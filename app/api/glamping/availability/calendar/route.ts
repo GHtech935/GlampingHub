@@ -1,0 +1,107 @@
+import { NextRequest, NextResponse } from 'next/server';
+import pool from '@/lib/db';
+import { eachDayOfInterval, parseISO, format } from 'date-fns';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const itemId = searchParams.get('itemId');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+
+    if (!itemId || !startDate || !endDate) {
+      return NextResponse.json(
+        { error: 'itemId, startDate, and endDate are required' },
+        { status: 400 }
+      );
+    }
+
+    // Get item inventory attributes
+    const itemQuery = await pool.query(`
+      SELECT
+        i.id,
+        i.name,
+        COALESCE(a.inventory_quantity, 1) as inventory_quantity,
+        COALESCE(a.unlimited_inventory, false) as unlimited_inventory,
+        COALESCE(a.allocation_type, 'per_night') as allocation_type
+      FROM glamping_items i
+      LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+      WHERE i.id = $1
+    `, [itemId]);
+
+    if (itemQuery.rows.length === 0) {
+      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    }
+
+    const item = itemQuery.rows[0];
+
+    // If unlimited inventory, all dates are available
+    if (item.unlimited_inventory) {
+      const days = eachDayOfInterval({
+        start: parseISO(startDate),
+        end: parseISO(endDate)
+      });
+
+      const availability = days.map(day => ({
+        date: format(day, 'yyyy-MM-dd'),
+        available: true,
+        unlimited: true
+      }));
+
+      return NextResponse.json({ availability });
+    }
+
+    // Get all bookings that overlap with the date range
+    const bookingsQuery = await pool.query(`
+      SELECT
+        b.check_in_date,
+        b.check_out_date
+      FROM glamping_booking_items bi
+      JOIN glamping_bookings b ON bi.booking_id = b.id
+      WHERE bi.item_id = $1
+        AND b.status NOT IN ('cancelled')
+        AND b.check_in_date < $3
+        AND b.check_out_date > $2
+      ORDER BY b.check_in_date
+    `, [itemId, startDate, endDate]);
+
+    // Generate all days in the range
+    const days = eachDayOfInterval({
+      start: parseISO(startDate),
+      end: parseISO(endDate)
+    });
+
+    // Check availability for each day
+    const availability = days.map(day => {
+      const dayStr = format(day, 'yyyy-MM-dd');
+
+      // Count how many bookings overlap with this specific day
+      const overlappingBookings = bookingsQuery.rows.filter(booking => {
+        const checkIn = format(parseISO(booking.check_in_date), 'yyyy-MM-dd');
+        const checkOut = format(parseISO(booking.check_out_date), 'yyyy-MM-dd');
+
+        // A booking overlaps with this day if:
+        // check_in <= day < check_out
+        return dayStr >= checkIn && dayStr < checkOut;
+      });
+
+      const bookedQuantity = overlappingBookings.length;
+      const availableQuantity = item.inventory_quantity - bookedQuantity;
+
+      return {
+        date: dayStr,
+        available: availableQuantity > 0,
+        available_quantity: Math.max(0, availableQuantity),
+        booked_quantity: bookedQuantity
+      };
+    });
+
+    return NextResponse.json({ availability });
+  } catch (error) {
+    console.error('Calendar availability error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch calendar availability' },
+      { status: 500 }
+    );
+  }
+}

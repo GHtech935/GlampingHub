@@ -1,0 +1,351 @@
+import { NextRequest, NextResponse } from "next/server";
+import pool from "@/lib/db";
+import { getSession, isStaffSession } from "@/lib/auth";
+
+// Disable caching - admin needs real-time data
+export const dynamic = 'force-dynamic';
+
+// Helper to extract localized string from JSONB
+function getLocalizedString(value: any, fallback: string = ''): string {
+  if (!value) return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    return value.vi || value.en || fallback;
+  }
+  return fallback;
+}
+
+// GET /api/admin/glamping/bookings/[id]
+// Fetch single glamping booking details
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const client = await pool.connect();
+
+  try {
+    // Check authentication
+    const session = await getSession();
+    if (!session || !isStaffSession(session)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    // Main query to fetch booking with all related data
+    const bookingQuery = `
+      SELECT
+        b.id,
+        b.booking_code,
+        b.status,
+        b.payment_status,
+        b.check_in_date,
+        b.check_out_date,
+        b.check_in_time,
+        b.check_out_time,
+        b.nights,
+        b.guests,
+        b.total_guests,
+        b.subtotal_amount,
+        b.tax_amount,
+        b.discount_amount,
+        b.total_amount,
+        b.deposit_due,
+        b.balance_due,
+        b.currency,
+        b.customer_notes,
+        b.internal_notes,
+        b.invoice_notes,
+        b.special_requirements,
+        b.tax_invoice_required,
+        b.tax_rate,
+        b.created_at,
+        b.updated_at,
+        b.confirmed_at,
+        b.cancelled_at,
+
+        -- Customer info
+        c.id as customer_id,
+        c.first_name as customer_first_name,
+        c.last_name as customer_last_name,
+        c.email as customer_email,
+        c.phone as customer_phone,
+        c.country as customer_country,
+        c.address_line1 as customer_address
+
+      FROM glamping_bookings b
+      LEFT JOIN customers c ON b.customer_id = c.id
+      WHERE b.id = $1
+    `;
+
+    const bookingResult = await client.query(bookingQuery, [id]);
+
+    if (bookingResult.rows.length === 0) {
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+    }
+
+    const row = bookingResult.rows[0];
+
+    // Fetch booking items
+    const itemsQuery = `
+      SELECT
+        bi.id,
+        bi.item_id,
+        bi.parameter_id,
+        bi.quantity,
+        bi.unit_price,
+        bi.total_price,
+        bi.metadata,
+        i.name as item_name,
+        i.sku as item_sku,
+        p.name as parameter_name,
+        z.id as zone_id,
+        z.name as zone_name
+      FROM glamping_booking_items bi
+      LEFT JOIN glamping_items i ON bi.item_id = i.id
+      LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
+      LEFT JOIN glamping_zones z ON i.zone_id = z.id
+      WHERE bi.booking_id = $1
+      ORDER BY bi.created_at
+    `;
+
+    const itemsResult = await client.query(itemsQuery, [id]);
+
+    // Fetch booking payments
+    const paymentsQuery = `
+      SELECT
+        bp.id,
+        bp.payment_method,
+        bp.amount,
+        bp.status,
+        bp.transaction_reference,
+        bp.paid_at,
+        bp.created_at
+      FROM glamping_booking_payments bp
+      WHERE bp.booking_id = $1
+      ORDER BY bp.created_at DESC
+    `;
+
+    const paymentsResult = await client.query(paymentsQuery, [id]);
+
+    // Fetch booking parameters
+    const paramsQuery = `
+      SELECT
+        bp.id,
+        bp.parameter_id,
+        bp.label,
+        bp.booked_quantity,
+        bp.controls_inventory
+      FROM glamping_booking_parameters bp
+      WHERE bp.booking_id = $1
+    `;
+
+    const paramsResult = await client.query(paramsQuery, [id]);
+
+    // Get zone info from items
+    const zoneInfo = itemsResult.rows.length > 0 ? {
+      id: itemsResult.rows[0].zone_id,
+      name: getLocalizedString(itemsResult.rows[0].zone_name),
+    } : null;
+
+    // Format response
+    const booking = {
+      id: row.id,
+      bookingCode: row.booking_code,
+      status: row.status,
+      paymentStatus: row.payment_status,
+      dates: {
+        checkIn: row.check_in_date,
+        checkOut: row.check_out_date,
+        checkInTime: row.check_in_time,
+        checkOutTime: row.check_out_time,
+        nights: row.nights,
+      },
+      guests: row.guests || {},
+      totalGuests: row.total_guests,
+      pricing: {
+        subtotalAmount: parseFloat(row.subtotal_amount || 0),
+        taxAmount: parseFloat(row.tax_amount || 0),
+        discountAmount: parseFloat(row.discount_amount || 0),
+        totalAmount: parseFloat(row.total_amount || 0),
+        depositDue: parseFloat(row.deposit_due || 0),
+        balanceDue: parseFloat(row.balance_due || 0),
+        currency: row.currency,
+      },
+      customer: {
+        id: row.customer_id,
+        firstName: row.customer_first_name,
+        lastName: row.customer_last_name,
+        fullName: `${row.customer_first_name || ''} ${row.customer_last_name || ''}`.trim(),
+        email: row.customer_email,
+        phone: row.customer_phone,
+        country: row.customer_country,
+        address: row.customer_address,
+      },
+      zone: zoneInfo,
+      items: itemsResult.rows.map((item) => ({
+        id: item.id,
+        itemId: item.item_id,
+        itemName: getLocalizedString(item.item_name),
+        itemSku: item.item_sku,
+        parameterId: item.parameter_id,
+        parameterName: getLocalizedString(item.parameter_name),
+        quantity: item.quantity,
+        unitPrice: parseFloat(item.unit_price || 0),
+        totalPrice: parseFloat(item.total_price || 0),
+        metadata: item.metadata,
+      })),
+      payments: paymentsResult.rows.map((payment) => ({
+        id: payment.id,
+        paymentMethod: payment.payment_method,
+        amount: parseFloat(payment.amount || 0),
+        status: payment.status,
+        transactionReference: payment.transaction_reference,
+        paidAt: payment.paid_at,
+        createdAt: payment.created_at,
+      })),
+      parameters: paramsResult.rows.map((param) => ({
+        id: param.id,
+        parameterId: param.parameter_id,
+        label: param.label,
+        bookedQuantity: param.booked_quantity,
+        controlsInventory: param.controls_inventory,
+      })),
+      notes: {
+        customer: row.customer_notes,
+        internal: row.internal_notes,
+      },
+      invoiceNotes: row.invoice_notes,
+      specialRequirements: row.special_requirements,
+      taxInvoiceRequired: row.tax_invoice_required || false,
+      taxRate: row.tax_rate || 10,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      confirmedAt: row.confirmed_at,
+      cancelledAt: row.cancelled_at,
+    };
+
+    return NextResponse.json(booking);
+  } catch (error) {
+    console.error("Error fetching glamping booking:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch booking" },
+      { status: 500 }
+    );
+  } finally {
+    client.release();
+  }
+}
+
+// PUT /api/admin/glamping/bookings/[id]
+// Update glamping booking
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const client = await pool.connect();
+
+  try {
+    // Check authentication
+    const session = await getSession();
+    if (!session || !isStaffSession(session)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+    const { status, paymentStatus, internalNotes } = body;
+
+    // Start transaction
+    await client.query('BEGIN');
+
+    // Get current booking state
+    const currentQuery = `
+      SELECT status, payment_status, internal_notes
+      FROM glamping_bookings
+      WHERE id = $1
+    `;
+    const currentResult = await client.query(currentQuery, [id]);
+
+    if (currentResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+    }
+
+    const current = currentResult.rows[0];
+
+    // Update booking
+    const updateFields: string[] = [];
+    const updateValues: any[] = [];
+    let paramIndex = 1;
+
+    if (status !== undefined) {
+      updateFields.push(`status = $${paramIndex}`);
+      updateValues.push(status);
+      paramIndex++;
+
+      // Set confirmed_at or cancelled_at if applicable
+      if (status === 'confirmed' && current.status !== 'confirmed') {
+        updateFields.push(`confirmed_at = NOW()`);
+      } else if (status === 'cancelled' && current.status !== 'cancelled') {
+        updateFields.push(`cancelled_at = NOW()`);
+      }
+    }
+
+    if (paymentStatus !== undefined) {
+      updateFields.push(`payment_status = $${paramIndex}`);
+      updateValues.push(paymentStatus);
+      paramIndex++;
+    }
+
+    if (internalNotes !== undefined) {
+      updateFields.push(`internal_notes = $${paramIndex}`);
+      updateValues.push(internalNotes);
+      paramIndex++;
+    }
+
+    updateFields.push(`updated_at = NOW()`);
+
+    if (updateFields.length > 1) {
+      const updateQuery = `
+        UPDATE glamping_bookings
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramIndex}
+        RETURNING *
+      `;
+      updateValues.push(id);
+
+      await client.query(updateQuery, updateValues);
+    }
+
+    // Record status change in history
+    if (status !== current.status || paymentStatus !== current.payment_status) {
+      const historyQuery = `
+        INSERT INTO glamping_booking_status_history
+        (booking_id, previous_status, new_status, previous_payment_status, new_payment_status, changed_by_user_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `;
+      await client.query(historyQuery, [
+        id,
+        current.status,
+        status || current.status,
+        current.payment_status,
+        paymentStatus || current.payment_status,
+        session.id,
+      ]);
+    }
+
+    await client.query('COMMIT');
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error("Error updating glamping booking:", error);
+    return NextResponse.json(
+      { error: "Failed to update booking" },
+      { status: 500 }
+    );
+  } finally {
+    client.release();
+  }
+}

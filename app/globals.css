@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* GlampingHub Brand Colors */
+    --brand-green: 152 28% 28%;        /* #335A48 - Primary CTA color */
+    --brand-green-hover: 152 28% 23%;  /* Darker green for hover */
+    --brand-blue: 217 91% 60%;         /* #3b82f6 - Filter pills */
+    --brand-dark: 220 39% 11%;         /* #1f2937 - Dark text */
+
+    /* Shadcn Theme Variables */
+    --background: 0 0% 100%;           /* White background */
+    --foreground: 220 39% 11%;         /* Dark gray text */
+
+    --card: 0 0% 100%;                 /* White cards */
+    --card-foreground: 220 39% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 39% 11%;
+
+    /* Primary = Dark Green (Main CTA buttons) */
+    --primary: 152 28% 28%;            /* Dark Green #335A48 */
+    --primary-foreground: 0 0% 100%;   /* White text on green */
+
+    /* Secondary = Blue (Filter pills, secondary actions) */
+    --secondary: 217 91% 60%;          /* Blue #3b82f6 */
+    --secondary-foreground: 0 0% 100%; /* White text on blue */
+
+    /* Muted = Light gray backgrounds */
+    --muted: 210 40% 96.1%;            /* Light gray */
+    --muted-foreground: 215.4 16.3% 46.9%; /* Gray text */
+
+    /* Accent = Highlight color */
+    --accent: 152 28% 95%;             /* Light green accent for backgrounds */
+    --accent-foreground: 152 28% 28%;  /* Green text on light green bg */
+
+    /* Destructive = Error/Delete actions */
+    --destructive: 0 84.2% 60.2%;      /* Red */
+    --destructive-foreground: 0 0% 98%;
+
+    /* Borders & Inputs */
+    --border: 214.3 31.8% 91.4%;       /* Light gray border */
+    --input: 214.3 31.8% 91.4%;        /* Input border */
+    --ring: 152 28% 28%;               /* Green focus ring */
+
+    /* Border Radius */
+    --radius: 0.5rem;                  /* 8px default radius */
+  }
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+
+  body {
+    @apply bg-white text-gray-900;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Touch-friendly interactions for mobile */
+  .touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smooth scrolling for better UX */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Leaflet Map Styles */
+.leaflet-container {
+  font-family: inherit;
+}
+
+.leaflet-popup-content-wrapper {
+  padding: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  width: 100% !important;
+}
+
+.custom-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Fix Leaflet controls z-index to not overlay header */
+.leaflet-control-zoom,
+.leaflet-control-attribution,
+.leaflet-bar {
+  z-index: 400 !important;
+}
+
+.leaflet-pane {
+  z-index: 400 !important;
+}
+
+/* SweetAlert above modal - z-index must be higher than Radix Dialog (z-50 = 50) */
+.swal2-container {
+  z-index: 100000 !important;
+}

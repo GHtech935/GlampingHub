@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: glampinghub
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+        # Get from Supabase: Settings > Database > Connection string
+      - key: JWT_SECRET
+        sync: false
+        # IMPORTANT: Use the SAME JWT_SECRET as CampingHub for shared staff login
+      - key: SESSION_COOKIE_NAME
+        value: glampinghub_session
+      - key: NEXT_PUBLIC_BASE_URL
+        sync: false
+        # Update with your Render URL or custom domain
+
+# Supabase is used for database, no need for databases section

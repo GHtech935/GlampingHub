@@ -1,0 +1,168 @@
+import { NextRequest, NextResponse } from 'next/server';
+import pool from '@/lib/db';
+
+// GET - Get single glamping item with details (public endpoint)
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    let { id } = await params;
+
+    // Strip "item-" prefix if present for backward compatibility
+    if (id.startsWith('item-')) {
+      id = id.replace('item-', '');
+    }
+
+    // Get item basic info
+    const itemQuery = `
+      SELECT
+        i.id,
+        i.name,
+        i.sku,
+        i.zone_id,
+        i.category_id,
+        i.summary,
+        c.name as category_name,
+        z.name as zone_name,
+        a.inventory_quantity,
+        a.unlimited_inventory,
+        a.allocation_type,
+        a.default_calendar_status as status,
+        a.visibility
+      FROM glamping_items i
+      LEFT JOIN glamping_categories c ON i.category_id = c.id
+      LEFT JOIN glamping_zones z ON i.zone_id = z.id
+      LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+      WHERE i.id = $1 AND z.is_active = true
+    `;
+
+    const { rows: itemRows } = await pool.query(itemQuery, [id]);
+
+    if (itemRows.length === 0) {
+      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    }
+
+    const item = itemRows[0];
+
+    // Get media
+    const mediaQuery = `
+      SELECT type, url, caption, display_order
+      FROM glamping_item_media
+      WHERE item_id = $1
+      ORDER BY display_order ASC
+    `;
+    const { rows: media } = await pool.query(mediaQuery, [id]);
+
+    // Get base pricing (minimum price without event)
+    const pricingQuery = `
+      SELECT MIN(amount) as base_price, rate_type
+      FROM glamping_pricing
+      WHERE item_id = $1 AND event_id IS NULL
+      GROUP BY rate_type
+      ORDER BY MIN(amount) ASC
+      LIMIT 1
+    `;
+    const { rows: pricingRows } = await pool.query(pricingQuery, [id]);
+
+    const base_price = pricingRows.length > 0 ? pricingRows[0].base_price : 0;
+    const pricing_rate = pricingRows.length > 0 ? pricingRows[0].rate_type : 'per_night';
+
+    // Get tags
+    const tagsQuery = `
+      SELECT t.id, t.name
+      FROM glamping_tags t
+      JOIN glamping_item_tags it ON it.tag_id = t.id
+      WHERE it.item_id = $1
+      ORDER BY t.name
+    `;
+    const { rows: tags } = await pool.query(tagsQuery, [id]);
+
+    // Get parameters
+    const parametersQuery = `
+      SELECT p.id, p.name, p.color_code, ip.min_quantity, ip.max_quantity, ip.display_order
+      FROM glamping_parameters p
+      JOIN glamping_item_parameters ip ON ip.parameter_id = p.id
+      WHERE ip.item_id = $1
+      ORDER BY ip.display_order
+    `;
+    const { rows: parameters } = await pool.query(parametersQuery, [id]);
+
+    // Get menu products linked to this item
+    // Note: glamping_menu_items uses 'status' (active/hidden) and 'is_available' columns
+    const menuProductsQuery = `
+      SELECT
+        mi.id as menu_item_id,
+        mi.name as menu_item_name,
+        mi.description as menu_item_description,
+        mi.price as menu_item_price,
+        mi.unit as menu_item_unit,
+        mi.image_url as menu_item_image,
+        mi.status as menu_item_status,
+        mi.is_available as menu_item_available,
+        imp.is_required,
+        imp.display_order,
+        mc.id as category_id,
+        mc.name as category_name
+      FROM glamping_item_menu_products imp
+      JOIN glamping_menu_items mi ON imp.menu_item_id = mi.id
+      LEFT JOIN glamping_menu_categories mc ON mi.category_id = mc.id
+      WHERE imp.item_id = $1
+      ORDER BY imp.display_order, mi.name
+    `;
+    const { rows: menuProducts } = await pool.query(menuProductsQuery, [id]);
+    console.log('[Public Item API] Item ID:', id, 'Menu products found:', menuProducts.length, menuProducts);
+
+    // Filter only active and available menu items for display
+    const activeMenuProducts = menuProducts.filter(mp =>
+      mp.menu_item_status === 'active' && mp.menu_item_available !== false
+    );
+
+    // Get taxes for this item
+    const taxesQuery = `
+      SELECT t.id, t.name, t.amount, t.is_percentage, t.apply_to, t.type
+      FROM glamping_taxes t
+      JOIN glamping_item_taxes it ON it.tax_id = t.id
+      WHERE it.item_id = $1
+    `;
+    const { rows: taxes } = await pool.query(taxesQuery, [id]);
+
+    const itemWithDetails = {
+      ...item,
+      base_price,
+      pricing_rate,
+      media,
+      tags,
+      parameters,
+      inventory_quantity: item.unlimited_inventory ? -1 : item.inventory_quantity,
+      menu_products: activeMenuProducts.map(mp => ({
+        id: mp.menu_item_id,
+        name: mp.menu_item_name,
+        description: mp.menu_item_description,
+        price: parseFloat(mp.menu_item_price || 0),
+        unit: mp.menu_item_unit,
+        image_url: mp.menu_item_image,
+        is_required: mp.is_required,
+        display_order: mp.display_order,
+        category_id: mp.category_id,
+        category_name: mp.category_name,
+      })),
+      taxes: taxes.map(t => ({
+        id: t.id,
+        name: t.name,
+        amount: parseFloat(t.amount || 0),
+        is_percentage: t.is_percentage,
+        apply_to: t.apply_to,
+        type: t.type,
+      })),
+    };
+
+    return NextResponse.json({ item: itemWithDetails });
+  } catch (error) {
+    console.error('Error fetching item details:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch item details' },
+      { status: 500 }
+    );
+  }
+}
