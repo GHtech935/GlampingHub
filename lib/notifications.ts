@@ -157,6 +157,7 @@ export async function createNotification(
               to: [{ email: userInfo.email, name: userInfo.full_name }],
               variables: {
                 customer_name: userInfo.full_name,
+                admin_name: userInfo.full_name, // For staff notifications
                 notification_link: `${appUrl}${link}`,
                 ...data,
               },

@@ -547,11 +547,14 @@ export async function POST(request: NextRequest) {
               gb.check_in_date,
               gb.check_out_date,
               gi.name as item_name,
-              COALESCE(gz.name->>'vi', gz.name->>'en') as zone_name
+              COALESCE(gz.name->>'vi', gz.name->>'en') as zone_name,
+              u.full_name as guest_name,
+              u.email as guest_email
             FROM glamping_bookings gb
             LEFT JOIN glamping_booking_items gbi ON gb.id = gbi.booking_id
             LEFT JOIN glamping_items gi ON gbi.item_id = gi.id
             LEFT JOIN glamping_zones gz ON gi.zone_id = gz.id
+            LEFT JOIN users u ON gb.customer_id = u.id
             WHERE gb.id = $1
             LIMIT 1`,
             [matchedBooking.id]
@@ -580,9 +583,12 @@ export async function POST(request: NextRequest) {
               booking_id: matchedBooking.id,
               amount: formattedAmount,
               zone_name: details.zone_name || 'N/A',
-              pitch_name: details.item_name || 'N/A',
+              item_name: details.item_name || 'N/A',
+              guest_name: details.guest_name || 'Khách hàng',
+              guest_email: details.guest_email || '',
               check_in_date: new Date(details.check_in_date).toLocaleDateString('vi-VN'),
               check_out_date: new Date(details.check_out_date).toLocaleDateString('vi-VN'),
+              notification_link: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://glampinghub.vn'}/admin/glamping/bookings`,
             };
 
             await Promise.all([
