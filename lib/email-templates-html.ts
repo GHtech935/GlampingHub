@@ -1418,3 +1418,6 @@ export const GLAMPING_EMAIL_TEMPLATES: Record<string, GlampingEmailTemplateDefin
 export const GLAMPING_EMAIL_TEMPLATES_HTML: Record<string, string> = Object.fromEntries(
   Object.entries(GLAMPING_EMAIL_TEMPLATES).map(([slug, template]) => [slug, template.html])
 );
+
+// Alias for backward compatibility with code expecting EMAIL_TEMPLATES
+export const EMAIL_TEMPLATES = GLAMPING_EMAIL_TEMPLATES;

@@ -663,6 +663,8 @@ export function BookingDetailModal({
       confirmed: { nextStatus: 'checked_in', labelVi: 'Check-in', labelEn: 'Check-in' },
       checked_in: { nextStatus: 'checked_out', labelVi: 'Check-out', labelEn: 'Check-out' },
       checked_out: null,
+      completed: null,
+      no_show: null,
       cancelled: null,
     };
     return transitions[status];

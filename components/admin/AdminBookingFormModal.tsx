@@ -382,6 +382,8 @@ export function AdminBookingFormModal({
         productsToSelect[matchingProduct.id] = {
           productId: matchingProduct.id,
           quantity: sourceProduct.quantity,
+          price: matchingProduct.price || 0,
+          name: matchingProduct.name || sourceProduct.name,
           voucherCode: undefined,
         }
       } else {
