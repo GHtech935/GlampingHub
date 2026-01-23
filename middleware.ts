@@ -64,6 +64,10 @@ async function authMiddleware(request: NextRequest, response?: NextResponse) {
     '/api/auth/reset-password',
     '/api/auth/logout',
     '/api/auth/me',
+    '/api/glamping',
+    '/api/settings/public',
+    '/api/upload',
+    '/api/webhooks',
   ];
 
   // Check if path is public

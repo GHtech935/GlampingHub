@@ -9,6 +9,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 
 interface NotificationBellProps {
   userType: 'customer' | 'staff';
+  appType?: 'camping' | 'glamping';
   className?: string;
 }
 
@@ -17,17 +18,19 @@ interface NotificationBellProps {
  *
  * Usage:
  * ```tsx
- * <NotificationBell userType="customer" />
- * <NotificationBell userType="staff" />
+ * <NotificationBell userType="customer" appType="glamping" />
+ * <NotificationBell userType="staff" appType="camping" />
  * ```
  */
 export default function NotificationBell({
   userType,
+  appType = 'camping',
   className,
 }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { unreadCount, fetchNotifications, fetchUnreadCount } = useNotifications({
     autoFetchCount: true,
+    appType,
   });
 
   const handleClick = () => {
@@ -66,6 +69,7 @@ export default function NotificationBell({
         isOpen={isOpen}
         onClose={handleClose}
         userType={userType}
+        appType={appType}
       />
     </>
   );

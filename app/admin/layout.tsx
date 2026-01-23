@@ -166,7 +166,13 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         .filter(group => group.roles.includes(userRole))
         .map(group => ({
           ...group,
-          items: group.items.filter(item => item.roles.includes(userRole))
+          items: group.items.filter(item => {
+            // Hide zone settings when on "all" zone
+            if (currentZoneId === "all" && item.name === t('zoneSettings')) {
+              return false;
+            }
+            return item.roles.includes(userRole);
+          })
         }))
         .filter(group => group.items.length > 0)  // Remove empty groups
     : [];
@@ -365,7 +371,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 {!loading && <ZoneSelector currentZoneId={currentZoneId} locale={locale} variant="header" />}
 
                 {/* Notification Bell */}
-                <NotificationBell userType="staff" />
+                <NotificationBell userType="staff" appType="glamping" />
 
                 {/* Language Switcher */}
                 <DropdownMenu>

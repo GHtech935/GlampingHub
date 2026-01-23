@@ -8,6 +8,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 
 interface NotificationListProps {
   userType: 'customer' | 'staff';
+  appType?: 'camping' | 'glamping';
   onClose: () => void;
 }
 
@@ -16,11 +17,13 @@ interface NotificationListProps {
  */
 export default function NotificationList({
   userType,
+  appType = 'camping',
   onClose,
 }: NotificationListProps) {
   const t = useTranslations('notifications');
   const { notifications, isLoading, fetchNotifications } = useNotifications({
     autoFetchCount: false,
+    appType,
   });
 
   // Fetch notifications when component mounts
@@ -57,6 +60,7 @@ export default function NotificationList({
         <NotificationItem
           key={notification.id}
           notification={notification}
+          appType={appType}
           onClose={onClose}
         />
       ))}

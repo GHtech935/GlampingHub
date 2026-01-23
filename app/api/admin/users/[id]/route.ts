@@ -47,7 +47,8 @@ export async function PUT(
       phone,
       role,
       campsite_ids,  // Array of campsite IDs for operations/owner (DEPRECATED)
-      glamping_zone_id,  // NEW: For GlampingHub
+      glamping_zone_id,  // DEPRECATED: For backward compatibility, use glampingZoneIds
+      glampingZoneIds,  // NEW: For glamping_owner role - array of zone IDs
       permissions,
       notes,
       is_active,
@@ -272,9 +273,39 @@ export async function PUT(
       }
     }
 
+    // Handle glamping zone assignments if provided
+    const hasUserGlampingZones = await tableExists('user_glamping_zones');
+    if (glampingZoneIds !== undefined && Array.isArray(glampingZoneIds)) {
+      let userRole = effectiveRole;
+
+      if (userRole === 'glamping_owner') {
+        if (hasUserGlampingZones) {
+          // Delete existing assignments for this user
+          await pool.query(
+            'DELETE FROM user_glamping_zones WHERE user_id = $1',
+            [id]
+          );
+
+          // Insert new assignments
+          if (glampingZoneIds.length > 0) {
+            const values = glampingZoneIds.map((zoneId, index) =>
+              `($1, $${index + 2}::uuid, $${glampingZoneIds.length + 2}, NOW(), $${glampingZoneIds.length + 3})`
+            ).join(', ');
+
+            await pool.query(
+              `INSERT INTO user_glamping_zones (user_id, zone_id, role, assigned_at, assigned_by)
+               VALUES ${values}`,
+              [id, ...glampingZoneIds, 'glamping_owner', session.id]
+            );
+          }
+        }
+      }
+    }
+
     // Log activity
     const activityMetadata: any = {
       campsite_ids: campsite_ids,
+      glampingZoneIds: glampingZoneIds,
       role: role,
       updated_by: session.id
     };

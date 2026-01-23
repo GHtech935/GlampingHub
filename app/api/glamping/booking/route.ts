@@ -167,6 +167,12 @@ export async function POST(request: NextRequest) {
 
     if (discountCode) {
       try {
+        console.log('[Booking] Validating discount code:', discountCode, {
+          zoneId,
+          itemId,
+          accommodationCost,
+        });
+
         const validateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/glamping/validate-voucher`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -184,13 +190,24 @@ export async function POST(request: NextRequest) {
           const voucherData = await validateResponse.json();
           voucherDiscount = voucherData.discountAmount || 0;
           voucherId = voucherData.voucher.id;
+          console.log('[Booking] Discount validated successfully:', {
+            discountAmount: voucherDiscount,
+            voucherId,
+          });
         } else {
           // Voucher invalid - continue without discount
           const errorData = await validateResponse.json();
-          console.error('Invalid voucher:', discountCode, errorData.error);
+          console.error('[Booking] Voucher validation failed:', {
+            code: discountCode,
+            status: validateResponse.status,
+            error: errorData.error,
+          });
         }
       } catch (error) {
-        console.error('Error validating voucher:', error);
+        console.error('[Booking] Error validating voucher:', {
+          code: discountCode,
+          error: error instanceof Error ? error.message : error,
+        });
         // Continue without discount if validation fails
       }
     }
@@ -203,8 +220,10 @@ export async function POST(request: NextRequest) {
       }, 0);
     }
 
-    const subtotalAmount = accommodationCost + menuProductsTotal - voucherDiscount;
-    const totalAmount = subtotalAmount;
+    // Fixed: subtotal should NOT pre-subtract discount (let database handle it)
+    const subtotalAmount = accommodationCost + menuProductsTotal;
+    // Calculate total amount for deposit calculation (JavaScript needs this for depositDue logic)
+    const totalAmount = subtotalAmount - voucherDiscount;
 
     // Find or create customer
     let customerId = null;
@@ -308,6 +327,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Calculate payment expiry timestamp (same logic as CampingHub-App)
+    const paymentExpiresAt = paymentMethod === 'pay_now'
+      ? new Date(Date.now() + (parseInt(process.env.SEPAY_PAYMENT_TIMEOUT_MINUTES || '30') * 60 * 1000)).toISOString()
+      : null;
+
     // Create booking record
     // Note: total_amount is a generated column (computed from subtotal - discount + tax)
     const bookingInsertQuery = `
@@ -329,9 +353,10 @@ export async function POST(request: NextRequest) {
         special_requirements,
         party_names,
         invoice_notes,
+        payment_expires_at,
         created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())
       RETURNING id, booking_code, created_at, total_amount
     `;
 
@@ -353,6 +378,7 @@ export async function POST(request: NextRequest) {
       specialRequirements || null,
       partyNames || null,
       invoiceNotes || null,
+      paymentExpiresAt,
     ]);
 
     const booking = bookingResult.rows[0];
@@ -524,6 +550,59 @@ export async function POST(request: NextRequest) {
       });
     } catch (staffEmailError) {
       console.error('⚠️ Failed to send glamping staff notification emails:', staffEmailError);
+    }
+
+    // =========================================================================
+    // CREATE IN-APP NOTIFICATIONS
+    // =========================================================================
+
+    try {
+      const {
+        sendNotificationToCustomer,
+        broadcastToRole,
+        notifyGlampingOwnersOfBooking,
+      } = await import('@/lib/notifications');
+
+      // 1. Notify customer
+      await sendNotificationToCustomer(
+        customerId,
+        'booking_created',
+        {
+          booking_reference: booking.booking_code,
+          booking_id: booking.id,
+          booking_code: booking.booking_code, // For link transformation
+        },
+        'glamping'
+      );
+
+      // 2. Notify staff (admin, sale, operations)
+      const staffData = {
+        customer_name: customerName,
+        booking_reference: booking.booking_code,
+        booking_code: booking.booking_code,
+        booking_id: booking.id,
+        pitch_name: itemName,
+        check_in_date: new Date(checkInDate).toLocaleDateString('vi-VN'),
+        check_out_date: new Date(checkOutDate).toLocaleDateString('vi-VN'),
+        total_amount: new Intl.NumberFormat('vi-VN').format(parseFloat(booking.total_amount)) + ' ₫',
+      };
+
+      await Promise.all([
+        broadcastToRole('admin', 'new_booking_created', staffData, 'glamping'),
+        broadcastToRole('sale', 'new_booking_created', staffData, 'glamping'),
+        broadcastToRole('operations', 'new_booking_created', staffData, 'glamping'),
+      ]);
+
+      // 3. Notify glamping zone owners
+      await notifyGlampingOwnersOfBooking(
+        booking.id,
+        'new_booking_created',
+        staffData
+      );
+
+      console.log('✅ Glamping booking in-app notifications sent');
+    } catch (notificationError) {
+      console.error('⚠️ Failed to send glamping notifications:', notificationError);
     }
 
     return NextResponse.json({

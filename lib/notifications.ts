@@ -13,11 +13,14 @@ import {
   EMAIL_TEMPLATE_MAP,
   CustomerNotificationType,
   StaffNotificationType,
+  transformLinkForGlamping,
 } from '@/lib/notification-templates';
 
 // =============================================================================
 // TYPES
 // =============================================================================
+
+export type AppType = 'camping' | 'glamping';
 
 export interface Notification {
   id: string;
@@ -42,11 +45,21 @@ interface CreateNotificationParams {
   data?: Record<string, any>;
   link: string;
   sendEmail?: boolean;
+  appType?: AppType;
 }
 
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+/**
+ * Get notifications table name based on app type
+ * @param appType - 'camping' or 'glamping'
+ * @returns Table name for the specified app type
+ */
+function getNotificationsTable(appType: AppType = 'camping'): string {
+  return appType === 'glamping' ? 'glamping_notifications' : 'notifications';
+}
 
 /**
  * Replace variables in template string
@@ -104,12 +117,15 @@ export async function createNotification(
     data,
     link,
     sendEmail = false,
+    appType = 'camping',
   } = params;
 
   try {
+    const table = getNotificationsTable(appType);
+
     // 1. Insert notification into database
     const result = await query<Notification>(
-      `INSERT INTO notifications (user_id, user_type, type, title, message, data, link, send_email)
+      `INSERT INTO ${table} (user_id, user_type, type, title, message, data, link, send_email)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
@@ -170,7 +186,8 @@ export async function createNotification(
 export async function sendNotificationToCustomer(
   customerId: string,
   type: CustomerNotificationType,
-  data: Record<string, any>
+  data: Record<string, any>,
+  appType: AppType = 'camping'
 ): Promise<Notification | null> {
   const template = CUSTOMER_NOTIFICATION_TEMPLATES[type];
 
@@ -185,7 +202,12 @@ export async function sendNotificationToCustomer(
     vi: replaceVariables(template.message.vi, data),
     en: replaceVariables(template.message.en, data),
   };
-  const link = replaceVariables(template.link, data);
+  let link = replaceVariables(template.link, data);
+
+  // Transform link for glamping if needed
+  if (appType === 'glamping') {
+    link = transformLinkForGlamping(link, 'customer', data);
+  }
 
   return createNotification({
     userId: customerId,
@@ -196,6 +218,7 @@ export async function sendNotificationToCustomer(
     data,
     link,
     sendEmail: template.sendEmail,
+    appType,
   });
 }
 
@@ -206,7 +229,8 @@ export async function sendNotificationToCustomer(
 export async function sendNotificationToStaff(
   staffId: string,
   type: StaffNotificationType,
-  data: Record<string, any>
+  data: Record<string, any>,
+  appType: AppType = 'camping'
 ): Promise<Notification | null> {
   const template = STAFF_NOTIFICATION_TEMPLATES[type];
 
@@ -221,7 +245,12 @@ export async function sendNotificationToStaff(
     vi: replaceVariables(template.message.vi, data),
     en: replaceVariables(template.message.en, data),
   };
-  const link = replaceVariables(template.link, data);
+  let link = replaceVariables(template.link, data);
+
+  // Transform link for glamping if needed
+  if (appType === 'glamping') {
+    link = transformLinkForGlamping(link, 'staff', data);
+  }
 
   return createNotification({
     userId: staffId,
@@ -232,6 +261,7 @@ export async function sendNotificationToStaff(
     data,
     link,
     sendEmail: template.sendEmail,
+    appType,
   });
 }
 
@@ -242,7 +272,8 @@ export async function sendNotificationToStaff(
 export async function broadcastToRole(
   role: 'admin' | 'sale' | 'operations' | 'owner',
   type: StaffNotificationType,
-  data: Record<string, any>
+  data: Record<string, any>,
+  appType: AppType = 'camping'
 ): Promise<void> {
   const template = STAFF_NOTIFICATION_TEMPLATES[type];
 
@@ -273,7 +304,7 @@ export async function broadcastToRole(
 
     // Send notification to all staff
     const promises = staffIds.map((staffId) =>
-      sendNotificationToStaff(staffId, type, data)
+      sendNotificationToStaff(staffId, type, data, appType)
     );
 
     await Promise.all(promises);
@@ -289,7 +320,8 @@ export async function broadcastToRole(
  */
 export async function broadcastToAllowedRoles(
   type: StaffNotificationType,
-  data: Record<string, any>
+  data: Record<string, any>,
+  appType: AppType = 'camping'
 ): Promise<void> {
   const template = STAFF_NOTIFICATION_TEMPLATES[type];
 
@@ -301,7 +333,7 @@ export async function broadcastToAllowedRoles(
   const roles = template.roles || ['admin', 'sale', 'operations'];
 
   for (const role of roles) {
-    await broadcastToRole(role, type, data);
+    await broadcastToRole(role, type, data, appType);
   }
 }
 
@@ -314,11 +346,13 @@ export async function broadcastToAllowedRoles(
  */
 export async function getUnreadCount(
   userId: string,
-  userType: 'customer' | 'staff'
+  userType: 'customer' | 'staff',
+  appType: AppType = 'camping'
 ): Promise<number> {
   try {
+    const table = getNotificationsTable(appType);
     const result = await query<{ count: string }>(
-      `SELECT COUNT(*) as count FROM notifications
+      `SELECT COUNT(*) as count FROM ${table}
        WHERE user_id = $1 AND user_type = $2 AND is_read = false`,
       [userId, userType]
     );
@@ -339,14 +373,17 @@ export async function getNotifications(
     limit?: number;
     offset?: number;
     unreadOnly?: boolean;
+    appType?: AppType;
   } = {}
 ): Promise<{ notifications: Notification[]; unreadCount: number; total: number }> {
-  const { limit = 20, offset = 0, unreadOnly = false } = options;
+  const { limit = 20, offset = 0, unreadOnly = false, appType = 'camping' } = options;
 
   try {
+    const table = getNotificationsTable(appType);
+
     // Build query
     let queryStr = `
-      SELECT * FROM notifications
+      SELECT * FROM ${table}
       WHERE user_id = $1 AND user_type = $2
     `;
     const params: any[] = [userId, userType];
@@ -362,14 +399,14 @@ export async function getNotifications(
 
     // Get total unread count
     const countResult = await query<{ count: string }>(
-      `SELECT COUNT(*) as count FROM notifications
+      `SELECT COUNT(*) as count FROM ${table}
        WHERE user_id = $1 AND user_type = $2 AND is_read = false`,
       [userId, userType]
     );
 
     // Get total count
     const totalResult = await query<{ count: string }>(
-      `SELECT COUNT(*) as count FROM notifications
+      `SELECT COUNT(*) as count FROM ${table}
        WHERE user_id = $1 AND user_type = $2`,
       [userId, userType]
     );
@@ -390,11 +427,13 @@ export async function getNotifications(
  */
 export async function markAsRead(
   notificationId: string,
-  userId: string
+  userId: string,
+  appType: AppType = 'camping'
 ): Promise<boolean> {
   try {
+    const table = getNotificationsTable(appType);
     const result = await query(
-      `UPDATE notifications SET is_read = true
+      `UPDATE ${table} SET is_read = true
        WHERE id = $1 AND user_id = $2`,
       [notificationId, userId]
     );
@@ -410,11 +449,13 @@ export async function markAsRead(
  */
 export async function markAllAsRead(
   userId: string,
-  userType: 'customer' | 'staff'
+  userType: 'customer' | 'staff',
+  appType: AppType = 'camping'
 ): Promise<number> {
   try {
+    const table = getNotificationsTable(appType);
     const result = await query(
-      `UPDATE notifications SET is_read = true
+      `UPDATE ${table} SET is_read = true
        WHERE user_id = $1 AND user_type = $2 AND is_read = false
        RETURNING id`,
       [userId, userType]
@@ -431,11 +472,13 @@ export async function markAllAsRead(
  */
 export async function deleteNotification(
   notificationId: string,
-  userId: string
+  userId: string,
+  appType: AppType = 'camping'
 ): Promise<boolean> {
   try {
+    const table = getNotificationsTable(appType);
     const result = await query(
-      `DELETE FROM notifications WHERE id = $1 AND user_id = $2`,
+      `DELETE FROM ${table} WHERE id = $1 AND user_id = $2`,
       [notificationId, userId]
     );
     return (result.rowCount || 0) > 0;
@@ -449,15 +492,19 @@ export async function deleteNotification(
  * Clean up old read notifications (older than specified days)
  * Useful for maintenance cron job
  */
-export async function cleanupOldNotifications(daysOld: number = 30): Promise<number> {
+export async function cleanupOldNotifications(
+  daysOld: number = 30,
+  appType: AppType = 'camping'
+): Promise<number> {
   try {
+    const table = getNotificationsTable(appType);
     const result = await query(
-      `DELETE FROM notifications
+      `DELETE FROM ${table}
        WHERE is_read = true
        AND created_at < NOW() - INTERVAL '${daysOld} days'`,
       []
     );
-    console.log(`🧹 Cleaned up ${result.rowCount} old notifications`);
+    console.log(`🧹 Cleaned up ${result.rowCount} old ${appType} notifications`);
     return result.rowCount || 0;
   } catch (error) {
     console.error('Error cleaning up old notifications:', error);
@@ -627,4 +674,123 @@ export function formatProductList(
   }
 
   return formatted.join(', ');
+}
+
+// =============================================================================
+// GLAMPING OWNER NOTIFICATION HELPERS
+// =============================================================================
+
+/**
+ * Notify all owners of a specific glamping zone
+ * Queries owners from user_glamping_zones junction table
+ *
+ * @param zoneId - The glamping zone ID
+ * @param type - Notification type from STAFF_NOTIFICATION_TEMPLATES
+ * @param data - Data to populate notification template variables
+ */
+export async function notifyGlampingOwnersOfZone(
+  zoneId: string,
+  type: StaffNotificationType,
+  data: Record<string, any>
+): Promise<void> {
+  try {
+    // Query owners of this zone from user_glamping_zones junction table
+    const result = await query<{ id: string }>(
+      `SELECT u.id
+       FROM user_glamping_zones ugz
+       JOIN users u ON ugz.user_id = u.id
+       WHERE ugz.zone_id = $1
+         AND u.role = 'glamping_owner'
+         AND u.is_active = true`,
+      [zoneId]
+    );
+
+    const ownerIds = result.rows.map((row) => row.id);
+
+    if (ownerIds.length === 0) {
+      console.log(`No glamping owners found for zone ${zoneId}`);
+      return;
+    }
+
+    // Send notification to each owner
+    const promises = ownerIds.map((ownerId) =>
+      sendNotificationToStaff(ownerId, type, data, 'glamping')
+    );
+
+    await Promise.all(promises);
+
+    console.log(`✅ Notified ${ownerIds.length} glamping owner(s) of zone ${zoneId} with ${type}`);
+  } catch (error) {
+    console.error('❌ Error notifying glamping owners of zone:', error);
+  }
+}
+
+/**
+ * Notify all owners of a glamping zone through a booking
+ * Automatically fetches zone_id from booking and calls notifyGlampingOwnersOfZone()
+ *
+ * @param glampingBookingId - The glamping booking ID
+ * @param type - Notification type from STAFF_NOTIFICATION_TEMPLATES
+ * @param data - Data to populate notification template variables
+ */
+export async function notifyGlampingOwnersOfBooking(
+  glampingBookingId: string,
+  type: StaffNotificationType,
+  data: Record<string, any>
+): Promise<void> {
+  try {
+    // Get zone_id from glamping booking
+    // Note: glamping_bookings has many-to-many relationship with items via glamping_booking_items
+    const result = await query<{ zone_id: string }>(
+      `SELECT DISTINCT gi.zone_id
+       FROM glamping_bookings gb
+       JOIN glamping_booking_items gbi ON gb.id = gbi.booking_id
+       JOIN glamping_items gi ON gbi.item_id = gi.id
+       WHERE gb.id = $1
+       LIMIT 1`,
+      [glampingBookingId]
+    );
+
+    if (result.rows.length === 0) {
+      console.error(`Glamping booking ${glampingBookingId} not found or has no items`);
+      return;
+    }
+
+    const zoneId = result.rows[0].zone_id;
+    await notifyGlampingOwnersOfZone(zoneId, type, data);
+  } catch (error) {
+    console.error('❌ Error notifying glamping owners of booking:', error);
+  }
+}
+
+/**
+ * Notify all owners of a glamping zone through an item
+ * Automatically fetches zone_id from item and calls notifyGlampingOwnersOfZone()
+ *
+ * @param itemId - The glamping item ID
+ * @param type - Notification type from STAFF_NOTIFICATION_TEMPLATES
+ * @param data - Data to populate notification template variables
+ */
+export async function notifyGlampingOwnersOfItem(
+  itemId: string,
+  type: StaffNotificationType,
+  data: Record<string, any>
+): Promise<void> {
+  try {
+    // Get zone_id from glamping item
+    const result = await query<{ zone_id: string }>(
+      `SELECT zone_id FROM glamping_items WHERE id = $1`,
+      [itemId]
+    );
+
+    if (result.rows.length === 0) {
+      console.error(`Glamping item ${itemId} not found`);
+      return;
+    }
+
+    const zoneId = result.rows[0].zone_id;
+    await notifyGlampingOwnersOfZone(zoneId, type, data);
+  } catch (error) {
+    console.error('❌ Error notifying glamping owners of item:', error);
+  }
 }

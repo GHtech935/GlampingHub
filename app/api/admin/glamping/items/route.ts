@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getSession, getAccessibleGlampingZoneIds, canAccessGlampingZone } from '@/lib/auth';
 import pool from '@/lib/db';
 
 export async function GET(request: NextRequest) {
@@ -9,6 +9,9 @@ export async function GET(request: NextRequest) {
     if (!session || session.type !== 'staff') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Get accessible zone IDs (null = all, [] = none)
+    const accessibleZoneIds = getAccessibleGlampingZoneIds(session);
 
     // Get filters from query params
     const searchParams = request.nextUrl.searchParams;
@@ -36,8 +39,25 @@ export async function GET(request: NextRequest) {
     const params: any[] = [];
     const conditions: string[] = [];
 
+    // Filter by accessible zones for glamping_owner (before other filters)
+    if (accessibleZoneIds !== null) {
+      if (accessibleZoneIds.length === 0) {
+        // No zones assigned - return empty
+        return NextResponse.json({ items: [] });
+      }
+      conditions.push(`i.zone_id = ANY($${params.length + 1}::uuid[])`);
+      params.push(accessibleZoneIds);
+    }
+
     // Filter by zone_id if provided (skip if "all")
     if (zoneId && zoneId !== 'all') {
+      // Validate zone access first
+      if (accessibleZoneIds !== null && !accessibleZoneIds.includes(zoneId)) {
+        return NextResponse.json(
+          { error: 'You do not have access to this zone' },
+          { status: 403 }
+        );
+      }
       conditions.push(`i.zone_id = $${params.length + 1}`);
       params.push(zoneId);
     }
@@ -118,6 +138,14 @@ export async function POST(request: NextRequest) {
 
     if (!zone_id || zone_id === 'all') {
       return NextResponse.json({ error: 'zone_id is required' }, { status: 400 });
+    }
+
+    // Validate zone access for glamping_owner
+    if (!canAccessGlampingZone(session, zone_id)) {
+      return NextResponse.json(
+        { error: 'You do not have access to this zone' },
+        { status: 403 }
+      );
     }
 
     const client = await pool.connect();

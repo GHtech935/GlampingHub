@@ -21,6 +21,7 @@ export interface Notification {
 
 interface UseNotificationsOptions {
   autoFetchCount?: boolean; // Auto fetch unread count on mount
+  appType?: 'camping' | 'glamping'; // App type for notification context
 }
 
 /**
@@ -36,11 +37,11 @@ interface UseNotificationsOptions {
  *   markAsReadById,
  *   markAllAsRead,
  *   refetch
- * } = useNotifications();
+ * } = useNotifications({ appType: 'glamping' });
  * ```
  */
 export function useNotifications(options: UseNotificationsOptions = {}) {
-  const { autoFetchCount = true } = options;
+  const { autoFetchCount = true, appType = 'camping' } = options;
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -52,7 +53,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
    */
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const response = await fetch('/api/notifications/unread-count');
+      const response = await fetch(`/api/notifications/unread-count?app_type=${appType}`);
       if (response.ok) {
         const data = await response.json();
         setUnreadCount(data.count);
@@ -60,7 +61,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     } catch (err) {
       console.error('Error fetching unread count:', err);
     }
-  }, []);
+  }, [appType]);
 
   /**
    * Fetch notifications with optional filtering
@@ -71,7 +72,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       setError(null);
 
       try {
-        const url = `/api/notifications?limit=${limit}&unread_only=${unreadOnly}`;
+        const url = `/api/notifications?limit=${limit}&unread_only=${unreadOnly}&app_type=${appType}`;
         const response = await fetch(url);
 
         if (!response.ok) {
@@ -88,7 +89,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         setIsLoading(false);
       }
     },
-    []
+    [appType]
   );
 
   /**
@@ -96,7 +97,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
    */
   const markAsReadById = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`/api/notifications/${id}`, {
+      const response = await fetch(`/api/notifications/${id}?app_type=${appType}`, {
         method: 'PATCH',
       });
 
@@ -113,14 +114,14 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       console.error('Error marking as read:', err);
       return false;
     }
-  }, []);
+  }, [appType]);
 
   /**
    * Mark all notifications as read
    */
   const markAllAsRead = useCallback(async () => {
     try {
-      const response = await fetch('/api/notifications/mark-all-read', {
+      const response = await fetch(`/api/notifications/mark-all-read?app_type=${appType}`, {
         method: 'POST',
       });
 
@@ -135,14 +136,14 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       console.error('Error marking all as read:', err);
       return false;
     }
-  }, []);
+  }, [appType]);
 
   /**
    * Delete a notification
    */
   const deleteById = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`/api/notifications/${id}`, {
+      const response = await fetch(`/api/notifications/${id}?app_type=${appType}`, {
         method: 'DELETE',
       });
 
@@ -165,7 +166,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       console.error('Error deleting notification:', err);
       return false;
     }
-  }, [notifications]);
+  }, [appType, notifications]);
 
   /**
    * Refetch both notifications and count

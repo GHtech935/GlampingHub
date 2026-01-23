@@ -83,9 +83,7 @@ export function HeroSection() {
             <div className="space-y-4">
               {/* Date Range Picker */}
               <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
-                  {t('selectDates')}
-                </label>
+                
                 <DateRangePicker
                   dateRange={glampingDateRange}
                   onSelect={setGlampingDateRange}

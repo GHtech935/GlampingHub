@@ -100,7 +100,7 @@ export const glampingBookingConfirmationHTML = `
       <!-- View Booking Button -->
       <div style="text-align: center; margin: 30px 0;">
         <a href="{confirmation_url}" style="${emailStyles.button}">
-          Xem và quản lý đặt phòng
+          Bấm để chọn đồ ăn tối
         </a>
       </div>
 

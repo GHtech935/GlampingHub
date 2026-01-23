@@ -9,6 +9,7 @@ import { useNotifications, Notification } from '@/hooks/useNotifications';
 
 interface NotificationItemProps {
   notification: Notification;
+  appType?: 'camping' | 'glamping';
   onClose: () => void;
 }
 
@@ -17,11 +18,15 @@ interface NotificationItemProps {
  */
 export default function NotificationItem({
   notification,
+  appType = 'camping',
   onClose,
 }: NotificationItemProps) {
   const router = useRouter();
   const locale = useLocale();
-  const { markAsReadById } = useNotifications({ autoFetchCount: false });
+  const { markAsReadById } = useNotifications({
+    autoFetchCount: false,
+    appType,
+  });
 
   // Get localized title and message
   const title =

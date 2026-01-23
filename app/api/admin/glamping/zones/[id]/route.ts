@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool, { getClient } from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, canAccessGlampingZone } from '@/lib/auth';
 
 // GET - Get single glamping zone with details
 export async function GET(
@@ -13,12 +13,20 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Role check
-    if (!['admin', 'owner'].includes(session.role)) {
+    // Role check: admin, sale, glamping_owner
+    if (!['admin', 'sale', 'glamping_owner'].includes(session.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
+
+    // Validate zone access for glamping_owner
+    if (!canAccessGlampingZone(session, id)) {
+      return NextResponse.json(
+        { error: 'You do not have access to this zone' },
+        { status: 403 }
+      );
+    }
 
     // Get zone with stats
     const zoneQuery = `
@@ -91,12 +99,21 @@ async function updateZone(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Role check
-    if (!['admin', 'owner'].includes(session.role)) {
+    // Role check: admin, glamping_owner
+    if (!['admin', 'glamping_owner'].includes(session.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
+
+    // Validate zone access for glamping_owner
+    if (!canAccessGlampingZone(session, id)) {
+      return NextResponse.json(
+        { error: 'You do not have access to this zone' },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
 
     // Validate bank_account_id if provided

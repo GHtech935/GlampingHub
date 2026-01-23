@@ -16,6 +16,7 @@ interface NotificationPanelProps {
   isOpen: boolean;
   onClose: () => void;
   userType: 'customer' | 'staff';
+  appType?: 'camping' | 'glamping';
 }
 
 /**
@@ -25,10 +26,12 @@ export default function NotificationPanel({
   isOpen,
   onClose,
   userType,
+  appType = 'camping',
 }: NotificationPanelProps) {
   const t = useTranslations('notifications');
   const { markAllAsRead, fetchNotifications, unreadCount } = useNotifications({
     autoFetchCount: false,
+    appType,
   });
 
   const handleMarkAllRead = async () => {
@@ -59,7 +62,7 @@ export default function NotificationPanel({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto mt-4 -mx-6 px-6">
-          <NotificationList userType={userType} onClose={onClose} />
+          <NotificationList userType={userType} appType={appType} onClose={onClose} />
         </div>
       </SheetContent>
     </Sheet>

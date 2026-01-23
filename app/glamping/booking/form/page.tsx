@@ -210,53 +210,62 @@ function GlampingBookingFormContent() {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
         // Fetch item details
-        const response = await fetch(`${baseUrl}/api/glamping/items/${itemId}`, {
+        const itemUrl = `${baseUrl}/api/glamping/items/${itemId}`
+        console.log('[Booking Form] Fetching item from:', itemUrl)
+        const response = await fetch(itemUrl, {
           cache: 'no-store'
         })
-        if (response.ok) {
-          const data = await response.json()
-          console.log('[Booking Form] Item data received:', data.item?.id, 'menu_products:', data.item?.menu_products)
-          // Get first image
-          const firstImage = data.item?.media?.find((m: any) => m.type === 'image')
-          itemImageUrl = firstImage?.url
+        console.log('[Booking Form] Item response status:', response.status, response.ok)
+        if (!response.ok) {
+          console.error('[Booking Form] Failed to fetch item:', response.status, response.statusText)
+          const text = await response.text()
+          console.error('[Booking Form] Response body:', text.substring(0, 200))
+          throw new Error(`Failed to fetch item: ${response.status}`)
+        }
 
-          // Get zone info
-          zoneId = data.item?.zone_id
+        const data = await response.json()
+        console.log('[Booking Form] Item data received:', data.item?.id, 'menu_products:', data.item?.menu_products)
 
-          // Get tax configuration from item
-          if (data.item?.taxes && data.item.taxes.length > 0) {
-            taxEnabled = true
-            const firstTax = data.item.taxes[0]
-            taxRate = firstTax.is_percentage ? parseFloat(firstTax.amount) : 0
-            taxName = { vi: firstTax.name, en: firstTax.name }
-          }
+        // Get first image
+        const firstImage = data.item?.media?.find((m: any) => m.type === 'image')
+        itemImageUrl = firstImage?.url
 
-          // Get parameter details from item
-          if (data.item?.parameters) {
-            parameters = data.item.parameters
-              .filter((p: any) => parameterQuantities[p.id])
-              .map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                color_code: p.color_code,
-                quantity: parameterQuantities[p.id] || 0
-              }))
-          }
+        // Get zone info
+        zoneId = data.item?.zone_id
 
-          // Get menu products from item
-          if (data.item?.menu_products && data.item.menu_products.length > 0) {
-            setMenuProducts(data.item.menu_products)
+        // Get tax configuration from item
+        if (data.item?.taxes && data.item.taxes.length > 0) {
+          taxEnabled = true
+          const firstTax = data.item.taxes[0]
+          taxRate = firstTax.is_percentage ? parseFloat(firstTax.amount) : 0
+          taxName = { vi: firstTax.name, en: firstTax.name }
+        }
 
-            // Auto-select required products with quantity 1
-            const initialSelections: Record<string, number> = {}
-            data.item.menu_products.forEach((mp: MenuProduct) => {
-              if (mp.is_required) {
-                initialSelections[mp.id] = 1
-              }
-            })
-            if (Object.keys(initialSelections).length > 0) {
-              setMenuProductSelections(initialSelections)
+        // Get parameter details from item
+        if (data.item?.parameters) {
+          parameters = data.item.parameters
+            .filter((p: any) => parameterQuantities[p.id])
+            .map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              color_code: p.color_code,
+              quantity: parameterQuantities[p.id] || 0
+            }))
+        }
+
+        // Get menu products from item
+        if (data.item?.menu_products && data.item.menu_products.length > 0) {
+          setMenuProducts(data.item.menu_products)
+
+          // Auto-select required products with quantity 1
+          const initialSelections: Record<string, number> = {}
+          data.item.menu_products.forEach((mp: MenuProduct) => {
+            if (mp.is_required) {
+              initialSelections[mp.id] = 1
             }
+          })
+          if (Object.keys(initialSelections).length > 0) {
+            setMenuProductSelections(initialSelections)
           }
         }
 
@@ -265,28 +274,40 @@ function GlampingBookingFormContent() {
           const depositResponse = await fetch(`${baseUrl}/api/glamping/items/${itemId}/deposit-settings`, {
             cache: 'no-store'
           })
-          if (depositResponse.ok) {
-            const depositData = await depositResponse.json()
-            if (depositData.hasDeposit) {
-              setHasDeposit(true)
-              setDepositType(depositData.depositType)
-              setDepositValue(depositData.depositValue)
-            } else {
-              setHasDeposit(false)
-              setDepositType(null)
-              setDepositValue(0)
-            }
+          if (!depositResponse.ok) {
+            console.error('[Booking Form] Failed to fetch deposit settings:', depositResponse.status)
+            throw new Error(`Failed to fetch deposit settings: ${depositResponse.status}`)
+          }
+
+          const depositData = await depositResponse.json()
+          if (depositData.hasDeposit) {
+            setHasDeposit(true)
+            setDepositType(depositData.depositType)
+            setDepositValue(depositData.depositValue)
+          } else {
+            setHasDeposit(false)
+            setDepositType(null)
+            setDepositValue(0)
           }
         } catch (error) {
           console.error('Error fetching deposit settings:', error)
+          // Set defaults on error
+          setHasDeposit(false)
+          setDepositType(null)
+          setDepositValue(0)
         }
 
         // Fetch zone details for policies
         if (zoneId) {
-          const zoneResponse = await fetch(`${baseUrl}/api/glamping/zones/${zoneId}`, {
-            cache: 'no-store'
-          })
-          if (zoneResponse.ok) {
+          try {
+            const zoneResponse = await fetch(`${baseUrl}/api/glamping/zones/${zoneId}`, {
+              cache: 'no-store'
+            })
+            if (!zoneResponse.ok) {
+              console.error('[Booking Form] Failed to fetch zone:', zoneResponse.status)
+              throw new Error(`Failed to fetch zone: ${zoneResponse.status}`)
+            }
+
             const zoneData = await zoneResponse.json()
             zoneAddress = zoneData.zone?.address
             city = zoneData.zone?.city
@@ -299,6 +320,8 @@ function GlampingBookingFormContent() {
             if (zoneData.zone?.house_rules) {
               houseRules = zoneData.zone.house_rules
             }
+          } catch (error) {
+            console.error('Error fetching zone details:', error)
           }
         }
       } catch (error) {

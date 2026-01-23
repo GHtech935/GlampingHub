@@ -1,15 +1,18 @@
 /**
  * Notifications API - Mark all as read
- * POST /api/notifications/mark-all-read
+ * POST /api/notifications/mark-all-read?app_type=camping|glamping
+ *
+ * Query params:
+ * - app_type: 'camping' | 'glamping' (default 'camping')
  *
  * Marks all unread notifications for the current user as read
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSession, isStaffSession } from '@/lib/auth';
-import { markAllAsRead } from '@/lib/notifications';
+import { markAllAsRead, AppType } from '@/lib/notifications';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
@@ -20,7 +23,19 @@ export async function POST() {
     const userType = isStaffSession(session) ? 'staff' : 'customer';
     const userId = session.id;
 
-    const updated = await markAllAsRead(userId, userType);
+    // Parse query params
+    const { searchParams } = new URL(request.url);
+    const appType = (searchParams.get('app_type') || 'camping') as AppType;
+
+    // Validate app_type
+    if (!['camping', 'glamping'].includes(appType)) {
+      return NextResponse.json(
+        { error: 'Invalid app_type. Must be "camping" or "glamping"' },
+        { status: 400 }
+      );
+    }
+
+    const updated = await markAllAsRead(userId, userType, appType);
 
     return NextResponse.json({ updated });
   } catch (error) {

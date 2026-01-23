@@ -46,10 +46,14 @@ export async function GET(request: NextRequest) {
         a.owner_bank_branch,
         a.glamping_zone_id,
         COALESCE(gz.name->>'vi', gz.name->>'en') as glamping_zone_name,
-        pp.description as role_description
+        pp.description as role_description,
+        ARRAY_AGG(DISTINCT ugz.zone_id) FILTER (WHERE ugz.zone_id IS NOT NULL) as assigned_zone_ids,
+        ARRAY_AGG(DISTINCT COALESCE(gz2.name->>'vi', gz2.name->>'en')) FILTER (WHERE gz2.id IS NOT NULL) as assigned_zone_names
       FROM users a
       LEFT JOIN permission_presets pp ON a.role = pp.role
       LEFT JOIN glamping_zones gz ON a.glamping_zone_id = gz.id
+      LEFT JOIN user_glamping_zones ugz ON a.id = ugz.user_id
+      LEFT JOIN glamping_zones gz2 ON ugz.zone_id = gz2.id
       WHERE 1=1
     `;
 
@@ -58,10 +62,14 @@ export async function GET(request: NextRequest) {
 
     // Filter by zoneId if provided (only show users assigned to this zone)
     if (zoneId && zoneId !== 'all') {
-      query += ` AND a.glamping_zone_id = $${paramIndex}`;
+      query += ` AND (a.glamping_zone_id = $${paramIndex} OR ugz.zone_id = $${paramIndex})`;
       params.push(zoneId);
       paramIndex++;
     }
+
+    // Hide camping owners from glamping zones page
+    // Only show glamping-related roles: admin, sale, operations, glamping_owner
+    query += ` AND a.role != 'owner'`;
 
     if (role && role !== 'all') {
       query += ` AND a.role = $${paramIndex}`;
@@ -85,7 +93,10 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
 
-    query += ` ORDER BY a.created_at DESC`;
+    query += `
+      GROUP BY a.id, gz.name, pp.description
+      ORDER BY a.created_at DESC
+    `;
 
     const result = await pool.query(query, params);
 
@@ -136,7 +147,8 @@ export async function POST(request: NextRequest) {
       role,
       campsite_id,
       campsite_ids, // For owner role - array of campsite IDs (DEPRECATED)
-      glamping_zone_id, // NEW: For GlampingHub
+      glamping_zone_id, // DEPRECATED: For backward compatibility, use glampingZoneIds
+      glampingZoneIds, // NEW: For glamping_owner role - array of zone IDs
       phone,
       permissions,
       notes,
@@ -272,6 +284,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // NEW: For glamping_owner role, insert into user_glamping_zones junction table
+    const hasUserGlampingZones = await tableExists('user_glamping_zones');
+    if (
+      hasUserGlampingZones &&
+      role === 'glamping_owner' &&
+      glampingZoneIds &&
+      Array.isArray(glampingZoneIds) &&
+      glampingZoneIds.length > 0
+    ) {
+      // Build dynamic values for bulk insert
+      const values = glampingZoneIds.map((zoneId, index) =>
+        `($1, $${index + 2}::uuid, $${glampingZoneIds.length + 2}, NOW(), $${glampingZoneIds.length + 3})`
+      ).join(', ');
+
+      await pool.query(
+        `INSERT INTO user_glamping_zones (user_id, zone_id, role, assigned_at, assigned_by)
+         VALUES ${values}`,
+        [newUserId, ...glampingZoneIds, 'glamping_owner', session.id]
+      );
+    }
+
     // Log activity
     await pool.query(
       `
@@ -283,7 +316,12 @@ export async function POST(request: NextRequest) {
         'admin',
         newUserId,
         `${first_name} ${last_name}`,
-        JSON.stringify({ email, role, campsite_ids: role === 'owner' ? campsite_ids : undefined })
+        JSON.stringify({
+          email,
+          role,
+          campsite_ids: role === 'owner' ? campsite_ids : undefined,
+          glampingZoneIds: role === 'glamping_owner' ? glampingZoneIds : undefined
+        })
       ]
     );
 

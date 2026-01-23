@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
-import { getSession, isStaffSession } from "@/lib/auth";
+import { getSession, isStaffSession, getAccessibleGlampingZoneIds } from "@/lib/auth";
 
 // Disable caching - admin needs real-time data
 export const dynamic = 'force-dynamic';
@@ -11,11 +11,14 @@ export async function GET(request: NextRequest) {
   const client = await pool.connect();
 
   try {
-    // Check authentication - allow admin, sale, operations, owner
+    // Check authentication - allow admin, sale, operations, owner, glamping_owner
     const session = await getSession();
     if (!session || !isStaffSession(session)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Get accessible zone IDs (null = all, [] = none)
+    const accessibleZoneIds = getAccessibleGlampingZoneIds(session);
 
     const searchParams = request.nextUrl.searchParams;
 
@@ -56,11 +59,38 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
 
-    // Zone filter - if specified and not "all"
-    if (zoneId && zoneId !== "all") {
-      conditions.push(`z.id = $${paramIndex}`);
-      values.push(zoneId);
-      paramIndex++;
+    // Zone filter - integrate with accessible zones
+    if (accessibleZoneIds !== null) {
+      // glamping_owner: filter by accessible zones
+      if (accessibleZoneIds.length === 0) {
+        // No zones assigned - return empty
+        return NextResponse.json({ bookings: [], total: 0 });
+      }
+
+      if (zoneId && zoneId !== "all") {
+        // Validate zone access
+        if (!accessibleZoneIds.includes(zoneId)) {
+          return NextResponse.json(
+            { error: "You do not have access to this zone" },
+            { status: 403 }
+          );
+        }
+        conditions.push(`z.id = $${paramIndex}`);
+        values.push(zoneId);
+        paramIndex++;
+      } else {
+        // Filter by all accessible zones
+        conditions.push(`z.id = ANY($${paramIndex}::uuid[])`);
+        values.push(accessibleZoneIds);
+        paramIndex++;
+      }
+    } else {
+      // admin/sale: can filter by specific zone if provided
+      if (zoneId && zoneId !== "all") {
+        conditions.push(`z.id = $${paramIndex}`);
+        values.push(zoneId);
+        paramIndex++;
+      }
     }
 
     // Date range filter

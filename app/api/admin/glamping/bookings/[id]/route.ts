@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { getSession, isStaffSession } from "@/lib/auth";
+import { sendTemplateEmail } from "@/lib/email";
 
 // Disable caching - admin needs real-time data
 export const dynamic = 'force-dynamic';
@@ -336,6 +337,132 @@ export async function PUT(
     }
 
     await client.query('COMMIT');
+
+    // Send email notifications if status or payment_status changed
+    if (status !== current.status || paymentStatus !== current.payment_status) {
+      try {
+        // Fetch booking details for email
+        const bookingDetailsResult = await pool.query(
+          `SELECT
+            gb.id,
+            gb.booking_code,
+            gb.customer_id,
+            gb.check_in_date,
+            gb.check_out_date,
+            gb.total_amount,
+            gb.deposit_due,
+            gb.balance_due,
+            gb.guests,
+            c.email as customer_email,
+            c.first_name as customer_first_name,
+            c.last_name as customer_last_name,
+            c.phone as customer_phone,
+            gi.name as item_name,
+            gi.zone_id,
+            gz.name as zone_name
+          FROM glamping_bookings gb
+          JOIN customers c ON gb.customer_id = c.id
+          JOIN glamping_items gi ON gb.item_id = gi.id
+          JOIN glamping_zones gz ON gi.zone_id = gz.id
+          WHERE gb.id = $1`,
+          [id]
+        );
+
+        if (bookingDetailsResult.rows.length > 0) {
+          const booking = bookingDetailsResult.rows[0];
+          const itemName = typeof booking.item_name === 'object'
+            ? (booking.item_name.vi || booking.item_name.en)
+            : booking.item_name;
+          const zoneName = typeof booking.zone_name === 'object'
+            ? (booking.zone_name.vi || booking.zone_name.en)
+            : booking.zone_name;
+
+          const finalStatus = status || current.status;
+          const finalPaymentStatus = paymentStatus || current.payment_status;
+
+          // 1. Send email to customer if status changed to confirmed
+          if (finalStatus === 'confirmed' && current.status !== 'confirmed') {
+            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/glamping/booking/confirmation/${booking.booking_code}`;
+
+            await sendTemplateEmail({
+              templateSlug: 'glamping-booking-confirmed',
+              to: [{
+                email: booking.customer_email,
+                name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim()
+              }],
+              variables: {
+                customer_name: booking.customer_first_name,
+                booking_reference: booking.booking_code,
+                zone_name: zoneName,
+                checkin_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
+                checkout_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
+                notification_link: confirmationLink,
+              },
+              bookingId: id,
+            });
+
+            console.log('✅ Confirmation email sent to customer (manual status change):', booking.customer_email);
+          }
+
+          // 2. Send notification to staff (admin/sale/operations/glamping_owner)
+          // Get staff: admin, sale, operations, and glamping_owner (only for this zone)
+          const staffResult = await pool.query(
+            `SELECT DISTINCT u.email, COALESCE(u.first_name, 'Admin') as name
+             FROM users u
+             LEFT JOIN user_glamping_zones ugz ON u.id = ugz.user_id AND ugz.zone_id = $1
+             WHERE u.is_active = true
+             AND (
+               u.role IN ('admin', 'sale', 'operations')
+               OR (u.role = 'glamping_owner' AND ugz.zone_id IS NOT NULL)
+             )`,
+            [booking.zone_id]
+          );
+
+          const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+          const bookingLink = `${appUrl}/admin/zones/all/bookings?booking_code=${booking.booking_code}`;
+
+          // Determine template based on status change
+          let templateSlug = 'glamping-admin-new-booking-pending';
+          let emailSubjectContext = '';
+
+          if (finalStatus === 'confirmed' && current.status !== 'confirmed') {
+            templateSlug = 'glamping-admin-new-booking-pending';
+            emailSubjectContext = 'Admin đã xác nhận đơn đặt chỗ';
+          } else if (finalStatus === 'cancelled' && current.status !== 'cancelled') {
+            // For cancelled status, we might want a different template
+            // But for now, use the same template
+            emailSubjectContext = 'Đơn đặt chỗ đã bị hủy';
+          } else if (paymentStatus !== current.payment_status) {
+            emailSubjectContext = 'Trạng thái thanh toán đã thay đổi';
+          }
+
+          for (const staff of staffResult.rows) {
+            await sendTemplateEmail({
+              templateSlug: templateSlug,
+              to: [{ email: staff.email, name: staff.name }],
+              variables: {
+                admin_name: staff.name,
+                booking_reference: booking.booking_code,
+                amount: new Intl.NumberFormat('vi-VN').format(booking.total_amount) + ' ₫',
+                guest_name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim(),
+                guest_email: booking.customer_email,
+                zone_name: zoneName,
+                item_name: itemName,
+                check_in_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
+                check_out_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
+                notification_link: bookingLink,
+              },
+              bookingId: id,
+            });
+          }
+
+          console.log(`✅ Status change notification emails sent to ${staffResult.rows.length} staff member(s)`);
+        }
+      } catch (emailError) {
+        console.error('⚠️ Failed to send status change emails:', emailError);
+        // Don't fail the request if email sending fails
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

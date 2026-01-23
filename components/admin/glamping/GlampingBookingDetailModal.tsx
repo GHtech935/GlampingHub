@@ -1359,6 +1359,7 @@ export function GlampingBookingDetailModal({
                 taxInvoiceRequired: booking.taxInvoiceRequired,
                 taxRate: booking.taxRate,
                 invoiceNotes: booking.invoiceNotes,
+                specialRequirements: booking.specialRequirements,
               }}
               locale={locale}
               onPaidAndCheckout={handlePaidAndCheckout}

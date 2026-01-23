@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, getAccessibleGlampingZoneIds } from '@/lib/auth';
 
 // GET - List all glamping zones
 export async function GET(req: NextRequest) {
@@ -10,9 +10,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Role check: admin, owner
-    if (!['admin', 'owner'].includes(session.role)) {
+    // Role check: admin, sale, glamping_owner
+    // NOTE: 'owner' (camping) should NOT have access to glamping zones
+    if (!['admin', 'sale', 'glamping_owner'].includes(session.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Get accessible zone IDs (null = all, [] = none)
+    const accessibleZoneIds = getAccessibleGlampingZoneIds(session);
+
+    // If no zones assigned, return empty result
+    if (accessibleZoneIds !== null && accessibleZoneIds.length === 0) {
+      return NextResponse.json({ zones: [] });
     }
 
     // Optional filters
@@ -38,6 +47,13 @@ export async function GET(req: NextRequest) {
 
     const params: any[] = [];
     let paramIndex = 1;
+
+    // NEW: Filter by accessible zones for glamping_owner
+    if (accessibleZoneIds !== null) {
+      query += ` AND z.id = ANY($${paramIndex}::uuid[])`;
+      params.push(accessibleZoneIds);
+      paramIndex++;
+    }
 
     // Search filter (name vi/en, address, city, province)
     if (search) {
@@ -109,8 +125,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Role check: admin, owner
-    if (!['admin', 'owner'].includes(session.role)) {
+    // Role check: admin only can create zones
+    // glamping_owner can only view/manage their assigned zones
+    if (session.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

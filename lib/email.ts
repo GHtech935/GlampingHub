@@ -152,11 +152,13 @@ export async function sendTemplateEmail({
   to,
   variables = {},
   bookingId,
+  glampingBookingId,
 }: {
   templateSlug: string;
   to: { email: string; name?: string }[];
   variables?: EmailVariables;
   bookingId?: string;
+  glampingBookingId?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     // Load template from code
@@ -178,6 +180,7 @@ export async function sendTemplateEmail({
       templateSlug,
       variables,
       bookingId,
+      glampingBookingId,
     });
   } catch (error: any) {
     console.error('❌ Error sending template email:', error);

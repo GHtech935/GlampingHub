@@ -1,12 +1,15 @@
 /**
  * Notifications API - Single notification operations
- * PATCH /api/notifications/[id] - Mark as read
- * DELETE /api/notifications/[id] - Delete notification
+ * PATCH /api/notifications/[id]?app_type=camping|glamping - Mark as read
+ * DELETE /api/notifications/[id]?app_type=camping|glamping - Delete notification
+ *
+ * Query params:
+ * - app_type: 'camping' | 'glamping' (default 'camping')
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { markAsRead, deleteNotification } from '@/lib/notifications';
+import { markAsRead, deleteNotification, AppType } from '@/lib/notifications';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -22,8 +25,20 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Parse query params
+    const { searchParams } = new URL(request.url);
+    const appType = (searchParams.get('app_type') || 'camping') as AppType;
+
+    // Validate app_type
+    if (!['camping', 'glamping'].includes(appType)) {
+      return NextResponse.json(
+        { error: 'Invalid app_type. Must be "camping" or "glamping"' },
+        { status: 400 }
+      );
+    }
+
     const { id } = await context.params;
-    const success = await markAsRead(id, session.id);
+    const success = await markAsRead(id, session.id, appType);
 
     if (!success) {
       return NextResponse.json(
@@ -52,8 +67,20 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Parse query params
+    const { searchParams } = new URL(request.url);
+    const appType = (searchParams.get('app_type') || 'camping') as AppType;
+
+    // Validate app_type
+    if (!['camping', 'glamping'].includes(appType)) {
+      return NextResponse.json(
+        { error: 'Invalid app_type. Must be "camping" or "glamping"' },
+        { status: 400 }
+      );
+    }
+
     const { id } = await context.params;
-    const success = await deleteNotification(id, session.id);
+    const success = await deleteNotification(id, session.id, appType);
 
     if (!success) {
       return NextResponse.json(

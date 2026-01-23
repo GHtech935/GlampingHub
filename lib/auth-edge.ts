@@ -14,16 +14,20 @@ export interface StaffSession {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'sale' | 'operations' | 'owner';
+  role: 'admin' | 'sale' | 'operations' | 'owner' | 'glamping_owner';
 
   // DEPRECATED: Kept for backward compatibility only
   // For operations role: Use campsiteIds instead
   // Will be removed in a future version
   campsiteId?: string;
 
-  // Unified field for both operations and owner roles
+  // Unified field for both operations and owner roles (CAMPING system)
   // Contains array of campsite IDs that the user has access to
   campsiteIds?: string[];
+
+  // NEW: For glamping_owner role (GLAMPING system)
+  // Contains array of glamping zone IDs that the user has access to
+  glampingZoneIds?: string[];
 }
 
 // Customer session

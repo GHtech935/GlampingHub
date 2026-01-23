@@ -6,11 +6,12 @@
  * - limit: number (default 20)
  * - offset: number (default 0)
  * - unread_only: boolean (default false)
+ * - app_type: 'camping' | 'glamping' (default 'camping')
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, isStaffSession, isCustomerSession } from '@/lib/auth';
-import { getNotifications } from '@/lib/notifications';
+import { getNotifications, AppType } from '@/lib/notifications';
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,12 +29,22 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = parseInt(searchParams.get('offset') || '0');
     const unreadOnly = searchParams.get('unread_only') === 'true';
+    const appType = (searchParams.get('app_type') || 'camping') as AppType;
+
+    // Validate app_type
+    if (!['camping', 'glamping'].includes(appType)) {
+      return NextResponse.json(
+        { error: 'Invalid app_type. Must be "camping" or "glamping"' },
+        { status: 400 }
+      );
+    }
 
     // Get notifications
     const result = await getNotifications(userId, userType, {
       limit,
       offset,
       unreadOnly,
+      appType,
     });
 
     return NextResponse.json({

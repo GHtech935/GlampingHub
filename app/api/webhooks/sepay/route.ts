@@ -387,6 +387,26 @@ export async function POST(request: NextRequest) {
           [newPaymentStatus, matchedBooking.id]
         );
 
+        // Create payment record in glamping_booking_payments table
+        try {
+          await client.query(
+            `INSERT INTO glamping_booking_payments
+              (booking_id, payment_method, amount, status, transaction_reference, paid_at, created_at)
+            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+            [
+              matchedBooking.id,
+              'bank_transfer',
+              paidAmount,
+              'paid',
+              transaction_code,
+            ]
+          );
+          console.log(`✅ Created payment record for glamping booking: ${bookingReference}, amount: ${paidAmount}`);
+        } catch (paymentError) {
+          console.error('⚠️ Failed to create payment record:', paymentError);
+          // Don't fail the webhook - booking status is already updated
+        }
+
         await client.query('COMMIT');
 
         console.log('✅ Glamping booking updated and auto-confirmed:', {
@@ -395,6 +415,188 @@ export async function POST(request: NextRequest) {
           payment_status: newPaymentStatus,
           amount: paidAmount,
         });
+
+        // Send confirmation emails after successful payment
+        try {
+          const formattedAmount = new Intl.NumberFormat('vi-VN').format(paidAmount) + ' ₫';
+
+          // Fetch booking details for email
+          const bookingDetailsResult = await pool.query(
+            `SELECT
+              gb.id,
+              gb.booking_code,
+              gb.customer_id,
+              gb.check_in_date,
+              gb.check_out_date,
+              gb.total_amount,
+              gb.deposit_due,
+              gb.balance_due,
+              gb.guests,
+              c.email as customer_email,
+              c.first_name as customer_first_name,
+              c.last_name as customer_last_name,
+              c.phone as customer_phone,
+              gi.name as item_name,
+              COALESCE(gz.name->>'vi', gz.name->>'en') as zone_name
+            FROM glamping_bookings gb
+            JOIN customers c ON gb.customer_id = c.id
+            LEFT JOIN glamping_booking_items gbi ON gb.id = gbi.booking_id
+            LEFT JOIN glamping_items gi ON gbi.item_id = gi.id
+            LEFT JOIN glamping_zones gz ON gi.zone_id = gz.id
+            WHERE gb.id = $1
+            LIMIT 1`,
+            [matchedBooking.id]
+          );
+
+          if (bookingDetailsResult.rows.length > 0) {
+            const booking = bookingDetailsResult.rows[0];
+            const itemName = booking.item_name || '';
+            const zoneName = booking.zone_name || '';
+
+            // 1. Send email to customer
+            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/glamping/booking/confirmation/${bookingReference}`;
+
+            await sendTemplateEmail({
+              templateSlug: 'glamping-booking-confirmed',
+              to: [{
+                email: booking.customer_email,
+                name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim()
+              }],
+              variables: {
+                customer_name: booking.customer_first_name,
+                booking_reference: bookingReference || '',
+                zone_name: zoneName,
+                checkin_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
+                checkout_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
+                notification_link: confirmationLink,
+              },
+              glampingBookingId: matchedBooking.id,
+            });
+
+            console.log('✅ Confirmation email sent to customer:', booking.customer_email);
+
+            // 2. Send notification email to admin/sale/operations/glamping_owner
+            // Get zone_id from booking
+            const zoneResult = await pool.query(
+              `SELECT gi.zone_id FROM glamping_items gi WHERE gi.id = $1`,
+              [matchedBooking.item_id]
+            );
+            const zoneId = zoneResult.rows[0]?.zone_id;
+
+            // Get staff: admin, sale, operations, and glamping_owner (only for this zone)
+            const staffResult = await pool.query(
+              `SELECT DISTINCT u.email, COALESCE(u.first_name, 'Admin') as name
+               FROM users u
+               LEFT JOIN user_glamping_zones ugz ON u.id = ugz.user_id AND ugz.zone_id = $1
+               WHERE u.is_active = true
+               AND (
+                 u.role IN ('admin', 'sale', 'operations')
+                 OR (u.role = 'glamping_owner' AND ugz.zone_id IS NOT NULL)
+               )`,
+              [zoneId]
+            );
+
+            const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+            const bookingLink = `${appUrl}/admin/zones/all/bookings?booking_code=${bookingReference}`;
+
+            for (const staff of staffResult.rows) {
+              await sendTemplateEmail({
+                templateSlug: 'glamping-admin-new-booking-pending',
+                to: [{ email: staff.email, name: staff.name }],
+                variables: {
+                  admin_name: staff.name,
+                  booking_reference: bookingReference || '',
+                  amount: formattedAmount,
+                  guest_name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim(),
+                  guest_email: booking.customer_email,
+                  zone_name: zoneName,
+                  item_name: itemName,
+                  check_in_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
+                  check_out_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
+                  notification_link: bookingLink,
+                },
+                glampingBookingId: matchedBooking.id,
+              });
+            }
+
+            console.log(`✅ Notification emails sent to ${staffResult.rows.length} staff member(s)`);
+          }
+        } catch (emailError) {
+          console.error('⚠️ Failed to send confirmation emails:', emailError);
+          // Don't fail the webhook if email sending fails
+        }
+
+        // =========================================================================
+        // SEND IN-APP NOTIFICATIONS
+        // =========================================================================
+
+        try {
+          const {
+            sendNotificationToCustomer,
+            broadcastToRole,
+            notifyGlampingOwnersOfBooking,
+          } = await import('@/lib/notifications');
+
+          const formattedAmount = new Intl.NumberFormat('vi-VN').format(paidAmount) + ' ₫';
+
+          // Fetch booking details for notifications
+          const detailsResult = await pool.query(
+            `SELECT
+              gb.customer_id,
+              gb.booking_code,
+              gb.check_in_date,
+              gb.check_out_date,
+              gi.name as item_name,
+              COALESCE(gz.name->>'vi', gz.name->>'en') as zone_name
+            FROM glamping_bookings gb
+            LEFT JOIN glamping_booking_items gbi ON gb.id = gbi.booking_id
+            LEFT JOIN glamping_items gi ON gbi.item_id = gi.id
+            LEFT JOIN glamping_zones gz ON gi.zone_id = gz.id
+            WHERE gb.id = $1
+            LIMIT 1`,
+            [matchedBooking.id]
+          );
+
+          if (detailsResult.rows.length > 0) {
+            const details = detailsResult.rows[0];
+
+            // 1. Notify customer
+            await sendNotificationToCustomer(
+              details.customer_id,
+              'payment_received',
+              {
+                amount: formattedAmount,
+                booking_id: matchedBooking.id,
+                booking_code: details.booking_code,
+                booking_reference: details.booking_code,
+              },
+              'glamping'
+            );
+
+            // 2. Notify staff
+            const staffData = {
+              booking_reference: details.booking_code,
+              booking_code: details.booking_code,
+              booking_id: matchedBooking.id,
+              amount: formattedAmount,
+              zone_name: details.zone_name || 'N/A',
+              pitch_name: details.item_name || 'N/A',
+              check_in_date: new Date(details.check_in_date).toLocaleDateString('vi-VN'),
+              check_out_date: new Date(details.check_out_date).toLocaleDateString('vi-VN'),
+            };
+
+            await Promise.all([
+              broadcastToRole('admin', 'new_booking_pending', staffData, 'glamping'),
+              broadcastToRole('operations', 'new_booking_pending', staffData, 'glamping'),
+              notifyGlampingOwnersOfBooking(matchedBooking.id, 'new_booking_pending', staffData),
+            ]);
+
+            console.log('✅ Glamping payment in-app notifications sent');
+          }
+        } catch (notificationError) {
+          console.error('⚠️ Failed to send glamping payment notifications:', notificationError);
+          // Don't fail the webhook if notification sending fails
+        }
 
         // Log successful match
         if (webhookLog) {
@@ -409,7 +611,7 @@ export async function POST(request: NextRequest) {
               booking_type: 'glamping',
             },
             transactionCode: transaction_code,
-            bookingId: matchedBooking.id,
+            bookingId: undefined, // Don't set bookingId for glamping (FK constraint to bookings table)
             bookingReference: bookingReference || undefined,
             matched: true,
             matchType: "auto",

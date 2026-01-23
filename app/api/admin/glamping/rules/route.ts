@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getSession, getAccessibleGlampingZoneIds, canAccessGlampingZone } from '@/lib/auth';
 import pool from '@/lib/db';
 
 // All 12 rule types with their default configuration
@@ -26,11 +26,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get accessible zone IDs (null = all, [] = none)
+    const accessibleZoneIds = getAccessibleGlampingZoneIds(session);
+
     const searchParams = request.nextUrl.searchParams;
     const zoneId = searchParams.get('zone_id');
 
     if (!zoneId || zoneId === 'all') {
       return NextResponse.json({ error: 'zone_id is required' }, { status: 400 });
+    }
+
+    // Validate zone access for glamping_owner
+    if (accessibleZoneIds !== null && !accessibleZoneIds.includes(zoneId)) {
+      return NextResponse.json(
+        { error: 'You do not have access to this zone' },
+        { status: 403 }
+      );
     }
 
     // Get all rule sets for this zone
@@ -76,6 +87,14 @@ export async function POST(request: NextRequest) {
 
     if (!zone_id || zone_id === 'all') {
       return NextResponse.json({ error: 'zone_id is required' }, { status: 400 });
+    }
+
+    // Validate zone access for glamping_owner
+    if (!canAccessGlampingZone(session, zone_id)) {
+      return NextResponse.json(
+        { error: 'You do not have access to this zone' },
+        { status: 403 }
+      );
     }
 
     const client = await pool.connect();

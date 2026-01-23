@@ -351,6 +351,16 @@ export default function BookingConfirmationPage() {
       {/* Menu Products - EDITABLE */}
       <Card>
         <CardHeader>
+          {/* Warning Notice - Menu Selection Deadline */}
+          {booking.booking.status === 'confirmed' && (
+            <Alert className="mb-6 bg-amber-50 border-amber-400 border-l-4">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              <AlertDescription className="text-amber-900 font-semibold text-base">
+                Chọn menu ăn tối trước 24h ngày check in
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex justify-between items-center">
             <CardTitle>Món ăn & Đồ uống</CardTitle>
             {!isEditingMenu && booking.canEditMenu && (

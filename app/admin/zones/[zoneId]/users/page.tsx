@@ -259,19 +259,37 @@ useEffect(() => {
   // Handle save user
   const handleSaveUser = async (formData: any) => {
     try {
+      const normalizedRole = normalizeRoleValue(formRole);
+
+      // Validate: glamping_owner must have a zone assigned
+      if (normalizedRole === 'glamping_owner' && !selectedZoneId) {
+        toast({
+          title: t('toast.error'),
+          description: 'Chủ Glamping phải được gán vào ít nhất một zone',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const url = selectedUser
         ? `/api/admin/users/${selectedUser.id}`
         : '/api/admin/users';
 
       const method = selectedUser ? 'PUT' : 'POST';
-      const normalizedRole = normalizeRoleValue(formRole);
 
-      // Include glamping_zone_id
-      const requestBody = {
+      // Prepare zone data based on role
+      const requestBody: any = {
         ...formData,
-        glamping_zone_id: selectedZoneId || null,
         role: normalizedRole
       };
+
+      // For glamping_owner role, send glampingZoneIds array
+      if (normalizedRole === 'glamping_owner' && selectedZoneId) {
+        requestBody.glampingZoneIds = [selectedZoneId];
+      } else if (selectedZoneId) {
+        // For backward compatibility with other roles
+        requestBody.glamping_zone_id = selectedZoneId;
+      }
 
       const response = await fetch(url, {
         method,
@@ -288,7 +306,8 @@ useEffect(() => {
         });
         setIsUserModalOpen(false);
         setFormRole('operations');
-        setSelectedZoneId('');  // Reset zone selection
+        // Keep zone selection if viewing specific zone, reset if "all"
+        setSelectedZoneId(zoneId !== 'all' ? zoneId : '');
         fetchUsers();
       } else {
         toast({
@@ -386,7 +405,8 @@ useEffect(() => {
       admin: { label: t('roles.admin'), className: 'bg-purple-100 text-purple-700' },
       sale: { label: t('roles.sale'), className: 'bg-blue-100 text-blue-700' },
       operations: { label: t('roles.operations'), className: 'bg-green-100 text-green-700' },
-      owner: { label: 'Owner', className: 'bg-orange-100 text-orange-700' }
+      owner: { label: 'Owner (Camping)', className: 'bg-orange-100 text-orange-700' },
+      glamping_owner: { label: 'Chủ Glamping', className: 'bg-teal-100 text-teal-700' }
     };
 
     const badge = badges[role] || badges.operations;
@@ -430,7 +450,8 @@ useEffect(() => {
             <Button onClick={() => {
               setSelectedUser(null);
               setFormRole('operations');
-              setSelectedZoneId('');  // Reset zone selection
+              // Auto-assign current zone if viewing specific zone page
+              setSelectedZoneId(zoneId !== 'all' ? zoneId : '');
               setIsUserModalOpen(true);
             }}>
               <Plus className="w-4 h-4 mr-2" />
@@ -483,7 +504,7 @@ useEffect(() => {
                     <SelectItem value="admin">{t('roles.admin')}</SelectItem>
                     <SelectItem value="sale">{t('roles.sale')}</SelectItem>
                     <SelectItem value="operations">{t('roles.operations')}</SelectItem>
-                    <SelectItem value="owner">Owner</SelectItem>
+                    <SelectItem value="glamping_owner">Chủ Glamping</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -784,33 +805,34 @@ useEffect(() => {
                       <SelectItem value="admin">{t('roles.admin')}</SelectItem>
                       <SelectItem value="sale">{t('roles.sale')}</SelectItem>
                       <SelectItem value="operations">{t('roles.operationsDetail')}</SelectItem>
-                      <SelectItem value="owner">Owner (Chủ Campsite)</SelectItem>
+                      <SelectItem value="glamping_owner">Chủ Glamping</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {/* Zone selector */}
-              <div>
-                <Label htmlFor="glamping_zone_id">Glamping Zone</Label>
-                <Select
-                  name="glamping_zone_id"
-                  value={selectedZoneId}
-                  onValueChange={setSelectedZoneId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a zone (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">None</SelectItem>
-                    {zones.map((zone) => (
-                      <SelectItem key={zone.id} value={zone.id}>
-                        {zone.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Zone selector - only show if viewing "all zones" page */}
+              {zoneId === 'all' && (
+                <div>
+                  <Label htmlFor="glamping_zone_id">Glamping Zone</Label>
+                  <Select
+                    name="glamping_zone_id"
+                    value={selectedZoneId}
+                    onValueChange={setSelectedZoneId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a zone (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {zones.map((zone) => (
+                        <SelectItem key={zone.id} value={zone.id}>
+                          {zone.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
             </div>
 

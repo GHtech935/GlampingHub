@@ -76,7 +76,7 @@ export async function authenticateAdmin(
   try {
     // Check users table (staff with passwords)
     const result = await pool.query(
-      'SELECT id, email, first_name, last_name, password_hash, role, campsite_id FROM users WHERE email = $1 AND is_active = true',
+      'SELECT id, email, first_name, last_name, password_hash, role, campsite_id, glamping_zone_id FROM users WHERE email = $1 AND is_active = true',
       [email]
     );
 
@@ -138,18 +138,44 @@ export async function authenticateAdmin(
       }
     }
 
+    // NEW: Fetch glamping zone assignments for glamping_owner
+    let glampingZoneIds: string[] | undefined;
+    if (user.role === 'glamping_owner') {
+      try {
+        const hasGlampingZonesTable = await tableExists('user_glamping_zones');
+        if (hasGlampingZonesTable) {
+          const zonesResult = await pool.query(
+            'SELECT zone_id FROM user_glamping_zones WHERE user_id = $1 AND role = $2 ORDER BY assigned_at',
+            [user.id, 'glamping_owner']
+          );
+          glampingZoneIds = zonesResult.rows.map(row => row.zone_id);
+        }
+
+        // Fallback to glamping_zone_id (single) for backward compat
+        if ((!glampingZoneIds || glampingZoneIds.length === 0) && user.glamping_zone_id) {
+          glampingZoneIds = [user.glamping_zone_id];
+        }
+      } catch (error) {
+        console.error('Failed to fetch glamping zone assignments:', error);
+        if (user.glamping_zone_id) {
+          glampingZoneIds = [user.glamping_zone_id];
+        }
+      }
+    }
+
     return {
       type: 'staff',
       id: user.id,
       email: user.email,
       firstName: user.first_name,
       lastName: user.last_name,
-      role: user.role as 'admin' | 'sale' | 'operations' | 'owner',
+      role: user.role as 'admin' | 'sale' | 'operations' | 'owner' | 'glamping_owner',
       // Backward compatibility: set campsiteId to first campsite for operations
       campsiteId: (user.role === 'operations' && campsiteIds && campsiteIds.length > 0)
         ? campsiteIds[0]
         : user.campsite_id,
       campsiteIds, // Populated for both operations and owner roles
+      glampingZoneIds, // NEW - only for glamping_owner role
     };
   } catch (error) {
     console.error('Admin authentication error:', error);
@@ -393,9 +419,10 @@ export async function createStaffUser(data: {
   password: string;
   firstName: string;
   lastName: string;
-  role?: 'admin' | 'sale' | 'operations' | 'owner';
+  role?: 'admin' | 'sale' | 'operations' | 'owner' | 'glamping_owner';
   campsiteId?: string;
   campsiteIds?: string[]; // For owner role - campsites this owner will own
+  glampingZoneIds?: string[]; // For glamping_owner role - zones this owner will manage
   phone?: string;
   notes?: string;
 }): Promise<{ id: string; email: string } | null> {
@@ -426,6 +453,21 @@ export async function createStaffUser(data: {
         'UPDATE campsites SET owner_id = $1 WHERE id = ANY($2::uuid[])',
         [newUser.id, data.campsiteIds]
       );
+    }
+
+    // For glamping_owner role, insert zone assignments
+    if (data.role === 'glamping_owner' && data.glampingZoneIds && data.glampingZoneIds.length > 0) {
+      const hasGlampingZonesTable = await tableExists('user_glamping_zones');
+      if (hasGlampingZonesTable) {
+        for (const zoneId of data.glampingZoneIds) {
+          await pool.query(
+            `INSERT INTO user_glamping_zones (user_id, zone_id, role)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (user_id, zone_id, role) DO NOTHING`,
+            [newUser.id, zoneId, 'glamping_owner']
+          );
+        }
+      }
     }
 
     return newUser;
@@ -499,5 +541,59 @@ export function getAccessibleCampsiteIds(user: SessionUser | null): string[] | n
     return [user.campsiteId];
   }
 
+  return [];
+}
+
+/**
+ * Check if user can access a specific glamping zone
+ * @param session Staff session or session user
+ * @param zoneId Zone ID to check
+ * @returns true if user has access
+ */
+export function canAccessGlampingZone(
+  session: SessionUser | null,
+  zoneId: string
+): boolean {
+  if (!session || !isStaffSession(session)) return false;
+
+  // Admin and sale can access all zones
+  if (session.role === 'admin' || session.role === 'sale') {
+    return true;
+  }
+
+  // glamping_owner can only access assigned zones
+  if (session.role === 'glamping_owner') {
+    if (!session.glampingZoneIds || session.glampingZoneIds.length === 0) {
+      return false;
+    }
+    return session.glampingZoneIds.includes(zoneId);
+  }
+
+  // owner role (camping) has NO access to glamping zones
+  // operations role: not used for glamping zones (only camping)
+  return false;
+}
+
+/**
+ * Get accessible glamping zone IDs for a user
+ * @param session Staff session or session user
+ * @returns Array of zone IDs or null (for admin/sale = all zones)
+ */
+export function getAccessibleGlampingZoneIds(
+  session: SessionUser | null
+): string[] | null {
+  if (!session || !isStaffSession(session)) return [];
+
+  // Admin and sale can access all zones (return null = no filter)
+  if (session.role === 'admin' || session.role === 'sale') {
+    return null;
+  }
+
+  // glamping_owner: return their assigned zones
+  if (session.role === 'glamping_owner') {
+    return session.glampingZoneIds || [];
+  }
+
+  // owner (camping) and operations: no glamping zones access
   return [];
 }

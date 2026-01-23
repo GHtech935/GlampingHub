@@ -51,6 +51,7 @@ interface GlampingBookingFinancialTabProps {
     taxInvoiceRequired?: boolean;
     taxRate?: number;
     invoiceNotes?: string;
+    specialRequirements?: string;
   };
   locale?: Locale;
   onPaidAndCheckout?: (paymentMethod: string) => void;
@@ -353,6 +354,7 @@ export function GlampingBookingFinancialTab({
         totalTax,
         grandTotal: calculatedTotal,
       },
+      specialRequests: booking.specialRequirements || '',
       invoiceNotes: invoiceNotes || '',
     });
   };

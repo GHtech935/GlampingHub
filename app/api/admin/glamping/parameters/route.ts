@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getSession, getAccessibleGlampingZoneIds, canAccessGlampingZone } from '@/lib/auth';
 import pool from '@/lib/db';
 
 export async function GET(request: NextRequest) {
@@ -9,6 +9,9 @@ export async function GET(request: NextRequest) {
     if (!session || session.type !== 'staff') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Get accessible zone IDs (null = all, [] = none)
+    const accessibleZoneIds = getAccessibleGlampingZoneIds(session);
 
     const searchParams = request.nextUrl.searchParams;
     const zoneId = searchParams.get('zone_id');
@@ -35,10 +38,31 @@ export async function GET(request: NextRequest) {
     `;
 
     const params: any[] = [];
+    const conditions: string[] = [];
 
+    // Filter by accessible zones for glamping_owner
+    if (accessibleZoneIds !== null) {
+      if (accessibleZoneIds.length === 0) {
+        return NextResponse.json({ parameters: [] });
+      }
+      conditions.push(`p.zone_id = ANY($${params.length + 1}::uuid[])`);
+      params.push(accessibleZoneIds);
+    }
+
+    // Filter by zone_id if provided (skip if "all")
     if (zoneId && zoneId !== 'all') {
-      query += ' WHERE p.zone_id = $1';
+      if (accessibleZoneIds !== null && !accessibleZoneIds.includes(zoneId)) {
+        return NextResponse.json(
+          { error: 'You do not have access to this zone' },
+          { status: 403 }
+        );
+      }
+      conditions.push(`p.zone_id = $${params.length + 1}`);
       params.push(zoneId);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
     }
 
     query += ' ORDER BY p.display_order ASC, p.name ASC';
@@ -81,6 +105,14 @@ export async function POST(request: NextRequest) {
 
     if (!zone_id || zone_id === 'all') {
       return NextResponse.json({ error: 'zone_id is required' }, { status: 400 });
+    }
+
+    // Validate zone access for glamping_owner
+    if (!canAccessGlampingZone(session, zone_id)) {
+      return NextResponse.json(
+        { error: 'You do not have access to this zone' },
+        { status: 403 }
+      );
     }
 
     // Validate visibility value

@@ -40,6 +40,7 @@ export async function GET(
         b.balance_due,
         b.total_amount,
         b.subtotal_amount,
+        b.payment_expires_at,
         b.created_at
       FROM glamping_bookings b
       WHERE b.id = $1`,
@@ -84,68 +85,21 @@ export async function GET(
 
     const booking = result.rows[0];
 
-    // Get payment timeout from env (default 15 minutes)
-    const paymentTimeoutMinutes = parseInt(process.env.SEPAY_PAYMENT_TIMEOUT_MINUTES || '15', 10);
+    // Simple comparison using stored payment_expires_at
+    let isExpired = booking.payment_expires_at
+      ? new Date(booking.payment_expires_at) < new Date()
+      : false;
 
-    // Calculate expiration based on env setting
-    const now = Date.now(); // Use timestamp instead of Date object for consistency
-    let createdAtTimestamp: number;
-    let expiresAtTimestamp: number;
-    let isExpired = false;
-
-    // Handle case where created_at might be NULL or invalid
-    if (booking.created_at) {
-      // PostgreSQL returns timestamp, ensure proper parsing
-      const createdAtDate = booking.created_at instanceof Date
-        ? booking.created_at
-        : new Date(booking.created_at);
-
-      // Check if the date is valid
-      if (isNaN(createdAtDate.getTime())) {
-        console.error('[Payment Status] Invalid created_at date:', booking.created_at);
-        createdAtTimestamp = now;
-      } else {
-        createdAtTimestamp = createdAtDate.getTime();
-      }
-
-      // Calculate expiration time from booking creation
-      expiresAtTimestamp = createdAtTimestamp + (paymentTimeoutMinutes * 60 * 1000);
-
-      // Check if payment has expired
-      if (now >= expiresAtTimestamp) {
-        isExpired = true;
-      } else {
-        isExpired = false;
-      }
-
-      // Override: if payment_status is already expired or booking is cancelled, mark as expired
-      if (booking.payment_status === 'expired' || booking.status === 'cancelled') {
-        isExpired = true;
-      }
-    } else {
-      // If no created_at, default to timeout from now (don't expire immediately)
-      console.warn('[Payment Status] No created_at found, using current time');
-      createdAtTimestamp = now;
-      expiresAtTimestamp = now + (paymentTimeoutMinutes * 60 * 1000);
-      isExpired = false;
+    // Override: if payment_status is already expired or booking is cancelled
+    if (booking.payment_status === 'expired' || booking.status === 'cancelled') {
+      isExpired = true;
     }
 
-    // Debug logging
-    console.log('[Payment Status] ===== DEBUG START =====');
-    console.log('[Payment Status] Booking ID:', bookingId);
-    console.log('[Payment Status] Timeout (minutes):', paymentTimeoutMinutes);
-    console.log('[Payment Status] created_at (raw):', booking.created_at);
-    console.log('[Payment Status] created_at type:', typeof booking.created_at);
-    console.log('[Payment Status] createdAt timestamp:', createdAtTimestamp);
-    console.log('[Payment Status] createdAt ISO:', new Date(createdAtTimestamp).toISOString());
-    console.log('[Payment Status] now timestamp:', now);
-    console.log('[Payment Status] now ISO:', new Date(now).toISOString());
-    console.log('[Payment Status] expiresAt timestamp:', expiresAtTimestamp);
-    console.log('[Payment Status] expiresAt ISO:', new Date(expiresAtTimestamp).toISOString());
-    console.log('[Payment Status] diff (ms):', expiresAtTimestamp - now);
-    console.log('[Payment Status] diff (minutes):', (expiresAtTimestamp - now) / (60 * 1000));
-    console.log('[Payment Status] isExpired:', isExpired, '| now >= expiresAt:', now >= expiresAtTimestamp, '| payment_status:', booking.payment_status);
-    console.log('[Payment Status] ===== DEBUG END =====');
+    console.log('[Payment Status] ===== SIMPLIFIED LOGIC =====');
+    console.log('[Payment Status] payment_expires_at:', booking.payment_expires_at);
+    console.log('[Payment Status] now:', new Date().toISOString());
+    console.log('[Payment Status] isExpired:', isExpired);
+    console.log('[Payment Status] ===== END =====');
 
     const totalAmount = booking.total_amount ? parseFloat(booking.total_amount) : (booking.subtotal_amount ? parseFloat(booking.subtotal_amount) : 0);
     const depositDue = booking.deposit_due ? parseFloat(booking.deposit_due) : 0;
@@ -157,7 +111,7 @@ export async function GET(
       status: booking.status,
       booking_code: booking.booking_code,
       is_expired: isExpired,
-      expires_at: new Date(expiresAtTimestamp).toISOString(),
+      expires_at: booking.payment_expires_at,
       transaction,
       amounts: {
         total: totalAmount,

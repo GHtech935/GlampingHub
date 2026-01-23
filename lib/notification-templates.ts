@@ -530,18 +530,61 @@ export const STAFF_NOTIFICATION_TYPES = Object.keys(
 ) as StaffNotificationType[];
 
 // Email template mapping for notifications that send emails
+// GlampingHub project - all templates use 'glamping-' prefix
 export const EMAIL_TEMPLATE_MAP: Record<string, string> = {
   // Customer emails
-  payment_received: 'payment-confirmation',
-  booking_confirmed: 'booking-confirmed',
-  balance_reminder: 'balance-payment-reminder',
-  pre_arrival_reminder: 'pre-arrival-reminder',
-  booking_cancelled: 'booking-cancellation',
-  late_payment_expired: 'late-payment-customer',
+  payment_received: 'glamping-payment-confirmation',
+  booking_confirmed: 'glamping-booking-confirmed',
+  balance_reminder: 'glamping-payment-reminder',
+  pre_arrival_reminder: 'glamping-pre-arrival-reminder',
+  booking_cancelled: 'glamping-booking-cancellation',
+  late_payment_expired: 'glamping-late-payment-customer',
 
   // Admin/Staff emails
-  new_booking_created: 'admin-new-booking-created',
-  new_booking_pending: 'admin-new-booking-pending',
-  payment_failed: 'admin-payment-failed',
-  late_payment_received: 'admin-late-payment'
+  new_booking_created: 'glamping-admin-new-booking-created',
+  new_booking_pending: 'glamping-admin-new-booking-pending',
+  late_payment_received: 'glamping-admin-late-payment'
 };
+
+// =============================================================================
+// LINK TRANSFORMATION FOR GLAMPING
+// =============================================================================
+
+/**
+ * Transform notification links for GlampingHub context
+ * Converts camping routes to glamping routes
+ *
+ * @param link - Original link from template (camping format)
+ * @param userType - 'customer' or 'staff'
+ * @param data - Template data (for variable replacement)
+ * @returns Transformed link pointing to glamping routes
+ *
+ * @example
+ * // Staff link transformation
+ * transformLinkForGlamping('/admin-camping/bookings?id={booking_id}', 'staff', { booking_id: '123' })
+ * // Returns: '/admin/glamping/bookings?id=123'
+ *
+ * // Customer link transformation
+ * transformLinkForGlamping('/booking/confirmation/{booking_id}', 'customer', { booking_code: 'GH26000001' })
+ * // Returns: '/glamping/booking/confirmation/GH26000001'
+ */
+export function transformLinkForGlamping(
+  link: string,
+  userType: 'customer' | 'staff',
+  data?: Record<string, any>
+): string {
+  if (userType === 'staff') {
+    // Transform: /admin-camping/* => /admin/glamping/*
+    return link.replace('/admin-camping/', '/admin/glamping/');
+  } else {
+    // Transform: /booking/* => /glamping/booking/*
+    let transformed = link.replace('/booking/', '/glamping/booking/');
+
+    // Replace {booking_id} with actual booking_code for glamping
+    if (data?.booking_code && transformed.includes('{booking_id}')) {
+      transformed = transformed.replace('{booking_id}', data.booking_code);
+    }
+
+    return transformed;
+  }
+}
