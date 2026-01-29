@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpDown, Edit, Trash, MapPin } from "lucide-react";
+import { ArrowUpDown, Edit, Trash, MapPin, Folder, CheckCircle, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
+import { StatCard, StatCardGrid } from "@/components/admin/StatCard";
 
 interface Category {
   id: string;
@@ -39,6 +40,7 @@ export default function AllZonesCategoriesPage() {
   const { toast } = useToast();
   const t = useTranslations("admin.glamping.categories");
   const tc = useTranslations("admin.glamping.common");
+  const ts = useTranslations("admin.glamping.allZonesStats");
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("all");
@@ -144,45 +146,75 @@ export default function AllZonesCategoriesPage() {
     <div className="space-y-6">
       {/* Header with Tabs */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">All Categories & Tags</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">{t("allTitle")}</h1>
 
         <Tabs value="categories" className="w-full">
           <TabsList>
-            <TabsTrigger value="categories">Categories</TabsTrigger>
+            <TabsTrigger value="categories">{t("tabCategories")}</TabsTrigger>
             <TabsTrigger
               value="tags"
               onClick={() => router.push("/admin/zones/all/tags")}
             >
-              Tags
+              {t("tabTags")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
+      {/* Stats */}
+      {!loading && (
+        <StatCardGrid>
+          <StatCard
+            title={ts("totalCategories")}
+            value={categories.length}
+            icon={Folder}
+            color="blue"
+          />
+          <StatCard
+            title={ts("active")}
+            value={categories.filter((c) => c.status === "active").length}
+            icon={CheckCircle}
+            color="green"
+          />
+          <StatCard
+            title={ts("totalItemsInCategories")}
+            value={categories.reduce((sum, c) => sum + (c.item_count || 0), 0)}
+            icon={Package}
+            color="purple"
+          />
+          <StatCard
+            title={ts("zones")}
+            value={new Set(categories.map((c) => c.zone_id)).size}
+            icon={MapPin}
+            color="orange"
+          />
+        </StatCardGrid>
+      )}
+
       {/* Filters */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Status:</label>
+          <label className="text-sm text-gray-600">{t("statusLabel")}:</label>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="hidden">Hidden</SelectItem>
+              <SelectItem value="all">{t("filter.all")}</SelectItem>
+              <SelectItem value="active">{t("filter.active")}</SelectItem>
+              <SelectItem value="hidden">{t("filter.hidden")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Zone:</label>
+          <label className="text-sm text-gray-600">{t("zoneLabel")}:</label>
           <Select value={zoneFilter} onValueChange={setZoneFilter}>
             <SelectTrigger className="w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Zones</SelectItem>
+              <SelectItem value="all">{t("allZones")}</SelectItem>
               {zones.map((zone) => (
                 <SelectItem key={zone.id} value={zone.id}>
                   {zone.name}
@@ -207,7 +239,7 @@ export default function AllZonesCategoriesPage() {
                   <ArrowUpDown className="w-4 h-4" />
                 </button>
               </TableHead>
-              <TableHead>Zone</TableHead>
+              <TableHead>{t("zoneColumn")}</TableHead>
               <TableHead className="text-center">{t("table.items")}</TableHead>
               <TableHead className="text-center">
                 <button

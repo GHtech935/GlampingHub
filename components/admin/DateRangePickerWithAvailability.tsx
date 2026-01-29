@@ -453,20 +453,6 @@ export function DateRangePickerWithAvailability({
                           </div>
                         )}
                       </div>
-
-                      {nights > 0 && (
-                        <div className="pt-2 border-t flex items-center gap-3">
-                          <Badge variant="secondary" className="flex items-center gap-1">
-                            <Moon className="h-3 w-3" />
-                            {nights} {locale === 'vi' ? 'đêm' : nights === 1 ? 'night' : 'nights'}
-                          </Badge>
-                          {totalPrice > 0 && (
-                            <p className="text-sm font-semibold text-green-600">
-                              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalPrice)}
-                            </p>
-                          )}
-                        </div>
-                      )}
                     </>
                   ) : (
                     <p className="text-sm text-gray-400">

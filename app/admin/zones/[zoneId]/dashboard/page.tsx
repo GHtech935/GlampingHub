@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Package, Tag, Calendar, Grid3x3, MapPin, Edit, Power } from "lucide-react";
+import { Plus, Package, Tag, Calendar, MapPin, Edit, Power, DollarSign, CheckCircle, BarChart3 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -17,6 +17,9 @@ import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 import { useToast } from "@/hooks/use-toast";
 import { ZoneFormModal } from "@/components/admin/glamping/ZoneFormModal";
+import { StatCard, StatCardGrid } from "@/components/admin/StatCard";
+import { RevenueChart } from "@/components/admin/RevenueChart";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 interface ZoneStats {
   id: string;
@@ -35,6 +38,47 @@ interface ZoneStats {
   longitude?: number | null;
 }
 
+interface DashboardData {
+  summary: {
+    totalRevenue: number;
+    totalBookings: number;
+    confirmedBookings: number;
+    pendingBookings: number;
+    cancelledBookings: number;
+    avgBookingValue: number;
+    totalGuests: number;
+  };
+  dailyRevenue: { date: string; revenue: number; bookings: number }[];
+  monthlyRevenue: { month: string; month_name: string; revenue: number; bookings: number }[];
+  statusDistribution: { status: string; count: number }[];
+  recentBookings: {
+    id: string;
+    bookingCode: string;
+    status: string;
+    totalAmount: number;
+    checkInDate: string;
+    checkOutDate: string;
+    createdAt: string;
+    customerName: string;
+  }[];
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  pending: "#f59e0b",
+  confirmed: "#22c55e",
+  checked_in: "#3b82f6",
+  completed: "#6366f1",
+  cancelled: "#ef4444",
+};
+
+const STATUS_BADGE_VARIANT: Record<string, string> = {
+  pending: "warning",
+  confirmed: "success",
+  checked_in: "info",
+  completed: "default",
+  cancelled: "destructive",
+};
+
 export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId: string }> }) {
   const router = useRouter();
   const t = useTranslations("admin.glamping.zones");
@@ -48,12 +92,16 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedZone, setSelectedZone] = useState<ZoneStats | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [chartMode, setChartMode] = useState<"daily" | "monthly">("daily");
 
   useEffect(() => {
     if (isAllZones) {
       fetchAllZones();
     } else {
       fetchZoneStats();
+      fetchDashboardData();
     }
   }, [zoneId]);
 
@@ -83,6 +131,31 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchDashboardData = async () => {
+    setDashboardLoading(true);
+    try {
+      const response = await fetch(`/api/admin/glamping/bookings/stats/dashboard?zoneId=${zoneId}`);
+      const data = await response.json();
+      if (response.ok) {
+        setDashboardData(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+    } finally {
+      setDashboardLoading(false);
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    return value.toLocaleString("vi-VN") + "đ";
+  };
+
+  const formatShortCurrency = (value: number) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+    return value.toFixed(0);
   };
 
   const toggleZoneStatus = async (zoneId: string, currentStatus: boolean) => {
@@ -330,6 +403,8 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
     );
   }
 
+  const td = (key: string) => t(`dashboard.${key}`);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -343,9 +418,10 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => router.push(`/admin/zones/manage/${zoneId}`)}
+            onClick={() => handleEditZone(zoneStats)}
           >
-            {t("viewDetails")}
+            <Edit className="w-4 h-4 mr-2" />
+            {tc("edit")}
           </Button>
           <Button onClick={() => router.push(`/admin/zones/${zoneId}/items/new`)}>
             <Plus className="w-4 h-4 mr-2" />
@@ -354,60 +430,174 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* Booking Stat Cards */}
+      {dashboardLoading ? (
+        <StatCardGrid>
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <div className="animate-pulse space-y-3">
+                  <div className="h-4 bg-gray-200 rounded w-24" />
+                  <div className="h-8 bg-gray-200 rounded w-16" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </StatCardGrid>
+      ) : dashboardData ? (
+        <StatCardGrid>
+          <StatCard
+            title={td("totalRevenue")}
+            value={formatShortCurrency(dashboardData.summary.totalRevenue) + "đ"}
+            icon={DollarSign}
+            color="green"
+          />
+          <StatCard
+            title={td("totalBookings")}
+            value={dashboardData.summary.totalBookings}
+            icon={BarChart3}
+            color="blue"
+          />
+          <StatCard
+            title={td("confirmedBookings")}
+            value={dashboardData.summary.confirmedBookings}
+            icon={CheckCircle}
+            color="emerald"
+          />
+          <StatCard
+            title={td("avgBookingValue")}
+            value={formatShortCurrency(dashboardData.summary.avgBookingValue) + "đ"}
+            icon={DollarSign}
+            color="purple"
+          />
+        </StatCardGrid>
+      ) : null}
+
+      {/* Revenue Chart */}
+      {dashboardLoading ? (
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Package className="w-5 h-5 text-green-600" />
+          <CardContent className="p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-gray-200 rounded w-48" />
+              <div className="h-48 bg-gray-200 rounded" />
+            </div>
+          </CardContent>
+        </Card>
+      ) : dashboardData ? (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Button
+              variant={chartMode === "daily" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setChartMode("daily")}
+            >
+              {td("daily")}
+            </Button>
+            <Button
+              variant={chartMode === "monthly" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setChartMode("monthly")}
+            >
+              {td("monthly")}
+            </Button>
+          </div>
+          <RevenueChart
+            data={chartMode === "daily" ? dashboardData.dailyRevenue : dashboardData.monthlyRevenue}
+            title={chartMode === "daily" ? td("dailyRevenue") : td("monthlyRevenue")}
+            description={chartMode === "daily" ? td("last30Days") : td("last12Months")}
+            type={chartMode}
+          />
+        </div>
+      ) : null}
+
+      {/* Two-column: Pie Chart + Zone Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Status Pie Chart */}
+        {dashboardLoading ? (
+          <Card>
+            <CardContent className="p-6">
+              <div className="animate-pulse space-y-4">
+                <div className="h-6 bg-gray-200 rounded w-48" />
+                <div className="h-64 bg-gray-200 rounded" />
               </div>
-              <div>
+            </CardContent>
+          </Card>
+        ) : dashboardData && dashboardData.statusDistribution.length > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>{td("bookingsByStatus")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={dashboardData.statusDistribution.map((item) => ({
+                      name: td(item.status),
+                      value: item.count,
+                      status: item.status,
+                    }))}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={90}
+                    paddingAngle={3}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {dashboardData.statusDistribution.map((item, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={STATUS_COLORS[item.status] || "#9ca3af"}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>{td("bookingsByStatus")}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center justify-center h-64 text-gray-500">
+              {td("noBookingsYet")}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Zone Overview */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{td("zoneOverview")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-green-50 rounded-lg text-center">
+                <Package className="w-6 h-6 text-green-600 mx-auto mb-2" />
                 <div className="text-2xl font-bold text-gray-900">
                   {zoneStats.items_count || 0}
                 </div>
                 <p className="text-sm text-gray-600">{t("stats.itemsCount")}</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Tag className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
+              <div className="p-4 bg-purple-50 rounded-lg text-center">
+                <Tag className="w-6 h-6 text-purple-600 mx-auto mb-2" />
                 <div className="text-2xl font-bold text-gray-900">
                   {zoneStats.categories_count || 0}
                 </div>
                 <p className="text-sm text-gray-600">{t("stats.categoriesCount")}</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Calendar className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
+              <div className="p-4 bg-orange-50 rounded-lg text-center">
+                <Calendar className="w-6 h-6 text-orange-600 mx-auto mb-2" />
                 <div className="text-2xl font-bold text-gray-900">
                   {zoneStats.events_count || 0}
                 </div>
                 <p className="text-sm text-gray-600">{t("stats.eventsCount")}</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Package className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
+              <div className="p-4 bg-blue-50 rounded-lg text-center">
+                <Package className="w-6 h-6 text-blue-600 mx-auto mb-2" />
                 <div className="text-2xl font-bold text-gray-900">
                   {zoneStats.active_items || 0}
                 </div>
@@ -417,6 +607,80 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Bookings */}
+      {dashboardLoading ? (
+        <Card>
+          <CardContent className="p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-gray-200 rounded w-48" />
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-10 bg-gray-200 rounded" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : dashboardData && dashboardData.recentBookings.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>{td("recentBookings")}</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/admin/zones/${zoneId}/bookings`)}
+              >
+                {td("viewAll")}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{td("bookingCode")}</TableHead>
+                  <TableHead>{td("customer")}</TableHead>
+                  <TableHead>{td("dates")}</TableHead>
+                  <TableHead>{td("status")}</TableHead>
+                  <TableHead className="text-right">{td("amount")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dashboardData.recentBookings.map((booking) => (
+                  <TableRow key={booking.id}>
+                    <TableCell className="font-medium">
+                      {booking.bookingCode}
+                    </TableCell>
+                    <TableCell>{booking.customerName}</TableCell>
+                    <TableCell>
+                      {new Date(booking.checkInDate).toLocaleDateString("vi-VN")}
+                      {" - "}
+                      {new Date(booking.checkOutDate).toLocaleDateString("vi-VN")}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_BADGE_VARIANT[booking.status] as any || "default"}>
+                        {td(booking.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(booking.totalAmount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : !dashboardLoading ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{td("recentBookings")}</CardTitle>
+          </CardHeader>
+          <CardContent className="py-8 text-center text-gray-500">
+            {td("noBookingsYet")}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Quick Actions */}
       <Card>
@@ -458,6 +722,17 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
           </div>
         </CardContent>
       </Card>
+
+      {/* Zone Edit Modal */}
+      <ZoneFormModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        zone={selectedZone || undefined}
+        onSuccess={() => {
+          fetchZoneStats();
+          setSelectedZone(null);
+        }}
+      />
     </div>
   );
 }

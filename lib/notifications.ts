@@ -150,7 +150,7 @@ export async function createNotification(
           const emailTemplate = EMAIL_TEMPLATE_MAP[type];
 
           if (emailTemplate) {
-            const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+            const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
 
             await sendTemplateEmail({
               templateSlug: emailTemplate,

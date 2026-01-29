@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { getSession, isStaffSession } from "@/lib/auth";
+import { getBookingItemTaxRates } from "@/lib/glamping-tax-utils";
 
 export const dynamic = 'force-dynamic';
 
@@ -67,11 +68,12 @@ export async function GET(
 
     const booking = bookingResult.rows[0];
 
-    // Get booking items (accommodation)
+    // Get booking items (accommodation) with tent reference
     const itemsResult = await client.query(
       `SELECT
         bi.id,
         bi.item_id,
+        bi.booking_tent_id,
         bi.parameter_id,
         bi.quantity,
         bi.unit_price,
@@ -88,14 +90,36 @@ export async function GET(
       [id]
     );
 
-    // Get menu products
+    // Get booking tents with discount info
+    const tentsResult = await client.query(
+      `SELECT
+        bt.id,
+        bt.item_id,
+        bt.voucher_code,
+        bt.discount_type,
+        bt.discount_value,
+        bt.discount_amount
+      FROM glamping_booking_tents bt
+      WHERE bt.booking_id = $1
+      ORDER BY bt.display_order`,
+      [id]
+    );
+    const tentsDiscountMap = new Map(tentsResult.rows.map(t => [t.id, t]));
+
+    // Get menu products with tent reference + discount fields
     const productsResult = await client.query(
       `SELECT
         bp.id,
         bp.menu_item_id,
+        bp.booking_tent_id,
         bp.quantity,
         bp.unit_price,
         bp.total_price,
+        bp.voucher_code,
+        bp.discount_type,
+        bp.discount_value,
+        bp.discount_amount,
+        bp.serving_date,
         mi.name as product_name,
         mc.name as category_name
       FROM glamping_booking_menu_products bp
@@ -106,14 +130,21 @@ export async function GET(
       [id]
     );
 
-    // Calculate tax rate
-    const taxRate = booking.tax_invoice_required ? (parseFloat(booking.tax_rate) || 10) : 0;
+    // Get per-item tax rates
+    const { itemTaxMap, menuTaxMap } = await getBookingItemTaxRates(client, id);
 
     // Build nightly pricing (simplified for glamping - one entry per item)
-    const nightlyPricing = itemsResult.rows.map((item, index) => {
+    const nightlyPricing = itemsResult.rows.map((item) => {
       const unitPrice = parseFloat(item.unit_price) || 0;
       const totalPrice = parseFloat(item.total_price) || 0;
-      const taxAmount = booking.tax_invoice_required ? totalPrice * (taxRate / 100) : 0;
+
+      // Look up per-item tax rate
+      const itemTaxInfo = item.item_id ? itemTaxMap.get(item.item_id) : undefined;
+      const itemTaxRate = booking.tax_invoice_required && itemTaxInfo ? itemTaxInfo.taxRate : 0;
+      const taxAmount = itemTaxRate > 0 ? totalPrice * (itemTaxRate / 100) : 0;
+
+      // Get tent discount info
+      const tentDiscount = item.booking_tent_id ? tentsDiscountMap.get(item.booking_tent_id) : null;
 
       return {
         date: new Date(booking.check_in_date).toISOString().split('T')[0],
@@ -125,35 +156,64 @@ export async function GET(
         zoneName: getLocalizedString(item.zone_name),
         quantity: item.quantity || 1,
         unitPrice: unitPrice,
+        taxRate: itemTaxRate,
         taxAmount: taxAmount,
+        bookingTentId: item.booking_tent_id || null,
+        itemId: item.item_id || null,
+        tentVoucherCode: tentDiscount?.voucher_code || null,
+        tentDiscountAmount: parseFloat(tentDiscount?.discount_amount || 0),
       };
     });
 
-    // Build products list
+    // Build products list (with per-product discount and per-product tax)
     const products = productsResult.rows.map(p => {
       const unitPrice = parseFloat(p.unit_price) || 0;
       const totalPrice = parseFloat(p.total_price) || 0;
-      const taxAmount = booking.tax_invoice_required ? totalPrice * (taxRate / 100) : 0;
+      const productDiscountAmount = parseFloat(p.discount_amount || 0);
+
+      // Look up per-product tax rate from menu item
+      const productTaxRate = booking.tax_invoice_required ? (menuTaxMap.get(p.menu_item_id) || 0) : 0;
+      const taxAmount = productTaxRate > 0 ? totalPrice * (productTaxRate / 100) : 0;
 
       return {
         name: getLocalizedString(p.product_name, 'Product'),
         category: getLocalizedString(p.category_name),
         quantity: p.quantity || 1,
         originalUnitPrice: unitPrice,
-        discount: null,
+        discount: productDiscountAmount > 0 ? {
+          voucherCode: p.voucher_code,
+          discountType: p.discount_type,
+          discountValue: parseFloat(p.discount_value || 0),
+          discountAmount: productDiscountAmount,
+        } : null,
         finalUnitPrice: unitPrice,
         subtotal: totalPrice,
-        taxRate: taxRate,
+        taxRate: productTaxRate,
         taxAmount: taxAmount,
         total: totalPrice + taxAmount,
+        bookingTentId: p.booking_tent_id || null,
+        menuItemId: p.menu_item_id || null,
+        voucherCode: p.voucher_code || null,
+        discountAmount: productDiscountAmount,
+        servingDate: p.serving_date || null,
       };
     });
 
-    // Calculate totals
+    // Calculate totals (including per-item discounts)
     const accommodationTotal = itemsResult.rows.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0);
     const productsTotal = productsResult.rows.reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+
+    // Sum per-tent discounts
+    const totalTentDiscounts = tentsResult.rows.reduce((sum, t) => sum + (parseFloat(t.discount_amount) || 0), 0);
+    // Sum per-product discounts
+    const totalProductDiscounts = productsResult.rows.reduce((sum, p) => sum + (parseFloat(p.discount_amount) || 0), 0);
+
     const subtotal = accommodationTotal + productsTotal;
-    const totalTax = booking.tax_invoice_required ? subtotal * (taxRate / 100) : 0;
+
+    // Sum tax from per-item amounts
+    const accommodationTax = nightlyPricing.reduce((sum, n) => sum + n.taxAmount, 0);
+    const productsTax = products.reduce((sum, p) => sum + p.taxAmount, 0);
+    const totalTax = accommodationTax + productsTax;
 
     return NextResponse.json({
       booking: {
@@ -164,7 +224,7 @@ export async function GET(
         nights: booking.nights,
         totalGuests: booking.total_guests,
         guests: booking.guests,
-        taxRate: taxRate,
+        taxRate: parseFloat(booking.tax_rate) || 10,
         taxEnabled: booking.tax_invoice_required,
         status: booking.status,
         paymentStatus: booking.payment_status,
@@ -173,16 +233,26 @@ export async function GET(
       nightlyPricing,
       products,
       voucherApplied: null,
+      tentDiscounts: tentsResult.rows
+        .filter(t => t.voucher_code)
+        .map(t => ({
+          tentId: t.id,
+          itemId: t.item_id,
+          voucherCode: t.voucher_code,
+          discountType: t.discount_type,
+          discountValue: parseFloat(t.discount_value || 0),
+          discountAmount: parseFloat(t.discount_amount || 0),
+        })),
       totals: {
         accommodationBeforeDiscount: accommodationTotal,
-        accommodationDiscounts: 0,
-        accommodationAfterDiscount: accommodationTotal,
+        accommodationDiscounts: totalTentDiscounts,
+        accommodationAfterDiscount: accommodationTotal - totalTentDiscounts,
         productsBeforeDiscount: productsTotal,
-        productsDiscounts: 0,
-        productsAfterDiscount: productsTotal,
-        productsTax: booking.tax_invoice_required ? productsTotal * (taxRate / 100) : 0,
+        productsDiscounts: totalProductDiscounts,
+        productsAfterDiscount: productsTotal - totalProductDiscounts,
+        productsTax: productsTax,
         subtotal: subtotal,
-        accommodationTax: booking.tax_invoice_required ? accommodationTotal * (taxRate / 100) : 0,
+        accommodationTax: accommodationTax,
         totalTax: totalTax,
         totalDiscount: parseFloat(booking.discount_amount) || 0,
         grandTotal: parseFloat(booking.total_amount),

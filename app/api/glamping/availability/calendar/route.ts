@@ -54,15 +54,16 @@ export async function GET(request: NextRequest) {
     // Get all bookings that overlap with the date range
     const bookingsQuery = await pool.query(`
       SELECT
-        b.check_in_date,
-        b.check_out_date
+        b.check_in_date::text as check_in_date,
+        b.check_out_date::text as check_out_date
       FROM glamping_booking_items bi
       JOIN glamping_bookings b ON bi.booking_id = b.id
       WHERE bi.item_id = $1
         AND b.status NOT IN ('cancelled')
+        AND b.check_in_date IS NOT NULL
+        AND b.check_out_date IS NOT NULL
         AND b.check_in_date < $3
         AND b.check_out_date > $2
-      ORDER BY b.check_in_date
     `, [itemId, startDate, endDate]);
 
     // Generate all days in the range
@@ -77,12 +78,23 @@ export async function GET(request: NextRequest) {
 
       // Count how many bookings overlap with this specific day
       const overlappingBookings = bookingsQuery.rows.filter(booking => {
-        const checkIn = format(parseISO(booking.check_in_date), 'yyyy-MM-dd');
-        const checkOut = format(parseISO(booking.check_out_date), 'yyyy-MM-dd');
+        try {
+          // Skip if dates are null or invalid
+          if (!booking.check_in_date || !booking.check_out_date) {
+            return false;
+          }
 
-        // A booking overlaps with this day if:
-        // check_in <= day < check_out
-        return dayStr >= checkIn && dayStr < checkOut;
+          const checkIn = format(parseISO(booking.check_in_date), 'yyyy-MM-dd');
+          const checkOut = format(parseISO(booking.check_out_date), 'yyyy-MM-dd');
+
+          // A booking overlaps with this day if:
+          // check_in <= day < check_out
+          return dayStr >= checkIn && dayStr < checkOut;
+        } catch (error) {
+          // Skip bookings with invalid dates
+          console.error('Invalid booking date:', booking, error);
+          return false;
+        }
       });
 
       const bookedQuantity = overlappingBookings.length;

@@ -215,7 +215,7 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowCategoryModal(true)}>
             <FolderOpen className="w-4 h-4 mr-2" />
-            Category
+            {t("categoryButton")}
           </Button>
           <Button onClick={handleCreate}>
             <Plus className="w-4 h-4 mr-2" />
@@ -238,9 +238,9 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="hidden">Hidden</SelectItem>
+            <SelectItem value="all">{t("filter.allStatus")}</SelectItem>
+            <SelectItem value="active">{t("status.active")}</SelectItem>
+            <SelectItem value="hidden">{t("status.hidden")}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -249,9 +249,9 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Availability</SelectItem>
-            <SelectItem value="available">Available</SelectItem>
-            <SelectItem value="unavailable">Unavailable</SelectItem>
+            <SelectItem value="all">{t("filter.allAvailability")}</SelectItem>
+            <SelectItem value="available">{t("availability.available")}</SelectItem>
+            <SelectItem value="unavailable">{t("availability.unavailable")}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -261,7 +261,7 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="all">{t("filter.allCategories")}</SelectItem>
               {categories.map(cat => (
                 <SelectItem key={cat} value={cat}>{cat}</SelectItem>
               ))}
@@ -275,7 +275,7 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-50">
-              <TableHead className="w-24">Image</TableHead>
+              <TableHead className="w-24">{t("table.image")}</TableHead>
               <TableHead>
                 <button
                   onClick={() => handleSort('name')}
@@ -296,20 +296,19 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
                 </button>
               </TableHead>
               <TableHead className="text-center">{t("table.status")}</TableHead>
-              <TableHead className="text-center">{t("table.available")}</TableHead>
               <TableHead className="text-right">{tc("actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   {tc("loading")}
                 </TableCell>
               </TableRow>
             ) : sortedMenuItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                   {tc("noData")}
                 </TableCell>
               </TableRow>
@@ -325,7 +324,7 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
                       />
                     ) : (
                       <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-xs">
-                        No image
+                        {t("noImage")}
                       </div>
                     )}
                   </TableCell>
@@ -339,17 +338,12 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
                     {formatPrice(item.price)}
                   </TableCell>
                   <TableCell className="text-center">
-                    {item.status === 'active' ? (
+                    {item.status === 'active' && item.is_available ? (
                       <Badge variant="success">{t("status.active")}</Badge>
+                    ) : item.status === 'active' && !item.is_available ? (
+                      <Badge variant="secondary">{t("availability.unavailable")}</Badge>
                     ) : (
                       <Badge variant="secondary">{t("status.hidden")}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {item.is_available ? (
-                      <Badge variant="success">{t("availability.available")}</Badge>
-                    ) : (
-                      <Badge variant="destructive">{t("availability.unavailable")}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

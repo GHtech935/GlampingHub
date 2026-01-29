@@ -40,115 +40,31 @@ import { type MultilingualText, getLocalizedText } from "@/lib/i18n-utils";
 import { GlampingBookingFinancialTab } from "./GlampingBookingFinancialTab";
 import { GlampingBookingProductsTab } from "./GlampingBookingProductsTab";
 import { GlampingBookingPaymentsTab } from "./GlampingBookingPaymentsTab";
+import { GlampingBookingEditTab } from "./GlampingBookingEditTab";
+import { GlampingBookingNotesTab } from "./GlampingBookingNotesTab";
 import GlampingBookingEmailsSection from "./GlampingBookingEmailsSection";
 import { GlampingForceEditStatusDialog } from "./GlampingForceEditStatusDialog";
+import type {
+  BookingStatus,
+  PaymentStatus,
+  BookingItem,
+  BookingPayment,
+  BookingHistoryRecord,
+  BookingDetail,
+  CustomerBooking,
+} from "./types";
+import { ItemColorProvider } from "./shared";
+import { BookingStayItemsSection } from "./tabs/BookingStayItemsSection";
+import { BookingOverviewCard } from "./tabs/BookingOverviewCard";
+import { GuestDistributionCard } from "./tabs/GuestDistributionCard";
+import {
+  groupBookingItemsByPeriod,
+  tentsToBookingPeriods,
+  getUniqueTentCount,
+  getTotalNightsAcrossPeriods,
+} from "@/lib/glamping-utils";
 
-// Types - aligned with camping booking statuses
-type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';
-type PaymentStatus = 'pending' | 'deposit_paid' | 'fully_paid' | 'refund_pending' | 'refunded' | 'no_refund' | 'expired';
-
-interface BookingItem {
-  id: string;
-  itemId: string;
-  itemName: string;
-  itemSku?: string;
-  parameterId?: string;
-  parameterName?: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  metadata?: any;
-}
-
-interface BookingPayment {
-  id: string;
-  paymentMethod: string;
-  amount: number;
-  status: string;
-  transactionReference?: string;
-  paidAt?: string;
-  createdAt: string;
-}
-
-interface BookingHistoryRecord {
-  id: string;
-  action: string;
-  description: string;
-  created_at: string;
-  actor_name: string | null;
-  actor_type: string;
-  payment_amount: number | null;
-}
-
-interface BookingDetail {
-  id: string;
-  bookingCode: string;
-  status: BookingStatus;
-  paymentStatus: PaymentStatus;
-  dates: {
-    checkIn: string;
-    checkOut: string;
-    checkInTime?: string;
-    checkOutTime?: string;
-    nights: number;
-  };
-  guests: Record<string, number>;
-  totalGuests: number;
-  pricing: {
-    subtotalAmount: number;
-    taxAmount: number;
-    discountAmount: number;
-    totalAmount: number;
-    depositDue: number;
-    balanceDue: number;
-    currency: string;
-  };
-  customer: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    fullName: string;
-    email: string;
-    phone: string;
-    country?: string;
-    address?: string;
-  };
-  zone: {
-    id: string;
-    name: MultilingualText | string;
-  } | null;
-  items: BookingItem[];
-  payments: BookingPayment[];
-  parameters: Array<{
-    id: string;
-    parameterId: string;
-    label: string;
-    bookedQuantity: number;
-    controlsInventory: boolean;
-  }>;
-  notes: {
-    customer?: string;
-    internal?: string;
-  };
-  invoiceNotes?: string;
-  specialRequirements?: string;
-  partyNames?: string;
-  taxInvoiceRequired?: boolean;
-  taxRate?: number;
-  createdAt: string;
-  updatedAt?: string;
-  confirmedAt?: string;
-  cancelledAt?: string;
-}
-
-interface CustomerBooking {
-  id: string;
-  booking_code: string;
-  check_in_date: string;
-  check_out_date: string;
-  total_amount: number;
-  status: string;
-  payment_status: string;
+interface CustomerBookingExtended extends CustomerBooking {
   created_at: string;
   zone_name: string;
 }
@@ -243,7 +159,7 @@ export function GlampingBookingDetailModal({
   const [editTotalGuests, setEditTotalGuests] = useState(0);
 
   // Customer booking history
-  const [customerBookings, setCustomerBookings] = useState<CustomerBooking[]>([]);
+  const [customerBookings, setCustomerBookings] = useState<CustomerBookingExtended[]>([]);
   const [loadingCustomerBookings, setLoadingCustomerBookings] = useState(false);
 
   // Force edit status dialog
@@ -653,22 +569,39 @@ export function GlampingBookingDetailModal({
   const zoneName = booking.zone ? getLocalizedText(booking.zone.name, locale) : '-';
   const canModify = ['pending', 'confirmed', 'checked_in'].includes(booking.status);
 
+  // Use per-tent data from DB when available, fallback to client-side grouping
+  const bookingPeriods = booking.tents && booking.tents.length > 0
+    ? tentsToBookingPeriods(booking.tents, booking.items)
+    : groupBookingItemsByPeriod(
+        booking.items,
+        booking.dates.checkIn,
+        booking.dates.checkOut
+      );
+
+  // Generate unique keys for each booking period (for color mapping)
+  const periodKeys = bookingPeriods.map(
+    period => `${period.itemId}|${period.checkInDate}|${period.checkOutDate}`
+  );
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">
             {locale === 'vi' ? 'Chi tiết booking' : 'Booking Details'} #{booking.bookingCode}
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+        <ItemColorProvider itemIds={periodKeys}>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="admin">{locale === 'vi' ? 'Quản lý' : 'Admin'}</TabsTrigger>
             <TabsTrigger value="guest">{locale === 'vi' ? 'Khách hàng' : 'Guest'}</TabsTrigger>
             <TabsTrigger value="stay">{locale === 'vi' ? 'Lưu trú' : 'Stay'}</TabsTrigger>
             <TabsTrigger value="products">{locale === 'vi' ? 'Sản phẩm' : 'Products'}</TabsTrigger>
             <TabsTrigger value="payments">{locale === 'vi' ? 'Thanh toán' : 'Payments'}</TabsTrigger>
+            <TabsTrigger value="edit">{locale === 'vi' ? 'Chỉnh sửa' : 'Edit'}</TabsTrigger>
+            <TabsTrigger value="notes">{locale === 'vi' ? 'Ghi chú' : 'Notes'}</TabsTrigger>
             <TabsTrigger value="financial">{locale === 'vi' ? 'Tài chính' : 'Financial'}</TabsTrigger>
           </TabsList>
 
@@ -792,6 +725,15 @@ export function GlampingBookingDetailModal({
               </div>
             </div>
 
+            {/* Booking Overview */}
+            <BookingOverviewCard
+              bookingPeriods={bookingPeriods}
+              totalGuests={booking.totalGuests}
+              locale={locale}
+              bookingCheckIn={booking.dates.checkIn}
+              bookingCheckOut={booking.dates.checkOut}
+            />
+
             {/* Payment Summary */}
             <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-3">
               <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -910,6 +852,23 @@ export function GlampingBookingDetailModal({
                   : (locale === 'vi' ? 'Lưu thay đổi' : 'Save Changes')}
               </Button>
             </div>
+          </TabsContent>
+
+          {/* Edit Tab */}
+          <TabsContent value="edit" className="space-y-4">
+            <GlampingBookingEditTab
+              booking={{
+                id: booking.id,
+                status: booking.status,
+                paymentStatus: booking.paymentStatus,
+              }}
+              locale={locale}
+              onRefresh={() => {
+                fetchBookingDetails();
+                fetchBookingHistory();
+              }}
+              isUpdating={updating}
+            />
           </TabsContent>
 
           {/* Guest Tab */}
@@ -1123,6 +1082,12 @@ export function GlampingBookingDetailModal({
               </div>
             </div>
 
+            {/* Guest Distribution by Tent */}
+            <GuestDistributionCard
+              bookingPeriods={bookingPeriods}
+              locale={locale}
+            />
+
             {/* Customer Booking History */}
             <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
               <h3 className="font-semibold text-gray-900 mb-3">
@@ -1198,117 +1163,13 @@ export function GlampingBookingDetailModal({
 
           {/* Stay Tab */}
           <TabsContent value="stay" className="space-y-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  {locale === 'vi' ? 'Thông tin lưu trú' : 'Stay Information'}
-                </h3>
-                {canModify && !isEditingStay && (
-                  <Button variant="ghost" size="sm" onClick={startEditingStay}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="text-sm text-gray-600">{locale === 'vi' ? 'Nhận phòng' : 'Check-in'}</label>
-                  <p className="font-medium">{formatDate(booking.dates.checkIn)}</p>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">{locale === 'vi' ? 'Trả phòng' : 'Check-out'}</label>
-                  <p className="font-medium">{formatDate(booking.dates.checkOut)}</p>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">{locale === 'vi' ? 'Số đêm' : 'Nights'}</label>
-                  <p className="font-medium">{booking.dates.nights}</p>
-                </div>
-              </div>
-
-              {/* Zone Info */}
-              <div className="pt-3 border-t">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm font-medium">{zoneName}</span>
-                </div>
-              </div>
-
-              {/* Guests */}
-              {isEditingStay ? (
-                <div className="pt-3 border-t space-y-4">
-                  <div className="space-y-2">
-                    <Label>{locale === 'vi' ? 'Số khách' : 'Total Guests'}</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={editTotalGuests}
-                      onChange={(e) => setEditTotalGuests(parseInt(e.target.value) || 1)}
-                    />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => setIsEditingStay(false)} disabled={updating}>
-                      {locale === 'vi' ? 'Hủy' : 'Cancel'}
-                    </Button>
-                    <Button onClick={handleSaveStayInfo} disabled={updating}>
-                      {updating ? (locale === 'vi' ? 'Đang lưu...' : 'Saving...') : (locale === 'vi' ? 'Lưu' : 'Save')}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Guest Parameters */}
-                  {booking.parameters.length > 0 && (
-                    <div className="pt-3 border-t">
-                      <label className="text-sm text-gray-600 mb-2 block">
-                        {locale === 'vi' ? 'Chi tiết khách' : 'Guest Details'}
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {booking.parameters.map((param) => (
-                          <Badge key={param.id} variant="outline">
-                            {param.label}: {param.bookedQuantity}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Booked Items */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
-                <Package className="h-5 w-5" />
-                {locale === 'vi' ? 'Phòng/Lều đặt' : 'Booked Rooms/Tents'}
-              </h3>
-
-              {booking.items.length === 0 ? (
-                <p className="text-gray-500 text-sm">
-                  {locale === 'vi' ? 'Không có sản phẩm' : 'No items'}
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {booking.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div>
-                        <p className="font-medium">{item.itemName || '-'}</p>
-                        {item.parameterName && (
-                          <p className="text-sm text-gray-600">{item.parameterName}</p>
-                        )}
-                        <p className="text-xs text-gray-500">
-                          {item.quantity} x {formatCurrency(item.unitPrice)}
-                        </p>
-                      </div>
-                      <p className="font-semibold">{formatCurrency(item.totalPrice)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Booked Items - Enhanced Multi-Item Display */}
+            <BookingStayItemsSection
+              bookingPeriods={bookingPeriods}
+              locale={locale}
+              bookingCheckIn={booking.dates.checkIn}
+              bookingCheckOut={booking.dates.checkOut}
+            />
           </TabsContent>
 
           {/* Products Tab */}
@@ -1318,6 +1179,7 @@ export function GlampingBookingDetailModal({
                 id: booking.id,
                 status: booking.status,
                 paymentStatus: booking.paymentStatus,
+                items: booking.items,
               }}
               zoneId={booking.zone?.id}
               locale={locale}
@@ -1336,10 +1198,19 @@ export function GlampingBookingDetailModal({
                 pricing: {
                   totalAmount: booking.pricing.totalAmount,
                 },
+                items: booking.items,
               }}
               locale={locale}
               onRefresh={fetchBookingDetails}
               isUpdating={updating}
+            />
+          </TabsContent>
+
+          {/* Notes Tab */}
+          <TabsContent value="notes" className="space-y-4">
+            <GlampingBookingNotesTab
+              booking={{ id: bookingId! }}
+              locale={locale}
             />
           </TabsContent>
 
@@ -1360,7 +1231,9 @@ export function GlampingBookingDetailModal({
                 taxRate: booking.taxRate,
                 invoiceNotes: booking.invoiceNotes,
                 specialRequirements: booking.specialRequirements,
+                items: booking.items,
               }}
+              bookingPeriods={bookingPeriods}
               locale={locale}
               onPaidAndCheckout={handlePaidAndCheckout}
               onAddVatPayment={handleAddVatPayment}
@@ -1372,6 +1245,7 @@ export function GlampingBookingDetailModal({
             />
           </TabsContent>
         </Tabs>
+        </ItemColorProvider>
 
         {/* Force Edit Status Dialog */}
         <GlampingForceEditStatusDialog

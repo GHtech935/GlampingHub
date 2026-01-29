@@ -11,8 +11,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin and owner can list users
-    if (session.role !== "admin" && session.role !== "owner") {
+    // Only admin, owner, and glamping_owner can list users
+    if (!['admin', 'owner', 'glamping_owner'].includes(session.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

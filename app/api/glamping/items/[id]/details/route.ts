@@ -45,6 +45,9 @@ export async function GET(
         p.id as parameter_id,
         p.name as parameter_name,
         p.color_code,
+        p.controls_inventory,
+        p.sets_pricing,
+        p.counted_for_menu,
         ip.display_order,
         ip.min_quantity,
         ip.max_quantity
@@ -111,8 +114,12 @@ export async function GET(
       },
       parameters: parametersResult.rows.map((p) => ({
         id: p.parameter_id || '',
+        parameter_id: p.parameter_id || '',
         name: p.parameter_name || '',
         color_code: p.color_code || '',
+        controls_inventory: p.controls_inventory || false,
+        sets_pricing: p.sets_pricing || false,
+        counted_for_menu: p.counted_for_menu || false,
         min_quantity: p.min_quantity,
         max_quantity: p.max_quantity,
       })),

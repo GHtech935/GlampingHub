@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
         p.price_range,
         p.required,
         p.visibility,
+        p.counted_for_menu,
         p.created_at,
         p.updated_at,
         z.name->>'vi' as zone_name
@@ -96,7 +97,8 @@ export async function POST(request: NextRequest) {
       sets_pricing,
       price_range,
       required,
-      visibility
+      visibility,
+      counted_for_menu
     } = body;
 
     if (!name) {
@@ -132,9 +134,10 @@ export async function POST(request: NextRequest) {
         sets_pricing,
         price_range,
         required,
-        visibility
+        visibility,
+        counted_for_menu
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         name,
@@ -147,7 +150,8 @@ export async function POST(request: NextRequest) {
         sets_pricing !== undefined ? sets_pricing : true,
         price_range || false,
         required || false,
-        visibility || 'everyone'
+        visibility || 'everyone',
+        counted_for_menu || false
       ]
     );
 

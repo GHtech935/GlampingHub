@@ -39,3 +39,7 @@ next-env.d.ts
 postgres_data/
 pgadmin_data/
 /docs
+database-backup*.sql
+database-backup*.dump
+database-schema-only.sql
+database-data-only.sql

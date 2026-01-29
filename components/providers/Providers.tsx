@@ -3,6 +3,7 @@
 import { ReactNode } from "react"
 import ToastProvider from "./ToastProvider"
 import { GoogleMapsProvider } from "./GoogleMapsProvider"
+import { GlampingCartProvider } from "./GlampingCartProvider"
 
 interface ProvidersProps {
   children: ReactNode
@@ -11,8 +12,10 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <GoogleMapsProvider>
-      {children}
-      <ToastProvider />
+      <GlampingCartProvider>
+        {children}
+        <ToastProvider />
+      </GlampingCartProvider>
     </GoogleMapsProvider>
   )
 }

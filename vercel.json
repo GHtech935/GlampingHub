@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/external/cancel-expired-bookings",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/external/email-automation",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/external/menu-selection-reminder",
+      "schedule": "0 */2 * * *"
+    }
+  ]
+}

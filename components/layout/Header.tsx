@@ -3,8 +3,9 @@
 import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { useTranslations } from 'next-intl'
-import { Menu, LogOut, User, Heart, BookOpen, ChevronDown, Bell } from "lucide-react"
+import { Menu, LogOut, User, Heart, BookOpen, ChevronDown, Bell, ShoppingBag } from "lucide-react"
 import { Container } from "./Container"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
@@ -19,11 +20,15 @@ import {
 import { LanguageSwitcher } from "./LanguageSwitcher"
 import { useAuth } from "@/hooks/useAuth"
 import { NotificationBell } from "@/components/notifications"
+import { useGlampingCart } from "@/components/providers/GlampingCartProvider"
+import { GlampingCartPopover } from "@/components/glamping-booking/GlampingCartPopover"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const router = useRouter()
   const t = useTranslations('header')
   const { user, loading, isStaff, isCustomer, logout } = useAuth()
+  const { cartCount } = useGlampingCart()
 
   return (
     <header className="border-b bg-white sticky top-0 z-[1001]">
@@ -32,10 +37,10 @@ export function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/images/logo_new.jpg"
+              src="/images/logo_glamping_transparent.png"
               alt="CampingHub Logo"
-              width={200}
-              height={40}
+              width={60}
+              height={60}
               className="rounded"
             />
           </Link>
@@ -59,6 +64,24 @@ export function Header() {
           {/* Desktop Auth Buttons & Language Switcher */}
           <div className="hidden md:flex items-center gap-3">
             <LanguageSwitcher />
+
+            {/* Cart Icon with Popover */}
+            <GlampingCartPopover>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative cursor-pointer"
+                aria-label={`Giỏ hàng (${cartCount} item${cartCount !== 1 ? 's' : ''})`}
+              >
+                <ShoppingBag className="h-5 w-5" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                    {cartCount}
+                  </span>
+                )}
+              </Button>
+            </GlampingCartPopover>
+
             {loading ? (
               <div className="text-sm text-muted-foreground">...</div>
             ) : isStaff ? (
@@ -143,6 +166,24 @@ export function Header() {
           {/* Mobile Language Switcher & Menu Button */}
           <div className="flex md:hidden items-center gap-2">
             <LanguageSwitcher />
+
+            {/* Mobile Cart Icon with Popover */}
+            <GlampingCartPopover>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative cursor-pointer"
+                aria-label={`Giỏ hàng (${cartCount} item${cartCount !== 1 ? 's' : ''})`}
+              >
+                <ShoppingBag className="h-5 w-5" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                    {cartCount}
+                  </span>
+                )}
+              </Button>
+            </GlampingCartPopover>
+
             {user && isCustomer && <NotificationBell userType="customer" />}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
@@ -161,10 +202,10 @@ export function Header() {
                 {/* Mobile Logo */}
                 <div className="flex items-center gap-2 mb-8">
                   <Image
-                    src="/images/logo_new.jpg"
+                    src="/images/logo_glamping_transparent.png"
                     alt="CampingHub Logo"
-                    width={200}
-                    height={100}
+                    width={60}
+                    height={60}
                     className="rounded"
                   />
                   

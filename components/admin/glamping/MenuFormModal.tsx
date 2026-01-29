@@ -67,6 +67,9 @@ export function MenuFormModal({
     advance_hours: "0",
     image_url: "",
     weight: 0,
+    min_guests: "",
+    max_guests: "",
+    stock: "",
   });
 
   // Reset form when modal opens/closes or editData changes
@@ -94,6 +97,9 @@ export function MenuFormModal({
           advance_hours: editData.advance_hours?.toString() || "0",
           image_url: editData.image_url || "",
           weight: editData.weight || 0,
+          min_guests: editData.min_guests?.toString() || "",
+          max_guests: editData.max_guests?.toString() || "",
+          stock: editData.stock?.toString() || "",
         });
       } else {
         // Fetch next weight for new items
@@ -116,6 +122,9 @@ export function MenuFormModal({
           advance_hours: "0",
           image_url: "",
           weight: 0,
+          min_guests: "",
+          max_guests: "",
+          stock: "",
         });
       }
     }
@@ -184,7 +193,7 @@ export function MenuFormModal({
     if (!file.type.startsWith('image/')) {
       toast({
         title: tc("error"),
-        description: "Vui lòng chọn file hình ảnh",
+        description: t("imageFileRequired"),
         variant: "destructive",
       });
       return;
@@ -211,13 +220,13 @@ export function MenuFormModal({
       setFormData(prev => ({ ...prev, image_url: data.url }));
       toast({
         title: tc("success"),
-        description: "Tải ảnh lên thành công",
+        description: t("imageUploadSuccess"),
       });
     } catch (error) {
       console.error("Upload error:", error);
       toast({
         title: tc("error"),
-        description: "Không thể tải ảnh lên",
+        description: t("imageUploadFailed"),
         variant: "destructive",
       });
     } finally {
@@ -245,10 +254,34 @@ export function MenuFormModal({
       return;
     }
 
-    if (!formData.price || parseFloat(formData.price) < 0) {
+    if (formData.price === '' || formData.price === null || formData.price === undefined || parseFloat(formData.price) < 0) {
       toast({
         title: tc("error"),
         description: t("priceRequired"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate guest limits
+    if (formData.min_guests && formData.max_guests) {
+      const minGuests = parseInt(formData.min_guests);
+      const maxGuests = parseInt(formData.max_guests);
+      if (maxGuests < minGuests) {
+        toast({
+          title: tc("error"),
+          description: t("guestLimitError"),
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Check if only one guest limit is filled
+    if ((formData.min_guests && !formData.max_guests) || (!formData.min_guests && formData.max_guests)) {
+      toast({
+        title: tc("error"),
+        description: t("guestLimitBothRequired"),
         variant: "destructive",
       });
       return;
@@ -282,6 +315,9 @@ export function MenuFormModal({
         image_url: formData.image_url || null,
         weight: formData.weight,
         zone_id: zoneId,
+        min_guests: formData.min_guests ? parseInt(formData.min_guests) : null,
+        max_guests: formData.max_guests ? parseInt(formData.max_guests) : null,
+        stock: formData.stock ? parseInt(formData.stock) : null,
       };
 
       const url = editData
@@ -373,55 +409,58 @@ export function MenuFormModal({
               </div>
             </div>
 
-            {/* Category */}
-            <div className="space-y-2">
-              <Label>{t("categoryLabel")}</Label>
-              <Select
-                value={formData.category_id || "none"}
-                onValueChange={handleCategoryChange}
-                disabled={loading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn category" />
-                </SelectTrigger>
-                <SelectContent position="popper" className="z-[9999]">
-                  <SelectItem value="none">
-                    -- Không chọn category --
-                  </SelectItem>
-                  {categories.map((category) => {
-                    const displayName = typeof category.name === 'object'
-                      ? (category.name?.vi || category.name?.en || 'N/A')
-                      : (category.name || 'N/A');
-
-                    return (
-                      <SelectItem key={category.id} value={category.id}>
-                        {displayName}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500">
-                Chọn category món ăn hoặc để trống
-              </p>
-            </div>
-
-            {/* Unit */}
-            <div className="space-y-2">
-              <Label>{t("unitLabel")}</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  placeholder="món"
-                  value={formData.unit_vi}
-                  onChange={(e) => setFormData({ ...formData, unit_vi: e.target.value })}
+            {/* Category and Unit - 2 columns */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Category */}
+              <div className="space-y-2">
+                <Label>{t("categoryLabel")}</Label>
+                <Select
+                  value={formData.category_id || "none"}
+                  onValueChange={handleCategoryChange}
                   disabled={loading}
-                />
-                <Input
-                  placeholder="item"
-                  value={formData.unit_en}
-                  onChange={(e) => setFormData({ ...formData, unit_en: e.target.value })}
-                  disabled={loading}
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("categoryPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="z-[9999]">
+                    <SelectItem value="none">
+                      {t("categoryNone")}
+                    </SelectItem>
+                    {categories.map((category) => {
+                      const displayName = typeof category.name === 'object'
+                        ? (category.name?.vi || category.name?.en || 'N/A')
+                        : (category.name || 'N/A');
+
+                      return (
+                        <SelectItem key={category.id} value={category.id}>
+                          {displayName}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">
+                  {t("categoryHelp")}
+                </p>
+              </div>
+
+              {/* Unit */}
+              <div className="space-y-2">
+                <Label>{t("unitLabel")}</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder={t("unitViPlaceholder")}
+                    value={formData.unit_vi}
+                    onChange={(e) => setFormData({ ...formData, unit_vi: e.target.value })}
+                    disabled={loading}
+                  />
+                  <Input
+                    placeholder={t("unitEnPlaceholder")}
+                    value={formData.unit_en}
+                    onChange={(e) => setFormData({ ...formData, unit_en: e.target.value })}
+                    disabled={loading}
+                  />
+                </div>
               </div>
             </div>
 
@@ -474,32 +513,91 @@ export function MenuFormModal({
               </Select>
             </div>
 
-            {/* Availability */}
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="is_available"
-                checked={formData.is_available}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, is_available: checked as boolean })
-                }
-                disabled={loading}
-              />
-              <Label htmlFor="is_available" className="font-normal cursor-pointer">
-                {t("availableLabel")}
-              </Label>
+            {/* Max Quantity, Stock, Display Order - 3 columns */}
+            <div className="grid grid-cols-3 gap-4">
+              {/* Max Quantity */}
+              <div className="space-y-2">
+                <Label htmlFor="max_quantity">{t("maxQuantityLabel")}</Label>
+                <Input
+                  id="max_quantity"
+                  type="number"
+                  min="0"
+                  placeholder="100"
+                  value={formData.max_quantity}
+                  onChange={(e) => setFormData({ ...formData, max_quantity: e.target.value })}
+                  disabled={loading}
+                />
+              </div>
+
+              {/* Stock */}
+              <div className="space-y-2">
+                <Label htmlFor="stock">{t("stockLabel")}</Label>
+                <Input
+                  id="stock"
+                  type="number"
+                  min="0"
+                  placeholder={t("stockPlaceholder")}
+                  value={formData.stock}
+                  onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500">
+                  {t("stockHelp")}
+                </p>
+              </div>
+
+              {/* Weight/Display Order */}
+              <div className="space-y-2">
+                <Label htmlFor="weight">{t("displayOrderLabel")}</Label>
+                <Input
+                  id="weight"
+                  type="number"
+                  placeholder="0"
+                  value={formData.weight}
+                  onChange={(e) => setFormData({ ...formData, weight: parseInt(e.target.value) || 0 })}
+                  disabled={loading}
+                />
+              </div>
             </div>
 
-            {/* Max Quantity */}
+            {/* Guest Limits for Combo */}
             <div className="space-y-2">
-              <Label htmlFor="max_quantity">{t("maxQuantityLabel")}</Label>
-              <Input
-                id="max_quantity"
-                type="number"
-                min="0"
-                value={formData.max_quantity}
-                onChange={(e) => setFormData({ ...formData, max_quantity: e.target.value })}
-                disabled={loading}
-              />
+              <Label>{t("comboGuestLabel")}</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="min_guests" className="text-sm text-gray-600">
+                    {t("minGuestsLabel")}
+                  </Label>
+                  <Input
+                    id="min_guests"
+                    type="number"
+                    min="0"
+                    placeholder="VD: 2"
+                    value={formData.min_guests}
+                    onChange={(e) => setFormData({ ...formData, min_guests: e.target.value })}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="max_guests" className="text-sm text-gray-600">
+                    {t("maxGuestsLabel")}
+                  </Label>
+                  <Input
+                    id="max_guests"
+                    type="number"
+                    min="0"
+                    placeholder="VD: 2"
+                    value={formData.max_guests}
+                    onChange={(e) => setFormData({ ...formData, max_guests: e.target.value })}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                {t("comboFixedHelp")}<br/>
+                {t("comboFlexibleHelp")}<br/>
+                {t("comboNormalHelp")}
+              </p>
             </div>
 
             {/* Advance Booking */}
@@ -573,7 +671,7 @@ export function MenuFormModal({
                     <div className="flex flex-col items-center gap-2">
                       <Upload className="w-8 h-8 text-gray-400" />
                       <span className="text-sm text-gray-600">
-                        {uploading ? "Đang tải lên..." : "Tải ảnh lên"}
+                        {uploading ? t("uploading") : t("uploadImage")}
                       </span>
                     </div>
                   </Button>
@@ -581,20 +679,23 @@ export function MenuFormModal({
               )}
 
               <p className="text-xs text-gray-500">
-                Nhấn để chọn hình ảnh từ máy tính của bạn
+                {t("imageHelp")}
               </p>
             </div>
 
-            {/* Weight */}
-            <div className="space-y-2">
-              <Label htmlFor="weight">{t("weightLabel")}</Label>
-              <Input
-                id="weight"
-                type="number"
-                value={formData.weight}
-                onChange={(e) => setFormData({ ...formData, weight: parseInt(e.target.value) || 0 })}
+            {/* Active Status - Checkbox at the bottom */}
+            <div className="flex items-center space-x-2 pt-4 border-t">
+              <Checkbox
+                id="is_available"
+                checked={formData.is_available}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, is_available: checked as boolean })
+                }
                 disabled={loading}
               />
+              <Label htmlFor="is_available" className="font-normal cursor-pointer">
+                {t("availableLabel")}
+              </Label>
             </div>
           </div>
 
@@ -609,7 +710,7 @@ export function MenuFormModal({
             </Button>
             <Button
               type="submit"
-              disabled={loading || (!formData.name_vi && !formData.name_en) || !formData.price}
+              disabled={loading || (!formData.name_vi && !formData.name_en) || (formData.price === '' || formData.price === null || formData.price === undefined)}
             >
               {loading ? tc("loading") : (editData ? t("updateButton") : t("createButton"))}
             </Button>

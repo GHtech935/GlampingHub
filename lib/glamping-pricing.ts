@@ -160,10 +160,12 @@ export async function calculateGlampingPricing(
   const pricingResult = await db.query(pricingQuery, [itemId]);
 
   // Fetch all active events for this item (via junction table) with pricing config
+  // Events are prioritized by: type (closure > special > seasonal), display_order, created_at
   const eventsQuery = `
     SELECT
       e.id,
       e.name,
+      e.type,
       e.start_date,
       e.end_date,
       e.days_of_week,
@@ -172,12 +174,21 @@ export async function calculateGlampingPricing(
       e.pricing_type,
       e.dynamic_pricing_value,
       e.dynamic_pricing_mode,
-      e.yield_thresholds
+      e.yield_thresholds,
+      ei.display_order
     FROM glamping_item_events e
     INNER JOIN glamping_item_event_items ei ON e.id = ei.event_id
     WHERE ei.item_id = $1
       AND e.status = 'available'
-    ORDER BY e.created_at DESC
+    ORDER BY
+      CASE e.type
+        WHEN 'closure' THEN 1
+        WHEN 'special' THEN 2
+        WHEN 'seasonal' THEN 3
+        ELSE 4
+      END,
+      ei.display_order DESC,
+      e.created_at DESC
   `;
 
   const eventsResult = await db.query(eventsQuery, [itemId]);
@@ -268,6 +279,8 @@ export async function calculateGlampingPricing(
 
     // Calculate price for each parameter
     Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
+      // Use qty=1 for price tier lookup when qty=0 (to get unit price for display)
+      const lookupQty = Math.max(quantity, 1);
       let price: number | null = null;
       let matchedEvent: any = null;
 
@@ -277,7 +290,7 @@ export async function calculateGlampingPricing(
         if (event.pricing_type === 'new_price') {
           const eventPrices = pricingMap.events[event.id]?.[paramId];
           if (eventPrices) {
-            price = findPrice(eventPrices, quantity);
+            price = findPrice(eventPrices, lookupQty);
             if (price !== null) {
               matchedEvent = event;
               break;
@@ -293,7 +306,7 @@ export async function calculateGlampingPricing(
 
       // Get base price for calculation (needed for dynamic and yield pricing)
       const basePrices = pricingMap.base[paramId] || [];
-      const basePrice = findPrice(basePrices, quantity);
+      const basePrice = findPrice(basePrices, lookupQty);
 
       // Apply pricing calculation based on event type
       if (matchedEvent) {
@@ -350,6 +363,15 @@ export async function calculateGlampingPricing(
       parameters: dayPricing,
     });
   }
+
+  // Ensure all requested parameters are in the pricing object, even if with price = 0
+  // This prevents missing parameters from being excluded from the calculation
+  Object.keys(parameterQuantities || {}).forEach(paramId => {
+    if (parameterTotalPricing[paramId] === undefined) {
+      console.warn(`[Pricing] Parameter ${paramId} has no pricing configured, setting to 0`);
+      parameterTotalPricing[paramId] = 0;
+    }
+  });
 
   return {
     parameterPricing: parameterTotalPricing,

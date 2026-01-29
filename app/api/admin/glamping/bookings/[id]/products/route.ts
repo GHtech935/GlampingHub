@@ -48,31 +48,47 @@ export async function GET(
     const booking = bookingResult.rows[0];
 
     // Fetch booked menu products from glamping_booking_menu_products
+    // JOIN with tents + items to support per-tent product grouping + discount fields
     const productsResult = await client.query(
       `SELECT
         bmp.id,
         bmp.menu_item_id,
+        bmp.booking_tent_id,
         bmp.quantity,
         bmp.unit_price,
         bmp.total_price,
         bmp.notes,
         bmp.created_at,
+        bmp.voucher_code,
+        bmp.voucher_id,
+        bmp.discount_type,
+        bmp.discount_value,
+        bmp.discount_amount,
+        bmp.serving_date,
         mi.name as product_name,
         mi.description as product_description,
         mi.unit as product_unit,
         mi.image_url,
-        mc.name as category_name
+        mc.name as category_name,
+        bt.item_id as tent_item_id,
+        bt.check_in_date as tent_check_in,
+        bt.check_out_date as tent_check_out,
+        bt.display_order as tent_display_order,
+        gi.name as tent_item_name
       FROM glamping_booking_menu_products bmp
       JOIN glamping_menu_items mi ON bmp.menu_item_id = mi.id
       LEFT JOIN glamping_menu_categories mc ON mi.category_id = mc.id
+      LEFT JOIN glamping_booking_tents bt ON bmp.booking_tent_id = bt.id
+      LEFT JOIN glamping_items gi ON bt.item_id = gi.id
       WHERE bmp.booking_id = $1
-      ORDER BY bmp.created_at, mi.name`,
+      ORDER BY bt.display_order NULLS LAST, bmp.serving_date NULLS LAST, bmp.created_at, mi.name`,
       [id]
     );
 
     const products = productsResult.rows.map(row => ({
       id: row.id,
       menuItemId: row.menu_item_id,
+      bookingTentId: row.booking_tent_id || null, // null means shared/booking-level product
       productName: typeof row.product_name === 'object'
         ? (row.product_name.vi || row.product_name.en || 'Unknown')
         : (row.product_name || 'Unknown Product'),
@@ -89,6 +105,18 @@ export async function GET(
       imageUrl: row.image_url,
       notes: row.notes,
       createdAt: row.created_at,
+      voucherCode: row.voucher_code || null,
+      discountAmount: parseFloat(row.discount_amount || 0),
+      servingDate: row.serving_date || null,
+      // Tent info for grouping
+      tentItemName: row.tent_item_name
+        ? (typeof row.tent_item_name === 'object'
+          ? (row.tent_item_name.vi || row.tent_item_name.en || '')
+          : row.tent_item_name)
+        : null,
+      tentCheckIn: row.tent_check_in || null,
+      tentCheckOut: row.tent_check_out || null,
+      tentDisplayOrder: row.tent_display_order ?? null,
     }));
 
     // Calculate total for all products

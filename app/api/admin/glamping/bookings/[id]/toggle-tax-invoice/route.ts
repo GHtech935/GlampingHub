@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { getSession, isStaffSession } from "@/lib/auth";
+import { calculatePerItemTax } from "@/lib/glamping-tax-utils";
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,7 @@ export async function POST(
         status,
         payment_status,
         subtotal_amount,
+        discount_amount,
         tax_rate,
         tax_amount,
         total_amount
@@ -55,11 +57,16 @@ export async function POST(
 
     const booking = bookingResult.rows[0];
 
-    // Calculate new tax amount
+    // Calculate new tax amount using per-item tax rates
+    let newTaxAmount = 0;
+    if (taxInvoiceRequired) {
+      const { totalTaxAmount } = await calculatePerItemTax(client, id);
+      newTaxAmount = totalTaxAmount;
+    }
+
     const subtotal = parseFloat(booking.subtotal_amount);
-    const taxRate = parseFloat(booking.tax_rate) || 10;
-    const newTaxAmount = taxInvoiceRequired ? subtotal * (taxRate / 100) : 0;
-    const newTotalAmount = subtotal + newTaxAmount;
+    const discountAmount = parseFloat(booking.discount_amount || '0');
+    const newTotalAmount = subtotal - discountAmount + newTaxAmount;
 
     // Calculate balance due based on payments
     const paymentsResult = await client.query(
@@ -71,23 +78,22 @@ export async function POST(
     const totalPaid = parseFloat(paymentsResult.rows[0].total_paid);
     const newBalanceDue = Math.max(0, newTotalAmount - totalPaid);
 
-    // Update booking
+    // Update booking (total_amount is GENERATED — do not set it directly)
     await client.query(
       `UPDATE glamping_bookings
        SET
          tax_invoice_required = $1,
          tax_amount = $2,
-         total_amount = $3,
-         balance_due = $4,
+         balance_due = $3,
          updated_at = NOW()
-       WHERE id = $5`,
-      [taxInvoiceRequired, newTaxAmount, newTotalAmount, newBalanceDue, id]
+       WHERE id = $4`,
+      [taxInvoiceRequired, newTaxAmount, newBalanceDue, id]
     );
 
     // Record in history
     await client.query(
       `INSERT INTO glamping_booking_status_history
-       (booking_id, previous_status, new_status, previous_payment_status, new_payment_status, changed_by_user_id, notes)
+       (booking_id, previous_status, new_status, previous_payment_status, new_payment_status, changed_by_user_id, description)
        VALUES ($1, $2, $2, $3, $3, $4, $5)`,
       [
         id,

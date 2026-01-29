@@ -1,7 +1,7 @@
 "use client"
 
 import { useSearchParams, useRouter } from "next/navigation"
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useState, useMemo, Suspense } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -10,6 +10,7 @@ import Swal from "sweetalert2"
 import { useTranslations } from "next-intl"
 import { useClientLocale } from "@/components/providers/ClientI18nProvider"
 import { useAuth } from "@/hooks/useAuth"
+import { useGlampingCart } from "@/components/providers/GlampingCartProvider"
 import { GlampingBookingSummaryHeader } from "@/components/glamping-booking/GlampingBookingSummaryHeader"
 import { GlampingMyDetailsSection } from "@/components/glamping-booking/GlampingMyDetailsSection"
 import { GlampingOtherDetailsSection } from "@/components/glamping-booking/GlampingOtherDetailsSection"
@@ -18,6 +19,7 @@ import { GlampingPaymentSection } from "@/components/glamping-booking/GlampingPa
 import { AppliedVoucher } from "@/components/booking/VoucherInput"
 import GlampingPricingSummary from "@/components/glamping-booking/GlampingPricingSummary"
 import { GlampingMenuProductsSelector, type MenuProduct } from "@/components/glamping-booking/GlampingMenuProductsSelector"
+import { CartItemsList } from "@/components/glamping-booking/CartItemsList"
 
 // Zod validation schema function
 const createBookingFormSchema = (t: any) => {
@@ -32,6 +34,12 @@ const createBookingFormSchema = (t: any) => {
     townCity: z.string().optional(),
     postcode: z.string().optional(),
     createPassword: z.string().optional(),
+
+    // New customer info fields
+    dateOfBirth: z.string().min(1, "Vui lòng nhập ngày sinh"),
+    socialMediaUrl: z.string().min(1, "Vui lòng nhập đường dẫn Facebook/Instagram"),
+    photoConsent: z.boolean(),
+    referralSource: z.string().min(1, "Vui lòng chọn nguồn giới thiệu"),
 
     // Other Details
     partyNames: z.string().optional(),
@@ -69,9 +77,10 @@ interface BookingData {
   parameterQuantities?: Record<string, number>
   parameters?: Array<{
     id: string
-    name: string
+    name: string | { vi?: string; en?: string }
     color_code?: string
     quantity: number
+    counted_for_menu?: boolean
   }>
 }
 
@@ -81,15 +90,20 @@ function GlampingBookingFormContent() {
   const { locale } = useClientLocale()
   const t = useTranslations('booking')
   const { user, isCustomer, loading: authLoading } = useAuth()
+  const { cart, clearCart, isInitialized: cartInitialized } = useGlampingCart()
   const [bookingData, setBookingData] = useState<BookingData | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [bookingSubmitted, setBookingSubmitted] = useState(false)
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null)
   const [pricingData, setPricingData] = useState<any>(null)
   const [allowPayLater, setAllowPayLater] = useState<boolean>(true)
   const [invoiceNotes, setInvoiceNotes] = useState<string>("")
   const [menuProducts, setMenuProducts] = useState<MenuProduct[]>([])
-  const [menuProductSelections, setMenuProductSelections] = useState<Record<string, number>>({})
+  const [menuProductSelections, setMenuProductSelections] = useState<Record<string, { quantity: number; price: number; name: string; voucher?: any }>>({})
   const isLoggedIn = !authLoading && user && isCustomer
+
+  // Cart mode state
+  const isCartMode = searchParams.get('from') === 'cart'
 
   // Deposit settings state
   const [depositType, setDepositType] = useState<'percentage' | 'fixed_amount' | null>(null)
@@ -142,17 +156,54 @@ function GlampingBookingFormContent() {
   // Watch all form values
   const formValues = watch()
 
+  // Calculate total counted guests from cart items or single booking
+  const totalCountedGuests = useMemo(() => {
+    if (isCartMode && cart && cart.items.length > 0) {
+      // Cart mode: Sum counted parameters from all cart items
+      let total = 0;
+      for (const item of cart.items) {
+        if (item.parameters) {
+          item.parameters.forEach((param: any) => {
+            if (param.counted_for_menu) {
+              total += param.quantity || 0;
+            }
+          });
+        }
+      }
+      return total;
+    } else if (bookingData?.parameters) {
+      // Single booking mode: Count from bookingData parameters
+      return bookingData.parameters.reduce((sum, param: any) => {
+        if (param.counted_for_menu) {
+          return sum + (param.quantity || 0);
+        }
+        return sum;
+      }, 0);
+    }
+    return 0;
+  }, [isCartMode, cart, bookingData?.parameters]);
+
   // Calculate menu products total (client-side calculation to match GlampingPricingSummary)
-  const menuProductsTotal = menuProducts.reduce((sum, product) => {
-    const quantity = menuProductSelections[product.id] || 0;
-    return sum + (product.price * quantity);
+  const menuProductsTotal = Object.values(menuProductSelections).reduce((sum, selection) => {
+    const itemTotal = selection.price * selection.quantity;
+    const discount = selection.voucher?.discountAmount || 0;
+    return sum + itemTotal - discount;
   }, 0);
 
-  // Calculate actual grand total including menu products
-  const accommodationTotal = pricingData?.totals?.accommodationAfterDiscount || 0;
-  const voucherDiscount = pricingData?.totals?.voucherDiscount || 0;
-  // accommodationTotal already has voucher discount applied, so just add menu products
-  const actualGrandTotal = accommodationTotal + menuProductsTotal;
+  // Calculate actual grand total - different logic for cart mode vs single-item mode
+  const actualGrandTotal = useMemo(() => {
+    if (isCartMode && cart && cart.items.length > 0) {
+      // Cart mode: Sum all cart items (vouchers already applied per item)
+      return cart.items.reduce((sum, item) => {
+        const itemTotal = Number(item.pricingBreakdown?.subtotal || item.totalPrice || item.basePrice) || 0;
+        return sum + itemTotal;
+      }, 0);
+    } else {
+      // Single-item mode: Use pricing data
+      const accommodationTotal = pricingData?.totals?.accommodationAfterDiscount || 0;
+      return accommodationTotal + menuProductsTotal;
+    }
+  }, [isCartMode, cart, pricingData, menuProductsTotal]);
 
   // Calculate deposit/balance based on actual grand total and deposit settings
   const actualDepositAmount = hasDeposit && depositType
@@ -162,9 +213,141 @@ function GlampingBookingFormContent() {
     : 0;
   const actualBalanceAmount = actualGrandTotal - actualDepositAmount;
 
-  // Load booking data from URL params
+  // Load booking data from URL params or cart
   useEffect(() => {
     const loadBookingData = async () => {
+      // Cart mode: Load data from cart context
+      if (isCartMode) {
+        // Wait for cart to initialize from localStorage
+        if (!cartInitialized) {
+          console.log('[Booking Form] Waiting for cart to initialize...')
+          return
+        }
+
+        // Skip cart check if booking was already submitted (prevents redirect loop after successful booking)
+        if (bookingSubmitted) {
+          console.log('[Booking Form] Booking already submitted, skipping cart check')
+          return
+        }
+
+        // Now check if cart is empty AFTER it's initialized
+        if (!cart || cart.items.length === 0) {
+          console.log('[Booking Form] Cart is empty after initialization, redirecting...')
+          toast.error('Giỏ hàng trống')
+          router.push('/')
+          return
+        }
+
+        console.log('[Booking Form] Cart loaded successfully with', cart.items.length, 'items')
+
+        // For cart mode, we'll use the first item's zone info as the booking zone
+        // All items must be from the same zone (enforced by cart provider)
+        const firstItem = cart.items[0]
+
+        // Fetch zone details for policies
+        let cancellationPolicy = undefined
+        let houseRules = undefined
+        let zoneAddress = undefined
+        let city = undefined
+        let province = undefined
+        let taxEnabled = false
+        let taxRate = 0
+        let taxName = { vi: 'VAT', en: 'VAT' }
+
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'
+          const zoneResponse = await fetch(`${baseUrl}/api/glamping/zones/${firstItem.zoneId}`, {
+            cache: 'no-store'
+          })
+          if (zoneResponse.ok) {
+            const zoneData = await zoneResponse.json()
+            zoneAddress = zoneData.zone?.address
+            city = zoneData.zone?.city
+            province = zoneData.zone?.province
+            cancellationPolicy = zoneData.zone?.cancellation_policy
+            houseRules = zoneData.zone?.house_rules
+          }
+
+          // Fetch tax info from first item
+          const itemResponse = await fetch(`${baseUrl}/api/glamping/items/${firstItem.itemId}`, {
+            cache: 'no-store'
+          })
+          if (itemResponse.ok) {
+            const itemData = await itemResponse.json()
+            if (itemData.item?.taxes && itemData.item.taxes.length > 0) {
+              taxEnabled = true
+              const firstTax = itemData.item.taxes[0]
+              taxRate = firstTax.is_percentage ? parseFloat(firstTax.amount) : 0
+              taxName = { vi: firstTax.name, en: firstTax.name }
+            }
+
+            // Get menu products from zone (if applicable)
+            if (itemData.item?.menu_products && itemData.item.menu_products.length > 0) {
+              setMenuProducts(itemData.item.menu_products)
+
+              // Auto-select required products
+              const initialSelections: Record<string, { quantity: number; price: number; name: string; voucher?: any }> = {}
+              itemData.item.menu_products.forEach((mp: MenuProduct) => {
+                if (mp.is_required) {
+                  const name = typeof mp.name === 'string' ? mp.name : (mp.name?.vi || mp.name?.en || 'Unknown');
+                  initialSelections[mp.id] = {
+                    quantity: 1,
+                    price: mp.price,
+                    name,
+                    voucher: null
+                  }
+                }
+              })
+              if (Object.keys(initialSelections).length > 0) {
+                setMenuProductSelections(initialSelections)
+              }
+            }
+          }
+
+          // Fetch deposit settings from first item (assuming all items have same deposit settings)
+          const depositResponse = await fetch(`${baseUrl}/api/glamping/items/${firstItem.itemId}/deposit-settings`, {
+            cache: 'no-store'
+          })
+          if (depositResponse.ok) {
+            const depositData = await depositResponse.json()
+            if (depositData.hasDeposit) {
+              setHasDeposit(true)
+              setDepositType(depositData.depositType)
+              setDepositValue(depositData.depositValue)
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching zone/item details for cart mode:', error)
+        }
+
+        // Set booking data for cart mode (used for zone info, policies, etc.)
+        setBookingData({
+          itemId: firstItem.itemId, // Use first item ID for compatibility
+          zoneId: firstItem.zoneId,
+          zoneName: firstItem.zoneName.vi,
+          itemName: `${cart.items.length} lều`, // Multi-item indicator
+          checkIn: firstItem.checkIn, // Use first item's dates for display
+          checkOut: firstItem.checkOut,
+          adults: firstItem.adults,
+          children: firstItem.children,
+          basePrice: cart.items.reduce((sum, item) => sum + item.basePrice, 0),
+          itemImageUrl: firstItem.itemImageUrl,
+          cancellationPolicy,
+          houseRules,
+          zoneAddress,
+          city,
+          province,
+          taxEnabled,
+          taxRate,
+          taxName,
+          parameterQuantities: firstItem.parameterQuantities,
+          parameters: firstItem.parameters,
+        })
+
+        return
+      }
+
+      // Single-item mode: Load from URL params (existing logic)
       const itemId = searchParams.get("itemId")
       const zoneName = searchParams.get("zoneName")
       const itemName = searchParams.get("itemName")
@@ -207,7 +390,7 @@ function GlampingBookingFormContent() {
       let parameters: Array<{ id: string; name: string; color_code?: string; quantity: number }> = []
 
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'
 
         // Fetch item details
         const itemUrl = `${baseUrl}/api/glamping/items/${itemId}`
@@ -258,10 +441,16 @@ function GlampingBookingFormContent() {
           setMenuProducts(data.item.menu_products)
 
           // Auto-select required products with quantity 1
-          const initialSelections: Record<string, number> = {}
+          const initialSelections: Record<string, { quantity: number; price: number; name: string; voucher?: any }> = {}
           data.item.menu_products.forEach((mp: MenuProduct) => {
             if (mp.is_required) {
-              initialSelections[mp.id] = 1
+              const name = typeof mp.name === 'string' ? mp.name : (mp.name?.vi || mp.name?.en || 'Unknown');
+              initialSelections[mp.id] = {
+                quantity: 1,
+                price: mp.price,
+                name,
+                voucher: null
+              }
             }
           })
           if (Object.keys(initialSelections).length > 0) {
@@ -353,7 +542,7 @@ function GlampingBookingFormContent() {
     }
 
     loadBookingData()
-  }, [searchParams, router, t])
+  }, [searchParams, router, t, isCartMode, cart, cartInitialized, bookingSubmitted])
 
   // Fetch pricing data
   useEffect(() => {
@@ -363,32 +552,61 @@ function GlampingBookingFormContent() {
       try {
         const voucherCode = appliedVoucher?.code || ''
 
-        const params = new URLSearchParams({
-          itemId: bookingData.itemId,
-          checkIn: bookingData.checkIn,
-          checkOut: bookingData.checkOut,
-          adults: bookingData.adults.toString(),
-          children: bookingData.children.toString(),
-        })
+        // Cart mode: Use multi-item pricing API
+        if (isCartMode && cart && cart.items.length > 0) {
+          const itemsPayload = cart.items.map(item => ({
+            itemId: item.itemId,
+            checkIn: item.checkIn,
+            checkOut: item.checkOut,
+            adults: item.adults,
+            children: item.children,
+            parameterQuantities: item.parameterQuantities || {}
+          }))
 
-        // Add parameter quantities
-        if (bookingData.parameterQuantities) {
-          Object.entries(bookingData.parameterQuantities).forEach(([paramId, quantity]) => {
-            params.append(`param_${paramId}`, quantity.toString())
+          const params = new URLSearchParams({
+            items: JSON.stringify(itemsPayload),
           })
+
+          if (voucherCode) params.append('discountCode', voucherCode)
+
+          const response = await fetch(`/api/glamping/booking/calculate-multi-pricing?${params.toString()}`)
+          const data = await response.json()
+
+          if (!response.ok) {
+            console.error('Error fetching multi-item pricing:', data.error)
+            return
+          }
+
+          setPricingData(data)
+        } else {
+          // Single-item mode: Use existing API
+          const params = new URLSearchParams({
+            itemId: bookingData.itemId,
+            checkIn: bookingData.checkIn,
+            checkOut: bookingData.checkOut,
+            adults: bookingData.adults.toString(),
+            children: bookingData.children.toString(),
+          })
+
+          // Add parameter quantities
+          if (bookingData.parameterQuantities) {
+            Object.entries(bookingData.parameterQuantities).forEach(([paramId, quantity]) => {
+              params.append(`param_${paramId}`, quantity.toString())
+            })
+          }
+
+          if (voucherCode) params.append('discountCode', voucherCode)
+
+          const response = await fetch(`/api/glamping/booking/calculate-pricing?${params.toString()}`)
+          const data = await response.json()
+
+          if (!response.ok) {
+            console.error('Error fetching pricing:', data.error)
+            return
+          }
+
+          setPricingData(data)
         }
-
-        if (voucherCode) params.append('discountCode', voucherCode)
-
-        const response = await fetch(`/api/glamping/booking/calculate-pricing?${params.toString()}`)
-        const data = await response.json()
-
-        if (!response.ok) {
-          console.error('Error fetching pricing:', data.error)
-          return
-        }
-
-        setPricingData(data)
       } catch (error) {
         console.error('Error fetching pricing:', error)
       }
@@ -396,7 +614,7 @@ function GlampingBookingFormContent() {
 
     const timer = setTimeout(fetchPricingData, 300)
     return () => clearTimeout(timer)
-  }, [bookingData, appliedVoucher])
+  }, [bookingData, appliedVoucher, isCartMode, cart])
 
   // Voucher handlers
   const handleVoucherApplied = (voucher: AppliedVoucher) => {
@@ -418,54 +636,178 @@ function GlampingBookingFormContent() {
     setIsSubmitting(true)
 
     try {
-      // Build menu product selections for payload
-      // API expects: { id, quantity, price, name }
-      const menuProductSelectionsPayload = Object.entries(menuProductSelections)
-        .filter(([_, qty]) => qty > 0)
-        .map(([productId, quantity]) => {
-          const product = menuProducts.find(p => p.id === productId)
-          return {
-            id: productId,
-            quantity,
-            price: product?.price || 0,
-            name: product?.name || '',
+      let bookingPayload: any = {}
+
+      // Cart mode: Build multi-item payload
+      if (isCartMode && cart && cart.items.length > 0) {
+        // Build menu product selections for payload
+        const menuProductSelectionsPayload = Object.entries(menuProductSelections)
+          .filter(([_, selection]) => selection.quantity > 0)
+          .map(([productId, selection]) => {
+            return {
+              id: productId,
+              quantity: selection.quantity,
+              price: selection.price,
+              name: selection.name,
+            }
+          })
+
+        // Build items array from cart (includes per-tent voucher + per-product vouchers)
+        const itemsPayload = cart.items.map(item => {
+          // Extract menu products with voucher info
+          // Handles both flat format: Record<string, MenuProductSelection>
+          // and per-night format: Record<number, Record<string, MenuProductSelection>>
+          const itemMenuProducts: Array<{ id: string; quantity: number; price: number; name: string; voucher?: any; servingDate?: string }> = [];
+          if (item.menuProducts && typeof item.menuProducts === 'object') {
+            const entries = Object.entries(item.menuProducts);
+            const isPerNight = entries.length > 0 && typeof Object.values(entries[0]?.[1] || {})[0] === 'object'
+              && !('quantity' in (entries[0]?.[1] || {}));
+
+            if (isPerNight) {
+              // Per-night format: flatten to individual entries with servingDate
+              for (const [nightIndexStr, nightProducts] of entries) {
+                const nightIndex = parseInt(nightIndexStr);
+                const nightMap = nightProducts as Record<string, { quantity: number; price: number; name: string; voucher?: any }>;
+                // Calculate serving date from checkIn + nightIndex
+                const checkInDate = new Date(item.checkIn);
+                const servingDate = new Date(checkInDate);
+                servingDate.setDate(servingDate.getDate() + nightIndex);
+                const servingDateStr = servingDate.toISOString().split('T')[0];
+
+                for (const [productId, sel] of Object.entries(nightMap)) {
+                  if (sel && sel.quantity > 0) {
+                    itemMenuProducts.push({
+                      id: productId,
+                      quantity: sel.quantity,
+                      price: sel.price,
+                      name: sel.name,
+                      voucher: sel.voucher || undefined,
+                      servingDate: servingDateStr,
+                    });
+                  }
+                }
+              }
+            } else {
+              // Flat format: Record<string, MenuProductSelection>
+              const selections = item.menuProducts as Record<string, { quantity: number; price: number; name: string; voucher?: any }>;
+              Object.entries(selections).forEach(([productId, sel]) => {
+                if (sel && sel.quantity > 0) {
+                  itemMenuProducts.push({
+                    id: productId,
+                    quantity: sel.quantity,
+                    price: sel.price,
+                    name: sel.name,
+                    voucher: sel.voucher || undefined,
+                  });
+                }
+              });
+            }
           }
+
+          return {
+            itemId: item.itemId,
+            checkInDate: item.checkIn,
+            checkOutDate: item.checkOut,
+            adults: item.adults,
+            children: item.children,
+            parameterQuantities: item.parameterQuantities || {},
+            // Per-tent accommodation voucher
+            accommodationVoucher: item.accommodationVoucher || null,
+            // Menu products with per-product vouchers
+            menuProducts: itemMenuProducts,
+          };
         })
 
-      const bookingPayload = {
-        // Booking info
-        itemId: bookingData.itemId,
-        checkInDate: bookingData.checkIn,
-        checkOutDate: bookingData.checkOut,
-        adults: bookingData.adults,
-        children: bookingData.children,
+        bookingPayload = {
+          // Multi-item booking
+          items: itemsPayload,
 
-        // Parameter quantities
-        parameterQuantities: bookingData.parameterQuantities || {},
+          // Shared menu products (if any - applied to entire booking)
+          menuProducts: menuProductSelectionsPayload,
 
-        // Menu products
-        menuProducts: menuProductSelectionsPayload,
+          // Guest details
+          guestEmail: data.email,
+          guestFirstName: data.firstName,
+          guestLastName: data.lastName,
+          guestPhone: `${data.phoneCountryCode}${data.phoneNumber}`,
+          guestCountry: data.country,
+          guestAddress: data.townCity && data.postcode
+            ? `${data.townCity}, ${data.postcode}`
+            : undefined,
 
-        // Guest details
-        guestEmail: data.email,
-        guestFirstName: data.firstName,
-        guestLastName: data.lastName,
-        guestPhone: `${data.phoneCountryCode}${data.phoneNumber}`,
-        guestCountry: data.country,
-        guestAddress: data.townCity && data.postcode
-          ? `${data.townCity}, ${data.postcode}`
-          : undefined,
+          // Other details
+          specialRequirements: data.specialRequests,
+          partyNames: data.partyNames,
+          invoiceNotes: invoiceNotes || undefined,
 
-        // Other details
-        specialRequirements: data.specialRequests,
-        partyNames: data.partyNames,
-        invoiceNotes: invoiceNotes || undefined,
+          // New customer info fields
+          dateOfBirth: data.dateOfBirth,
+          socialMediaUrl: data.socialMediaUrl,
+          photoConsent: data.photoConsent,
+          referralSource: data.referralSource,
 
-        // Voucher code
-        discountCode: appliedVoucher?.code,
+          // Cart mode: per-item vouchers are inside items[].accommodationVoucher and items[].menuProducts[].voucher
+          // Only send global discountCode as fallback if no per-item vouchers exist
+          discountCode: appliedVoucher?.code,
 
-        // Payment
-        paymentMethod: data.paymentMethod,
+          // Payment
+          paymentMethod: data.paymentMethod,
+        }
+      } else {
+        // Single-item mode: Build existing payload
+        const menuProductSelectionsPayload = Object.entries(menuProductSelections)
+          .filter(([_, selection]) => selection.quantity > 0)
+          .map(([productId, selection]) => {
+            return {
+              id: productId,
+              quantity: selection.quantity,
+              price: selection.price,
+              name: selection.name,
+              voucher: selection.voucher || undefined,
+            }
+          })
+
+        bookingPayload = {
+          // Booking info
+          itemId: bookingData.itemId,
+          checkInDate: bookingData.checkIn,
+          checkOutDate: bookingData.checkOut,
+          adults: bookingData.adults,
+          children: bookingData.children,
+
+          // Parameter quantities
+          parameterQuantities: bookingData.parameterQuantities || {},
+
+          // Menu products
+          menuProducts: menuProductSelectionsPayload,
+
+          // Guest details
+          guestEmail: data.email,
+          guestFirstName: data.firstName,
+          guestLastName: data.lastName,
+          guestPhone: `${data.phoneCountryCode}${data.phoneNumber}`,
+          guestCountry: data.country,
+          guestAddress: data.townCity && data.postcode
+            ? `${data.townCity}, ${data.postcode}`
+            : undefined,
+
+          // Other details
+          specialRequirements: data.specialRequests,
+          partyNames: data.partyNames,
+          invoiceNotes: invoiceNotes || undefined,
+
+          // New customer info fields
+          dateOfBirth: data.dateOfBirth,
+          socialMediaUrl: data.socialMediaUrl,
+          photoConsent: data.photoConsent,
+          referralSource: data.referralSource,
+
+          // Voucher code
+          discountCode: appliedVoucher?.code,
+
+          // Payment
+          paymentMethod: data.paymentMethod,
+        }
       }
 
       const response = await fetch("/api/glamping/booking", {
@@ -497,6 +839,14 @@ function GlampingBookingFormContent() {
 
       const result = await response.json()
 
+      // Mark booking as submitted to prevent useEffect redirect loop
+      setBookingSubmitted(true)
+
+      // Clear cart if in cart mode
+      if (isCartMode) {
+        clearCart()
+      }
+
       if (result.paymentRequired) {
         toast.success(locale === 'vi' ? 'Đặt phòng thành công! Vui lòng thanh toán.' : 'Booking created! Please complete payment.')
       } else {
@@ -504,7 +854,8 @@ function GlampingBookingFormContent() {
       }
 
       // Redirect to payment page
-      router.push(result.redirectUrl || `/glamping/booking/payment/${result.bookingId}`)
+      const redirectUrl = result.redirectUrl || `/glamping/booking/payment/${result.bookingId}`
+      router.push(redirectUrl)
 
     } catch (error: any) {
       console.error("Booking error:", error)
@@ -525,6 +876,18 @@ function GlampingBookingFormContent() {
     )
   }
 
+  // Show loading state while cart is initializing (for cart mode)
+  if (isCartMode && !cartInitialized) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Đang tải giỏ hàng...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <form onSubmit={handleSubmit(onSubmit)}>
@@ -540,7 +903,12 @@ function GlampingBookingFormContent() {
           }}
         />
 
-        <div className="max-w-7xl mx-auto px-6 lg:px-12 py-8 space-y-6">
+        <div className="max-w-6xl mx-auto px-6 lg:px-12 py-8 space-y-6">
+          {/* Cart Items List (only in cart mode) */}
+          {isCartMode && cart && cart.items.length > 0 && (
+            <CartItemsList />
+          )}
+
           {/* My Details and Other Details - Side by Side */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* My Details Section */}
@@ -572,57 +940,26 @@ function GlampingBookingFormContent() {
             />
           </div>
 
-          {/* Menu Products and Pricing Summary */}
-          {menuProducts.length > 0 ? (
-            /* Two-column layout on large screens when menu products exist */
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Menu Products Selector */}
-              <GlampingMenuProductsSelector
-                menuProducts={menuProducts}
-                selections={menuProductSelections}
-                onChange={setMenuProductSelections}
-                locale={locale}
-              />
-
-              {/* Pricing Summary */}
-              <div>
-                <GlampingPricingSummary
-                  pricingData={pricingData}
-                  locale={locale}
-                  appliedVoucher={appliedVoucher}
-                  onVoucherApplied={handleVoucherApplied}
-                  onVoucherRemoved={handleVoucherRemoved}
-                  zoneId={bookingData.zoneId}
-                  itemId={bookingData.itemId}
-                  checkIn={bookingData.checkIn}
-                  checkOut={bookingData.checkOut}
-                  basePrice={bookingData.basePrice}
-                  parameters={bookingData.parameters}
-                  menuProducts={menuProducts}
-                  menuProductSelections={menuProductSelections}
-                />
-              </div>
-            </div>
-          ) : (
-            /* Full-width layout when no menu products */
-            <div>
-              <GlampingPricingSummary
-                pricingData={pricingData}
-                locale={locale}
-                appliedVoucher={appliedVoucher}
-                onVoucherApplied={handleVoucherApplied}
-                onVoucherRemoved={handleVoucherRemoved}
-                zoneId={bookingData.zoneId}
-                itemId={bookingData.itemId}
-                checkIn={bookingData.checkIn}
-                checkOut={bookingData.checkOut}
-                basePrice={bookingData.basePrice}
-                parameters={bookingData.parameters}
-                menuProducts={menuProducts}
-                menuProductSelections={menuProductSelections}
-              />
-            </div>
-          )}
+          {/* Pricing Summary - Full Width */}
+          <div>
+            <GlampingPricingSummary
+              pricingData={pricingData}
+              locale={locale}
+              appliedVoucher={appliedVoucher}
+              onVoucherApplied={handleVoucherApplied}
+              onVoucherRemoved={handleVoucherRemoved}
+              zoneId={bookingData.zoneId}
+              itemId={bookingData.itemId}
+              checkIn={bookingData.checkIn}
+              checkOut={bookingData.checkOut}
+              basePrice={bookingData.basePrice}
+              parameters={bookingData.parameters}
+              menuProducts={menuProducts}
+              menuProductSelections={menuProductSelections}
+              cartItems={isCartMode && cart ? cart.items : undefined}
+              isCartMode={isCartMode}
+            />
+          </div>
 
           {/* Payment Section */}
           <GlampingPaymentSection

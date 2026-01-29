@@ -31,9 +31,10 @@ interface NightlyBreakdownProps {
   displayAutoDiscounts?: ApplicableDiscount[];
   parameters?: Array<{
     id: string;
-    name: string;
+    name: string | { vi?: string; en?: string };
     color_code?: string;
     quantity: number;
+    counted_for_menu?: boolean;
   }>;
   parameterQuantities?: Record<string, number>;
 }
@@ -45,6 +46,16 @@ interface NightDetail {
   applicableDiscounts: Array<{ discount: ApplicableDiscount; amount: number }>;
   finalPrice: number;
 }
+
+// Helper function to extract localized string from JSONB field
+const getLocalizedString = (value: any, locale: string, fallback: string = ''): string => {
+  if (!value) return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    return value[locale] || value.vi || value.en || fallback;
+  }
+  return fallback;
+};
 
 export default function NightlyBreakdown({
   checkIn,
@@ -283,7 +294,7 @@ export default function NightlyBreakdown({
                                         style={{ backgroundColor: paramMeta.color_code }}
                                       />
                                     )}
-                                    <span>• {paramMeta.name} x {quantity}:</span>
+                                    <span>• {getLocalizedString(paramMeta.name, locale)} x {quantity}:</span>
                                   </div>
                                   <span>{formatCurrency(price * quantity)}</span>
                                 </div>

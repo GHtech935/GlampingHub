@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 async function getItemDetails(itemId: string) {
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/glamping/items/${itemId}/details`,
+      `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/api/glamping/items/${itemId}/details`,
       {
         cache: 'no-store',
       }

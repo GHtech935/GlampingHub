@@ -18,7 +18,8 @@ export async function GET(
     const result = await pool.query(
       `SELECT id, name, color_code, controls_inventory, sets_pricing,
               price_range, visibility, created_at, updated_at,
-              default_value, display_order, link_to_guests, required, zone_id
+              default_value, display_order, link_to_guests, required, zone_id,
+              counted_for_menu
        FROM glamping_parameters
        WHERE id = $1`,
       [id]
@@ -61,7 +62,8 @@ export async function PUT(
       default_value,
       display_order,
       link_to_guests,
-      required
+      required,
+      counted_for_menu
     } = body;
 
     if (!name) {
@@ -81,8 +83,9 @@ export async function PUT(
          display_order = $8,
          link_to_guests = $9,
          required = $10,
+         counted_for_menu = $11,
          updated_at = NOW()
-       WHERE id = $11
+       WHERE id = $12
        RETURNING *`,
       [
         name,
@@ -95,6 +98,7 @@ export async function PUT(
         display_order !== undefined ? display_order : 0,
         link_to_guests || false,
         required || false,
+        counted_for_menu || false,
         id
       ]
     );

@@ -7,6 +7,7 @@
 
 import pool from '@/lib/db';
 import { PoolClient } from 'pg';
+import { calculatePerItemTax } from '@/lib/glamping-tax-utils';
 
 interface RecalculationResult {
   productsCost: number;
@@ -196,4 +197,119 @@ export function calculateProductDiscount(
     return discountValue * quantity;
   }
   return 0;
+}
+
+// ─── Glamping Booking Recalculation ─────────────────────────────────────────
+
+/**
+ * Recalculate glamping booking-level totals after any item edit/delete.
+ * Sums accommodation items + menu products, applies tax if required.
+ * Updates glamping_bookings with new totals.
+ */
+export async function recalculateGlampingBookingTotals(
+  client: PoolClient,
+  bookingId: string
+): Promise<void> {
+  // Get booking tax settings
+  const bookingResult = await client.query(
+    `SELECT tax_invoice_required
+     FROM glamping_bookings WHERE id = $1`,
+    [bookingId]
+  );
+
+  if (bookingResult.rows.length === 0) {
+    throw new Error(`Booking ${bookingId} not found`);
+  }
+
+  const { tax_invoice_required } = bookingResult.rows[0];
+
+  // Sum accommodation items (from glamping_booking_items)
+  const accomResult = await client.query(
+    `SELECT COALESCE(SUM(unit_price * quantity), 0) as accommodation_total
+     FROM glamping_booking_items
+     WHERE booking_id = $1`,
+    [bookingId]
+  );
+  const accommodationTotal = parseFloat(accomResult.rows[0].accommodation_total);
+
+  // Sum menu products (from glamping_booking_menu_products)
+  const menuResult = await client.query(
+    `SELECT COALESCE(SUM(unit_price * quantity), 0) as menu_total
+     FROM glamping_booking_menu_products
+     WHERE booking_id = $1`,
+    [bookingId]
+  );
+  const menuTotal = parseFloat(menuResult.rows[0].menu_total);
+
+  // Sum discount amounts from tents
+  const tentDiscountResult = await client.query(
+    `SELECT COALESCE(SUM(discount_amount), 0) as tent_discount
+     FROM glamping_booking_tents
+     WHERE booking_id = $1`,
+    [bookingId]
+  );
+  const tentDiscount = parseFloat(tentDiscountResult.rows[0].tent_discount);
+
+  // Sum discount amounts from menu products
+  const menuDiscountResult = await client.query(
+    `SELECT COALESCE(SUM(COALESCE(discount_amount, 0)), 0) as menu_discount
+     FROM glamping_booking_menu_products
+     WHERE booking_id = $1`,
+    [bookingId]
+  );
+  const menuDiscount = parseFloat(menuDiscountResult.rows[0].menu_discount);
+
+  const subtotal = accommodationTotal + menuTotal;
+  const totalDiscount = tentDiscount + menuDiscount;
+  const afterDiscount = subtotal - totalDiscount;
+
+  // Apply tax if required (per-item tax rates)
+  let taxAmount = 0;
+  if (tax_invoice_required) {
+    const { totalTaxAmount } = await calculatePerItemTax(client, bookingId);
+    taxAmount = totalTaxAmount;
+  }
+
+  // total_amount is a GENERATED column (subtotal_amount + tax_amount - discount_amount)
+  // so we only update the source columns; deposit/balance derived from the result
+  const totalAmount = afterDiscount + taxAmount;
+  const depositDue = Math.round(totalAmount * 0.5);
+  const balanceDue = totalAmount - depositDue;
+
+  // Update booking totals (total_amount is generated — do not set it)
+  await client.query(
+    `UPDATE glamping_bookings SET
+       subtotal_amount = $2,
+       tax_amount = $3,
+       discount_amount = $4,
+       deposit_due = $5,
+       balance_due = $6,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [bookingId, subtotal, taxAmount, totalDiscount, depositDue, balanceDue]
+  );
+}
+
+/**
+ * Log an edit/delete action to glamping booking history.
+ */
+export async function logGlampingBookingEditAction(
+  client: PoolClient,
+  bookingId: string,
+  userId: string,
+  actionType: 'item_edit' | 'item_delete',
+  description: string
+): Promise<void> {
+  await client.query(
+    `INSERT INTO glamping_booking_status_history
+     (booking_id, previous_status, new_status, previous_payment_status, new_payment_status,
+      changed_by_user_id, action_type, description)
+     SELECT
+       $1,
+       status, status,
+       payment_status, payment_status,
+       $2, $3, $4
+     FROM glamping_bookings WHERE id = $1`,
+    [bookingId, userId, actionType, description]
+  );
 }

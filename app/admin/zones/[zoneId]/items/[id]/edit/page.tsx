@@ -39,8 +39,9 @@ export default function EditItemPage({
             preview: m.url,
             caption: m.caption || ''
           })) || [],
-        // Transform YouTube URL
-        youtube_url: data.item.media?.find((m: any) => m.type === 'youtube')?.url || '',
+        // Transform YouTube URL and start time
+        youtube_url: data.item.youtube_url || data.item.media?.find((m: any) => m.type === 'youtube')?.url || '',
+        video_start_time: data.item.video_start_time || data.item.media?.find((m: any) => m.type === 'youtube')?.video_start_time || 0,
         // Transform parameters to expected format
         parameters: data.item.parameters?.map((p: any) => ({
           id: p.id,

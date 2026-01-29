@@ -14,8 +14,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin, sale, and owner can view customer details
-    if (!['admin', 'sale', 'owner'].includes(session.role)) {
+    // Only admin, sale, owner, and glamping_owner can view customer details
+    if (!['admin', 'sale', 'owner', 'glamping_owner'].includes(session.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

@@ -10,8 +10,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin, sale, and owner can export customers
-    if (!['admin', 'sale', 'owner'].includes(session.role)) {
+    // Only admin, sale, owner, and glamping_owner can export customers
+    if (!['admin', 'sale', 'owner', 'glamping_owner'].includes(session.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

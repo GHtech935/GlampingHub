@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
       checkOut,
       totalAmount,
       customerId,
+      applicationType = 'all', // 'accommodation', 'menu_only', or 'all'
     } = body;
 
     // Validate required fields
@@ -110,15 +111,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validation 6: Check application type (tent only for booking form)
-    if (voucher.application_type !== 'tent') {
-      return NextResponse.json(
-        { error: "Voucher không áp dụng cho đặt phòng" },
-        { status: 400 }
-      );
+    // Validation 6: Check application type
+    // Allow voucher if:
+    // - voucher.application_type is 'all' or null (applies to everything)
+    // - voucher.application_type matches the requested applicationType
+    // - requested applicationType is 'all' (backward compatibility)
+    const voucherAppType = voucher.application_type || 'all';
+
+    if (applicationType !== 'all') {
+      // Map application types for backward compatibility
+      let mappedType = applicationType;
+      if (applicationType === 'accommodation') {
+        mappedType = 'tent';
+      } else if (applicationType === 'menu_only') {
+        mappedType = 'menu';
+      }
+
+      if (voucherAppType !== 'all' && voucherAppType !== mappedType) {
+        const errorMessages: Record<string, string> = {
+          'accommodation': 'Voucher không áp dụng cho lưu trú',
+          'menu_only': 'Voucher không áp dụng cho món ăn',
+        };
+        return NextResponse.json(
+          { error: errorMessages[applicationType] || "Voucher không áp dụng cho loại này" },
+          { status: 400 }
+        );
+      }
     }
 
     // Validation 7: Check applicable items (if itemId provided)
+    // glamping_discount_items.item_id can reference either glamping_items.id or glamping_menu_items.id
+    // depending on the voucher's application_type
     if (itemId) {
       const itemCheckQuery = `
         SELECT 1 FROM glamping_discount_items
@@ -134,8 +157,11 @@ export async function POST(request: NextRequest) {
       const hasSpecificItems = parseInt(hasItemsResult.rows[0].count) > 0;
 
       if (hasSpecificItems && itemCheckResult.rows.length === 0) {
+        const errorMessage = applicationType === 'menu_only'
+          ? "Voucher không áp dụng cho món ăn này"
+          : "Voucher không áp dụng cho loại lều này";
         return NextResponse.json(
-          { error: "Voucher không áp dụng cho loại lều này" },
+          { error: errorMessage },
           { status: 400 }
         );
       }

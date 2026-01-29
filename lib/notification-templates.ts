@@ -165,7 +165,23 @@ export const CUSTOMER_NOTIFICATION_TEMPLATES = {
     sendEmail: false
   },
 
-  // 10. Late Payment for Expired Booking
+  // 10. Menu Selection Reminder
+  menu_selection_reminder: {
+    icon: '🍽️',
+    color: 'orange',
+    title: {
+      vi: 'Nhắc nhở chọn món ăn',
+      en: 'Menu Selection Reminder'
+    },
+    message: {
+      vi: 'Đừng quên chọn món ăn cho chuyến đi! Bạn chỉ có thể chỉnh sửa đến 24h trước check-in.',
+      en: 'Don\'t forget to select your meals! You can only edit until 24h before check-in.'
+    },
+    link: '/glamping/booking/confirmation/{booking_code}',
+    sendEmail: true
+  },
+
+  // 11. Late Payment for Expired Booking
   late_payment_expired: {
     icon: '⚠️',
     color: 'orange',
@@ -200,7 +216,7 @@ export const STAFF_NOTIFICATION_TEMPLATES = {
       en: 'Customer {customer_name} booked #{booking_reference} - {pitch_name} ({check_in_date} → {check_out_date}). Total: {total_amount}'
     },
     link: '/admin-camping/bookings?id={booking_id}',
-    sendEmail: true,
+    sendEmail: false, // Email is sent directly by sendGlampingBookingNotificationToStaff with full guest details
     roles: ['admin', 'sale', 'operations']
   },
 
@@ -538,6 +554,7 @@ export const EMAIL_TEMPLATE_MAP: Record<string, string> = {
   balance_reminder: 'glamping-payment-reminder',
   pre_arrival_reminder: 'glamping-pre-arrival-reminder',
   booking_cancelled: 'glamping-booking-cancellation',
+  menu_selection_reminder: 'glamping-menu-selection-reminder',
   late_payment_expired: 'glamping-late-payment-customer',
 
   // Admin/Staff emails

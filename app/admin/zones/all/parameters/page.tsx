@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Edit, MapPin, Package, DollarSign, TrendingUp, Check, X } from "lucide-react";
+import { Edit, MapPin, Package, DollarSign, TrendingUp, Check, X, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,6 +15,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { StatCard, StatCardGrid } from "@/components/admin/StatCard";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,7 @@ export default function AllZonesParametersPage() {
   const { toast } = useToast();
   const t = useTranslations("admin.glamping.parameters");
   const tc = useTranslations("admin.glamping.common");
+  const ts = useTranslations("admin.glamping.allZonesStats");
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [loading, setLoading] = useState(true);
   const [zoneFilter, setZoneFilter] = useState<string>("all");
@@ -94,6 +96,36 @@ export default function AllZonesParametersPage() {
           <p className="text-gray-600 mt-1">{t("allParametersSubtitle")}</p>
         </div>
       </div>
+
+      {/* Stats */}
+      {!loading && (
+        <StatCardGrid>
+          <StatCard
+            title={ts("totalParameters")}
+            value={parameters.length}
+            icon={Sliders}
+            color="blue"
+          />
+          <StatCard
+            title={ts("pricingControl")}
+            value={parameters.filter((p) => p.sets_pricing).length}
+            icon={DollarSign}
+            color="green"
+          />
+          <StatCard
+            title={ts("inventoryControl")}
+            value={parameters.filter((p) => p.controls_inventory).length}
+            icon={Package}
+            color="purple"
+          />
+          <StatCard
+            title={ts("zones")}
+            value={new Set(parameters.map((p) => p.zone_id)).size}
+            icon={MapPin}
+            color="orange"
+          />
+        </StatCardGrid>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-2">

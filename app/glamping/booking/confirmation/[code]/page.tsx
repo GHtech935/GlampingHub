@@ -95,7 +95,7 @@ export default function BookingConfirmationPage() {
   const [booking, setBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditingMenu, setIsEditingMenu] = useState(false);
-  const [menuSelections, setMenuSelections] = useState<Record<string, number>>({});
+  const [menuSelections, setMenuSelections] = useState<Record<number, Record<string, { quantity: number; price: number; name: string; voucher?: any }>>>({});
   const [availableMenuItems, setAvailableMenuItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -135,11 +135,18 @@ export default function BookingConfirmationPage() {
       setAvailableMenuItems(data.menuItems);
 
       // Initialize selections from current booking
-      const initialSelections: Record<string, number> = {};
+      const flatSelections: Record<string, { quantity: number; price: number; name: string; voucher?: any }> = {};
       booking?.menuProducts.forEach((item) => {
-        initialSelections[item.menu_item_id] = item.quantity;
+        const menuItem = data.menuItems.find((m: any) => m.id === item.menu_item_id);
+        flatSelections[item.menu_item_id] = {
+          quantity: item.quantity,
+          price: item.unit_price,
+          name: typeof item.name === 'string' ? item.name : (item.name?.vi || item.name?.en || 'Unknown'),
+          voucher: null
+        };
       });
-      setMenuSelections(initialSelections);
+      // Wrap in night-level structure (using 0 as the key for single booking)
+      setMenuSelections({ 0: flatSelections });
       setIsEditingMenu(true);
     } catch (error: any) {
       toast.error(error.message || 'Lỗi khi tải danh sách món ăn');
@@ -155,18 +162,29 @@ export default function BookingConfirmationPage() {
   };
 
   const handleSaveMenu = async () => {
-    // Convert selections to API format
-    const menuProducts = Object.entries(menuSelections)
-      .filter(([id, qty]) => qty > 0)
-      .map(([id, qty]) => {
-        const item = availableMenuItems.find((i) => i.id === id);
-        return {
-          id,
-          quantity: qty,
-          price: item.price,
-          name: item.name,
-        };
+    // Convert per-night selections to API format (aggregate quantities)
+    const menuProductsAggregated: Record<string, { name: string; price: number; quantity: number }> = {};
+    Object.values(menuSelections).forEach((nightSelections) => {
+      Object.entries(nightSelections).forEach(([id, selection]) => {
+        if (selection.quantity > 0) {
+          if (!menuProductsAggregated[id]) {
+            menuProductsAggregated[id] = {
+              name: selection.name,
+              price: selection.price,
+              quantity: 0
+            };
+          }
+          menuProductsAggregated[id].quantity += selection.quantity;
+        }
       });
+    });
+
+    const menuProducts = Object.entries(menuProductsAggregated).map(([id, data]) => ({
+      id,
+      quantity: data.quantity,
+      price: data.price,
+      name: data.name,
+    }));
 
     setSaving(true);
     try {
@@ -402,9 +420,15 @@ export default function BookingConfirmationPage() {
                   display_order: 0,
                   category_id: item.category_id,
                   category_name: item.category_name,
+                  min_guests: item.min_guests,
+                  max_guests: item.max_guests,
                 }))}
-                selections={menuSelections}
+                nightlySelections={menuSelections}
                 onChange={setMenuSelections}
+                nights={booking?.booking?.check_in_date && booking?.booking?.check_out_date
+                  ? Math.ceil((new Date(booking.booking.check_out_date).getTime() - new Date(booking.booking.check_in_date).getTime()) / (1000 * 60 * 60 * 24))
+                  : 1}
+                checkInDate={booking?.booking?.check_in_date ? new Date(booking.booking.check_in_date) : undefined}
               />
               <div className="flex gap-4 mt-6">
                 <Button onClick={handleSaveMenu} disabled={saving}>

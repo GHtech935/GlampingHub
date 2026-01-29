@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Edit, MapPin } from "lucide-react";
+import { Search, Edit, MapPin, CalendarDays, CheckCircle, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
+import { StatCard, StatCardGrid } from "@/components/admin/StatCard";
 
 interface Event {
   id: string;
@@ -41,6 +42,8 @@ interface Event {
 export default function AllZonesEventsPage() {
   const router = useRouter();
   const t = useTranslations("admin.glamping.events");
+  const tc = useTranslations("admin.glamping.common");
+  const ts = useTranslations("admin.glamping.allZonesStats");
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -75,8 +78,8 @@ export default function AllZonesEventsPage() {
     } catch (error) {
       console.error("Failed to fetch events:", error);
       toast({
-        title: "Error",
-        description: "Failed to load events",
+        title: tc("error"),
+        description: tc("error"),
         variant: "destructive",
       });
     } finally {
@@ -106,17 +109,47 @@ export default function AllZonesEventsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">All Events</h1>
-          <p className="text-gray-600 mt-1">View and manage events from all zones</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t("allTitle")}</h1>
+          <p className="text-gray-600 mt-1">{t("allSubtitle")}</p>
         </div>
       </div>
+
+      {/* Stats */}
+      {!loading && (
+        <StatCardGrid>
+          <StatCard
+            title={ts("totalEvents")}
+            value={events.length}
+            icon={CalendarDays}
+            color="blue"
+          />
+          <StatCard
+            title={ts("active")}
+            value={events.filter((e) => e.status === "active").length}
+            icon={CheckCircle}
+            color="green"
+          />
+          <StatCard
+            title={ts("special")}
+            value={events.filter((e) => e.type === "special").length}
+            icon={Star}
+            color="purple"
+          />
+          <StatCard
+            title={ts("zones")}
+            value={new Set(events.map((e) => e.zone_id)).size}
+            icon={MapPin}
+            color="orange"
+          />
+        </StatCardGrid>
+      )}
 
       {/* Search & Filters */}
       <div className="flex gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
-            placeholder="Search events..."
+            placeholder={t("search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -125,32 +158,32 @@ export default function AllZonesEventsPage() {
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder={t("filters.statusFilter")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="all">{t("filters.allStatus")}</SelectItem>
+            <SelectItem value="active">{t("status.active")}</SelectItem>
+            <SelectItem value="inactive">{t("status.inactive")}</SelectItem>
           </SelectContent>
         </Select>
 
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Type" />
+            <SelectValue placeholder={t("filters.typeFilter")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="special">Special</SelectItem>
-            <SelectItem value="seasonal">Seasonal</SelectItem>
+            <SelectItem value="all">{t("filters.allTypes")}</SelectItem>
+            <SelectItem value="special">{t("type.special")}</SelectItem>
+            <SelectItem value="seasonal">{t("type.seasonal")}</SelectItem>
           </SelectContent>
         </Select>
 
         <Select value={zoneFilter} onValueChange={setZoneFilter}>
           <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Zone" />
+            <SelectValue placeholder={t("zoneLabel")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Zones</SelectItem>
+            <SelectItem value="all">{t("allZones")}</SelectItem>
             {zones.map((zone) => (
               <SelectItem key={zone.id} value={zone.id}>
                 {zone.name}
@@ -166,13 +199,13 @@ export default function AllZonesEventsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>{t("table.name")}</TableHead>
-              <TableHead>Zone</TableHead>
+              <TableHead>{t("zoneColumn")}</TableHead>
               <TableHead>{t("table.type")}</TableHead>
               <TableHead>{t("table.dates")}</TableHead>
               <TableHead>{t("table.recurrence")}</TableHead>
               <TableHead>{t("table.items")}</TableHead>
               <TableHead>{t("table.status")}</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right">{t("table.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -187,7 +220,7 @@ export default function AllZonesEventsPage() {
             ) : filteredEvents.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-8">
-                  <div className="text-gray-500">No events found</div>
+                  <div className="text-gray-500">{t("noResults")}</div>
                 </TableCell>
               </TableRow>
             ) : (
@@ -201,19 +234,19 @@ export default function AllZonesEventsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{event.type}</Badge>
+                    <Badge variant="outline">{t(`type.${event.type}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-sm">
                     <div>{formatDate(event.start_date)}</div>
                     <div className="text-gray-500">{formatDate(event.end_date)}</div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{event.recurrence}</Badge>
+                    <Badge variant="secondary">{t(`recurrence.${event.recurrence}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-center">{event.item_count || 0}</TableCell>
                   <TableCell>
                     <Badge variant={event.status === "active" ? "default" : "secondary"}>
-                      {event.status}
+                      {t(`status.${event.status}`)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">

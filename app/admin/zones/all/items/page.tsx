@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Search, Filter, Edit, Eye, MapPin } from "lucide-react";
+import { Plus, Search, Filter, Edit, Eye, MapPin, Package, CheckCircle, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { StatCard, StatCardGrid } from "@/components/admin/StatCard";
 
 interface Item {
   id: string;
@@ -38,6 +39,7 @@ export default function AllZonesItemsPage() {
   const router = useRouter();
   const t = useTranslations("admin.glamping.items");
   const tc = useTranslations("admin.glamping.common");
+  const ts = useTranslations("admin.glamping.allZonesStats");
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -97,6 +99,36 @@ export default function AllZonesItemsPage() {
           <p className="text-gray-600 mt-1">{t("allItemsDesc")}</p>
         </div>
       </div>
+
+      {/* Stats */}
+      {!loading && (
+        <StatCardGrid>
+          <StatCard
+            title={ts("totalItems")}
+            value={items.length}
+            icon={Package}
+            color="blue"
+          />
+          <StatCard
+            title={ts("available")}
+            value={items.filter((i) => i.status === "available").length}
+            icon={CheckCircle}
+            color="green"
+          />
+          <StatCard
+            title={ts("zones")}
+            value={new Set(items.map((i) => i.zone_id)).size}
+            icon={MapPin}
+            color="purple"
+          />
+          <StatCard
+            title={ts("categories")}
+            value={new Set(items.map((i) => i.category_name).filter(Boolean)).size}
+            icon={Folder}
+            color="orange"
+          />
+        </StatCardGrid>
+      )}
 
       {/* Search & Filter */}
       <div className="flex gap-4">

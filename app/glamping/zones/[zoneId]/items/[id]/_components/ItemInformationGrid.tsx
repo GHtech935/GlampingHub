@@ -16,30 +16,32 @@ interface ItemInformationGridProps {
   locale?: 'vi' | 'en';
 }
 
-// Convert YouTube URL to embed format
-function getYouTubeEmbedUrl(url: string): string {
+// Convert YouTube URL or Video ID to embed format
+function getYouTubeEmbedUrl(url: string, startTime?: number): string {
   try {
-    // If already an embed URL, return as is
+    let videoId = url;
+
+    // If already an embed URL, extract the video ID
     if (url.includes('youtube.com/embed/')) {
-      return url;
+      const match = url.match(/youtube\.com\/embed\/([^?&]+)/);
+      if (match && match[1]) videoId = match[1];
     }
-
     // Handle youtube.com/watch?v=VIDEO_ID format
-    const watchRegex = /(?:youtube\.com\/watch\?v=)([^&]+)/;
-    const watchMatch = url.match(watchRegex);
-    if (watchMatch && watchMatch[1]) {
-      return `https://www.youtube.com/embed/${watchMatch[1]}`;
+    else if (url.includes('youtube.com/watch')) {
+      const watchRegex = /(?:youtube\.com\/watch\?v=)([^&]+)/;
+      const watchMatch = url.match(watchRegex);
+      if (watchMatch && watchMatch[1]) videoId = watchMatch[1];
     }
-
     // Handle youtu.be/VIDEO_ID format
-    const shortRegex = /(?:youtu\.be\/)([^?]+)/;
-    const shortMatch = url.match(shortRegex);
-    if (shortMatch && shortMatch[1]) {
-      return `https://www.youtube.com/embed/${shortMatch[1]}`;
+    else if (url.includes('youtu.be/')) {
+      const shortRegex = /(?:youtu\.be\/)([^?]+)/;
+      const shortMatch = url.match(shortRegex);
+      if (shortMatch && shortMatch[1]) videoId = shortMatch[1];
     }
+    // Otherwise assume it's a plain video ID already
 
-    // If no pattern matches, return original URL
-    return url;
+    const base = `https://www.youtube.com/embed/${videoId}`;
+    return startTime && startTime > 0 ? `${base}?start=${startTime}` : base;
   } catch (error) {
     console.error('Error converting YouTube URL:', error);
     return url;
@@ -82,7 +84,7 @@ export function ItemInformationGrid({
             {youtubeVideos.map((video, index) => (
               <div key={index} className="aspect-video w-1/2">
                 <iframe
-                  src={getYouTubeEmbedUrl(video.url)}
+                  src={getYouTubeEmbedUrl(video.url, video.video_start_time)}
                   className="w-full h-full rounded-lg"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen

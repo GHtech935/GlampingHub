@@ -174,15 +174,15 @@ export async function GET(
           pricing = basePricing;
         }
 
-        // Count bookings for this specific date
+        // Count bookings for this specific date using per-tent dates
         const bookingResult = await pool.query(`
-          SELECT COUNT(DISTINCT bi.id) as booking_count
-          FROM glamping_booking_items bi
-          JOIN glamping_bookings b ON bi.booking_id = b.id
-          WHERE bi.item_id = $1
+          SELECT COUNT(DISTINCT bt.id) as booking_count
+          FROM glamping_booking_tents bt
+          JOIN glamping_bookings b ON bt.booking_id = b.id
+          WHERE bt.item_id = $1
             AND b.status NOT IN ('cancelled')
-            AND b.check_in_date <= $2
-            AND b.check_out_date > $2
+            AND bt.check_in_date <= $2
+            AND bt.check_out_date > $2
         `, [itemId, dateStr]);
 
         const bookingCount = parseInt(bookingResult.rows[0]?.booking_count || 0);

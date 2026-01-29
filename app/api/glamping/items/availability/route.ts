@@ -62,19 +62,18 @@ export async function POST(request: NextRequest) {
             };
           }
 
-          // Count overlapping bookings
-          // Overlap logic: booking overlaps if:
-          // - Booking starts before our end date AND booking ends after our start date
+          // Count overlapping bookings using per-tent dates
+          // Overlap logic: tent overlaps if date ranges intersect
           const bookingQuery = await pool.query(`
-            SELECT COUNT(DISTINCT bi.id) as booking_count
-            FROM glamping_booking_items bi
-            JOIN glamping_bookings b ON bi.booking_id = b.id
-            WHERE bi.item_id = $1
+            SELECT COUNT(DISTINCT bt.id) as booking_count
+            FROM glamping_booking_tents bt
+            JOIN glamping_bookings b ON bt.booking_id = b.id
+            WHERE bt.item_id = $1
               AND b.status NOT IN ('cancelled')
               AND (
-                (b.check_in_date <= $2 AND b.check_out_date > $2)
-                OR (b.check_in_date < $3 AND b.check_out_date >= $3)
-                OR (b.check_in_date >= $2 AND b.check_out_date <= $3)
+                (bt.check_in_date <= $2 AND bt.check_out_date > $2)
+                OR (bt.check_in_date < $3 AND bt.check_out_date >= $3)
+                OR (bt.check_in_date >= $2 AND bt.check_out_date <= $3)
               )
           `, [itemId, check_in_date, check_out_date]);
 

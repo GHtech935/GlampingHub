@@ -100,6 +100,8 @@ export async function GET(
         mi.image_url as menu_item_image,
         mi.status as menu_item_status,
         mi.is_available as menu_item_available,
+        mi.min_guests,
+        mi.max_guests,
         imp.is_required,
         imp.display_order,
         mc.id as category_id,
@@ -146,6 +148,8 @@ export async function GET(
         display_order: mp.display_order,
         category_id: mp.category_id,
         category_name: mp.category_name,
+        min_guests: mp.min_guests,
+        max_guests: mp.max_guests,
       })),
       taxes: taxes.map(t => ({
         id: t.id,

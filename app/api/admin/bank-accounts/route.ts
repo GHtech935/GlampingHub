@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (session.role !== 'admin' && session.role !== 'owner') {
+    if (!['admin', 'owner', 'glamping_owner'].includes(session.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const is_active = searchParams.get('is_active');
     const search = searchParams.get('search');
+    const glamping_zone_id = searchParams.get('glamping_zone_id');
 
     const offset = (page - 1) * limit;
 
@@ -37,15 +38,24 @@ export async function GET(request: NextRequest) {
     const params: any[] = [];
     let paramIndex = 1;
 
+    // Filter by glamping zone: only accounts assigned to this zone
+    if (glamping_zone_id) {
+      conditions.push(
+        `ba.id IN (SELECT bank_account_id FROM glamping_zones WHERE id = $${paramIndex} AND bank_account_id IS NOT NULL)`
+      );
+      params.push(glamping_zone_id);
+      paramIndex++;
+    }
+
     if (is_active !== null && is_active !== undefined && is_active !== '') {
-      conditions.push(`is_active = $${paramIndex}`);
+      conditions.push(`ba.is_active = $${paramIndex}`);
       params.push(is_active === 'true');
       paramIndex++;
     }
 
     if (search) {
       conditions.push(
-        `(bank_name ILIKE $${paramIndex} OR account_number ILIKE $${paramIndex} OR account_holder ILIKE $${paramIndex})`
+        `(ba.bank_name ILIKE $${paramIndex} OR ba.account_number ILIKE $${paramIndex} OR ba.account_holder ILIKE $${paramIndex})`
       );
       params.push(`%${search}%`);
       paramIndex++;
@@ -55,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     // Count total
     const countResult = await pool.query(
-      `SELECT COUNT(*) FROM bank_accounts ${whereClause}`,
+      `SELECT COUNT(*) FROM bank_accounts ba ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0].count);

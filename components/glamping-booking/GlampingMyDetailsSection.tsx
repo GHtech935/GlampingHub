@@ -212,25 +212,121 @@ export function GlampingMyDetailsSection({
           </div>
         </div>
 
-        {/* Address */}
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="townCity">{t('townCity')}</Label>
-            <Input
-              id="townCity"
-              {...register("townCity")}
-              placeholder="Hà Nội"
-            />
-          </div>
+        {/* Date of Birth */}
+        <div className="space-y-2">
+          <Label htmlFor="dateOfBirth">
+            {t('dateOfBirth')} <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="dateOfBirth"
+            type="date"
+            {...register("dateOfBirth")}
+            className={errors.dateOfBirth ? "border-red-500" : ""}
+          />
+          {errors.dateOfBirth && (
+            <p className="text-sm text-red-500 flex items-center gap-1">
+              <AlertCircle className="h-4 w-4" />
+              {errors.dateOfBirth.message as string}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {t('dateOfBirthHelper')}
+          </p>
+        </div>
 
+        {/* Social Media URL */}
+        <div className="space-y-2">
+          <Label htmlFor="socialMediaUrl">
+            {t('socialMediaUrl')} <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="socialMediaUrl"
+            type="text"
+            {...register("socialMediaUrl")}
+            placeholder="https://facebook.com/yourprofile hoặc https://instagram.com/yourprofile"
+            className={errors.socialMediaUrl ? "border-red-500" : ""}
+          />
+          {errors.socialMediaUrl && (
+            <p className="text-sm text-red-500 flex items-center gap-1">
+              <AlertCircle className="h-4 w-4" />
+              {errors.socialMediaUrl.message as string}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {t('socialMediaUrlHelper')}
+          </p>
+        </div>
+
+        {/* Photo Consent */}
+        <div className="space-y-2">
+          <Label htmlFor="photoConsent">
+            {t('photoConsent')} <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            onValueChange={(value) => setValue("photoConsent", value === "true")}
+          >
+            <SelectTrigger className={errors.photoConsent ? "border-red-500" : ""}>
+              <SelectValue placeholder={t('photoConsentOptions.agree')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="true">{t('photoConsentOptions.agree')}</SelectItem>
+              <SelectItem value="false">{t('photoConsentOptions.disagree')}</SelectItem>
+            </SelectContent>
+          </Select>
+          {errors.photoConsent && (
+            <p className="text-sm text-red-500 flex items-center gap-1">
+              <AlertCircle className="h-4 w-4" />
+              {errors.photoConsent.message as string}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {t('photoConsentHelper')}
+          </p>
+        </div>
+
+        {/* Referral Source */}
+        <div className="space-y-2">
+          <Label>
+            {t('referralSource')} <span className="text-red-500">*</span>
+          </Label>
           <div className="space-y-2">
-            <Label htmlFor="postcode">{t('postcode')}</Label>
-            <Input
-              id="postcode"
-              {...register("postcode")}
-              placeholder="100000"
-            />
+            {[
+              { value: 'facebook', label: t('referralSourceOptions.facebook') },
+              { value: 'instagram', label: t('referralSourceOptions.instagram') },
+              { value: 'tiktok', label: t('referralSourceOptions.tiktok') },
+              { value: 'referral', label: t('referralSourceOptions.referral') },
+              { value: 'returning', label: t('referralSourceOptions.returning') },
+              { value: 'panorama', label: t('referralSourceOptions.panorama') },
+              { value: 'google', label: t('referralSourceOptions.google') },
+              { value: 'other', label: t('referralSourceOptions.other') },
+            ].map((option) => (
+              <div key={option.value} className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  id={`referralSource-${option.value}`}
+                  value={option.value}
+                  {...register("referralSource")}
+                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300"
+                />
+                <Label htmlFor={`referralSource-${option.value}`} className="font-normal cursor-pointer">
+                  {option.label}
+                </Label>
+              </div>
+            ))}
+            {watch('referralSource') === 'other' && (
+              <Input
+                type="text"
+                placeholder="Khác..."
+                className="mt-2"
+              />
+            )}
           </div>
+          {errors.referralSource && (
+            <p className="text-sm text-red-500 flex items-center gap-1">
+              <AlertCircle className="h-4 w-4" />
+              {errors.referralSource.message as string}
+            </p>
+          )}
         </div>
 
         {/* Password (optional account creation) - only show when not logged in */}

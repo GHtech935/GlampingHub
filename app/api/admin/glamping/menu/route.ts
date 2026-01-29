@@ -37,6 +37,9 @@ export async function GET(request: NextRequest) {
         m.sort_order,
         m.weight,
         m.status,
+        m.min_guests,
+        m.max_guests,
+        m.stock,
         m.created_at,
         m.updated_at,
         z.name->>'vi' as zone_name
@@ -108,7 +111,10 @@ export async function POST(request: NextRequest) {
       advance_hours,
       image_url,
       weight,
-      status
+      status,
+      min_guests,
+      max_guests,
+      stock
     } = body;
 
     // Validate required fields
@@ -116,7 +122,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    if (!price || price < 0) {
+    if (price === null || price === undefined || price < 0) {
       return NextResponse.json({ error: 'Valid price is required' }, { status: 400 });
     }
 
@@ -148,9 +154,12 @@ export async function POST(request: NextRequest) {
         advance_hours,
         image_url,
         weight,
-        status
+        status,
+        min_guests,
+        max_guests,
+        stock
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING *`,
       [
         name,
@@ -167,7 +176,10 @@ export async function POST(request: NextRequest) {
         advance_hours || 0,
         image_url || null,
         weight || 0,
-        status || 'active'
+        status || 'active',
+        min_guests || null,
+        max_guests || null,
+        stock || null
       ]
     );
 

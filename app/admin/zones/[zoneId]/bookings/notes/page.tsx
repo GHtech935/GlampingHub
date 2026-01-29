@@ -1,0 +1,489 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import { Search, RotateCcw, RefreshCw, ArrowUpDown, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { toast } from "react-hot-toast";
+import { useTranslations } from "next-intl";
+import { useAdminLocale } from "@/components/providers/AdminI18nProvider";
+import { GlampingBookingDetailModal } from "@/components/admin/glamping/GlampingBookingDetailModal";
+
+// Types
+interface BookingNote {
+  noteId: string;
+  content: string;
+  noteDate: string;
+  bookingId: string;
+  bookingCode: string;
+  staffId: string;
+  staffName: string;
+  customerName: string;
+}
+
+interface StaffOption {
+  id: string;
+  name: string;
+}
+
+interface NotesFilters {
+  dateRange: string;
+  dateFrom?: string;
+  dateTo?: string;
+  staffId: string;
+  search: string;
+}
+
+// Date range options
+const DATE_RANGE_OPTIONS = [
+  { value: "today", labelEn: "Today", labelVi: "Hom nay" },
+  { value: "last_7_days", labelEn: "Last 7 days", labelVi: "7 ngay qua" },
+  { value: "last_30_days", labelEn: "Last 30 days", labelVi: "30 ngay qua" },
+  { value: "custom", labelEn: "Custom", labelVi: "Tuy chinh" },
+];
+
+// Format date and time
+const formatDateTime = (dateString: string): { date: string; time: string } => {
+  const date = new Date(dateString);
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const year = date.getFullYear();
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+
+  return {
+    date: `${day}/${month}/${year}`,
+    time: `${hours}:${minutes}`,
+  };
+};
+
+export default function BookingNotesPage() {
+  const params = useParams();
+  const zoneId = params.zoneId as string;
+  const t = useTranslations("admin");
+  const { locale } = useAdminLocale();
+
+  const [notes, setNotes] = useState<BookingNote[]>([]);
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [filters, setFilters] = useState<NotesFilters>({
+    dateRange: "last_30_days",
+    staffId: "all",
+    search: "",
+  });
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetchNotes();
+  }, [filters.dateRange, filters.dateFrom, filters.dateTo, filters.staffId, zoneId]);
+
+  const fetchNotes = async () => {
+    try {
+      setLoading(true);
+
+      const params = new URLSearchParams();
+      if (zoneId && zoneId !== "all") {
+        params.append("zoneId", zoneId);
+      }
+      params.append("dateRange", filters.dateRange);
+      if (filters.dateRange === "custom") {
+        if (filters.dateFrom) params.append("dateFrom", filters.dateFrom);
+        if (filters.dateTo) params.append("dateTo", filters.dateTo);
+      }
+      if (filters.staffId && filters.staffId !== "all") {
+        params.append("staffId", filters.staffId);
+      }
+      if (filters.search) {
+        params.append("search", filters.search);
+      }
+
+      const response = await fetch(`/api/admin/glamping/bookings/notes?${params.toString()}`);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch notes");
+      }
+
+      const data = await response.json();
+      setNotes(data.notes || []);
+      setStaffOptions(data.staffOptions || []);
+      setTotalCount(data.totalCount || 0);
+    } catch (error) {
+      console.error("Failed to fetch notes:", error);
+      toast.error(locale === "vi" ? "Khong the tai ghi chu" : "Failed to load notes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFilterChange = (key: keyof NotesFilters, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSearch = () => {
+    fetchNotes();
+  };
+
+  const handleReset = () => {
+    setFilters({
+      dateRange: "last_30_days",
+      staffId: "all",
+      search: "",
+    });
+  };
+
+  const handleViewBooking = (bookingId: string) => {
+    setSelectedBookingId(bookingId);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleCloseDetailModal = () => {
+    setSelectedBookingId(null);
+    setIsDetailModalOpen(false);
+  };
+
+  const toggleSortDirection = () => {
+    setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+  };
+
+  // Sort notes by date
+  const sortedNotes = [...notes].sort((a, b) => {
+    const dateA = new Date(a.noteDate).getTime();
+    const dateB = new Date(b.noteDate).getTime();
+    return sortDirection === "desc" ? dateB - dateA : dateA - dateB;
+  });
+
+  // Truncate text with ellipsis
+  const truncateText = (text: string, maxLength: number = 50): string => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + "...";
+  };
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-4 sm:space-y-6">
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              {locale === "vi" ? "Ghi Chu Booking" : "Booking Notes"}
+            </h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">
+              {locale === "vi"
+                ? `Tong cong ${totalCount} booking co ghi chu`
+                : `${totalCount} bookings with notes`}
+            </p>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchNotes}
+            className="flex items-center gap-1.5 sm:gap-2 h-9 sm:h-10 touch-manipulation"
+          >
+            <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="text-xs sm:text-sm">
+              {locale === "vi" ? "Lam moi" : "Refresh"}
+            </span>
+          </Button>
+        </div>
+
+        {/* Filter Bar */}
+        <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
+          {/* Search bar - full width on mobile */}
+          <div className="mb-3 sm:mb-0 sm:hidden">
+            <label className="text-xs text-gray-500 mb-1.5 block">
+              {locale === "vi" ? "Tim kiem" : "Search"}
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                type="text"
+                placeholder={
+                  locale === "vi"
+                    ? "Tim ghi chu, ma booking, khach hang..."
+                    : "Search notes, booking code, customer..."
+                }
+                value={filters.search}
+                onChange={(e) => handleFilterChange("search", e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Filters grid */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3 sm:items-end">
+            {/* Search bar - desktop only */}
+            <div className="hidden sm:block sm:flex-1">
+              <label className="text-xs text-gray-500 mb-1.5 block">
+                {locale === "vi" ? "Tim kiem" : "Search"}
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                <Input
+                  type="text"
+                  placeholder={
+                    locale === "vi"
+                      ? "Tim ghi chu, ma booking, khach hang..."
+                      : "Search notes, booking code, customer..."
+                  }
+                  value={filters.search}
+                  onChange={(e) => handleFilterChange("search", e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            {/* Date Range filter */}
+            <div className="sm:w-40">
+              <label className="text-xs text-gray-500 mb-1.5 block">
+                {locale === "vi" ? "Khoang ngay" : "Date Range"}
+              </label>
+              <Select
+                value={filters.dateRange}
+                onValueChange={(value) => handleFilterChange("dateRange", value)}
+              >
+                <SelectTrigger className="h-9 sm:h-10 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DATE_RANGE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {locale === "vi" ? option.labelVi : option.labelEn}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Staff filter */}
+            <div className="sm:w-40">
+              <label className="text-xs text-gray-500 mb-1.5 block">
+                {locale === "vi" ? "Nhan vien" : "Staff"}
+              </label>
+              <Select
+                value={filters.staffId}
+                onValueChange={(value) => handleFilterChange("staffId", value)}
+              >
+                <SelectTrigger className="h-9 sm:h-10 text-sm">
+                  <SelectValue placeholder={locale === "vi" ? "Tat ca" : "All"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {locale === "vi" ? "Tat ca" : "All"}
+                  </SelectItem>
+                  {staffOptions.map((staff) => (
+                    <SelectItem key={staff.id} value={staff.id}>
+                      {staff.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Search button */}
+            <div className="hidden sm:block">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleSearch}
+                className="h-10"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Reset button */}
+            <div className="flex items-end col-span-2 sm:col-span-1">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleReset}
+                title={locale === "vi" ? "Dat lai bo loc" : "Reset filters"}
+                className="h-9 sm:h-10 w-full sm:w-10"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Custom date range inputs */}
+          {filters.dateRange === "custom" && (
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  {locale === "vi" ? "Tu ngay" : "From"}
+                </label>
+                <Input
+                  type="date"
+                  value={filters.dateFrom || ""}
+                  onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  {locale === "vi" ? "Den ngay" : "To"}
+                </label>
+                <Input
+                  type="date"
+                  value={filters.dateTo || ""}
+                  onChange={(e) => handleFilterChange("dateTo", e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Notes Table */}
+        {loading ? (
+          <div className="bg-white rounded-lg border border-gray-200 p-8">
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="ml-3 text-gray-600">
+                {locale === "vi" ? "Dang tai..." : "Loading..."}
+              </span>
+            </div>
+          </div>
+        ) : sortedNotes.length === 0 ? (
+          <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+            <p className="text-gray-500">
+              {locale === "vi"
+                ? "Khong tim thay ghi chu nao"
+                : "No notes found"}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <button
+                        onClick={toggleSortDirection}
+                        className="flex items-center gap-1 hover:text-gray-700"
+                      >
+                        {locale === "vi" ? "Ngay" : "Date"}
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Booking
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {locale === "vi" ? "Nhan vien" : "Staff"}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {locale === "vi" ? "Khach hang" : "Customer"}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {locale === "vi" ? "Ghi chu" : "Note"}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {sortedNotes.map((note) => {
+                    const { date, time } = formatDateTime(note.noteDate);
+
+                    return (
+                      <tr
+                        key={note.noteId}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        {/* Date */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {date}
+                          </div>
+                          <div className="text-xs text-gray-500">{time}</div>
+                        </td>
+
+                        {/* Booking Code */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() => handleViewBooking(note.bookingId)}
+                            className="text-sm font-medium text-primary hover:text-primary/80 hover:underline"
+                          >
+                            {note.bookingCode}
+                          </button>
+                        </td>
+
+                        {/* Staff */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                              <User className="h-3.5 w-3.5 text-gray-500" />
+                            </div>
+                            <span className="text-sm text-gray-900">
+                              {truncateText(note.staffName, 20)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Customer */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <span className="text-sm text-gray-900">
+                            {note.customerName}
+                          </span>
+                        </td>
+
+                        {/* Note Content */}
+                        <td className="px-4 py-4">
+                          {note.content.length > 50 ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-sm text-gray-700 cursor-help">
+                                  {truncateText(note.content, 50)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="max-w-sm whitespace-pre-wrap"
+                              >
+                                {note.content}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-sm text-gray-700">
+                              {note.content}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Booking Detail Modal */}
+        <GlampingBookingDetailModal
+          bookingId={selectedBookingId}
+          isOpen={isDetailModalOpen}
+          onClose={handleCloseDetailModal}
+          onUpdate={fetchNotes}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}

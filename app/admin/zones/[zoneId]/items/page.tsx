@@ -1,18 +1,10 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { Plus, Search, Filter, Edit, Eye } from "lucide-react";
+import { Plus, Search, Filter, Edit, Tent, ImageOff, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
@@ -23,7 +15,23 @@ interface Item {
   category_name: string;
   inventory_quantity: number;
   status: string;
+  visibility: string;
+  image_url: string | null;
+  base_price: number | null;
+  active_bookings: number;
+  deposit_type: string;
+  deposit_value: number;
 }
+
+const formatCurrency = (amount: number) => {
+  if (amount >= 1_000_000) {
+    return `${(amount / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (amount >= 1_000) {
+    return `${(amount / 1_000).toFixed(0)}K`;
+  }
+  return amount.toLocaleString("vi-VN");
+};
 
 export default function ItemsPage({ params }: { params: Promise<{ zoneId: string }> }) {
   const router = useRouter();
@@ -34,7 +42,6 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  // Redirect to dashboard if "all" zones selected (not supported on this page)
   useEffect(() => {
     if (zoneId === "all") {
       router.replace("/admin/zones/all/dashboard");
@@ -45,7 +52,7 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
     if (zoneId !== "all") {
       fetchItems();
     }
-  }, [zoneId]); // Re-fetch when zone changes
+  }, [zoneId]);
 
   const fetchItems = async () => {
     try {
@@ -56,16 +63,30 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
         setItems(data.items);
       }
     } catch (error) {
-      console.error('Failed to fetch items:', error);
+      console.error("Failed to fetch items:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(search.toLowerCase()) ||
-    item.sku?.toLowerCase().includes(search.toLowerCase())
+  const filteredItems = items.filter(
+    (item) =>
+      item.name.toLowerCase().includes(search.toLowerCase()) ||
+      item.sku?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const getStatusVariant = (status: string) => {
+    switch (status) {
+      case "available":
+        return "success";
+      case "unavailable":
+        return "secondary";
+      case "disabled":
+        return "destructive";
+      default:
+        return "secondary";
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -98,78 +119,132 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
         </Button>
       </div>
 
-      {/* Table */}
-      <div className="border rounded-lg bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("table.name")}</TableHead>
-              <TableHead>{t("table.sku")}</TableHead>
-              <TableHead>{t("table.category")}</TableHead>
-              <TableHead>{t("table.inventory")}</TableHead>
-              <TableHead>{t("table.visibility")}</TableHead>
-              <TableHead className="text-right">{t("table.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
-                  <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      {/* Cards Grid */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="text-center py-16">
+          <Tent className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+          <p className="text-gray-500">{tc("noData")}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredItems.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+            >
+              {/* Image */}
+              <div className="relative aspect-[4/3] bg-gray-100">
+                {item.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.image_url}
+                    alt={item.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
+                    <ImageOff className="w-10 h-10 mb-1" />
+                    <span className="text-xs">{t("card.noImage")}</span>
                   </div>
-                </TableCell>
-              </TableRow>
-            ) : filteredItems.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
-                  <div className="text-gray-500">
-                    {tc("noData")}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredItems.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>{item.sku || '-'}</TableCell>
-                  <TableCell>{item.category_name || '-'}</TableCell>
-                  <TableCell>
-                    {item.inventory_quantity === -1 ? (
-                      <Badge variant="outline">{t("table.unlimited")}</Badge>
-                    ) : (
-                      item.inventory_quantity
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={item.status === 'available' ? 'default' : 'secondary'}>
-                      {t(`status.${item.status}`)}
+                )}
+
+                {/* Status badges overlaid on image */}
+                <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                  <Badge variant={getStatusVariant(item.status)} className="text-xs shadow-sm">
+                    {t(`status.${item.status}`)}
+                  </Badge>
+                  {item.category_name && (
+                    <Badge variant="outline" className="text-xs bg-white/90 shadow-sm">
+                      {item.category_name}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => router.push(`/admin/zones/${zoneId}/items/${item.id}`)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => router.push(`/admin/zones/${zoneId}/items/${item.id}/edit`)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-4 space-y-3">
+                {/* Name */}
+                <h3 className="font-semibold text-lg text-gray-900 leading-tight line-clamp-1">
+                  {item.name}
+                </h3>
+
+                {/* SKU */}
+                {item.sku && (
+                  <p className="text-xs text-muted-foreground">
+                    SKU: {item.sku}
+                  </p>
+                )}
+
+                {/* Info rows */}
+                <div className="space-y-1.5 text-sm text-gray-600">
+                  {/* Base price */}
+                  {item.base_price != null && item.base_price > 0 && (
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                      <span>
+                        {t("card.basePrice")}:{" "}
+                        <span className="font-medium text-gray-900">
+                          {formatCurrency(item.base_price)} VND
+                        </span>
+                      </span>
                     </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                  )}
+
+                  {/* Deposit */}
+                  {item.deposit_type && item.deposit_type !== "system_default" && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-3.5 h-3.5 flex items-center justify-center text-orange-500 flex-shrink-0 text-xs font-bold">%</span>
+                      <span>
+                        {t("card.deposit")}:{" "}
+                        <span className="font-medium text-gray-900">
+                          {item.deposit_type === "custom_percentage"
+                            ? `${item.deposit_value}%`
+                            : `${formatCurrency(item.deposit_value)} VND`}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom stats */}
+                <div className="flex items-center justify-between pt-2 border-t text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <Tent className="w-4 h-4 text-blue-500" />
+                    <div>
+                      <span className="font-semibold text-gray-900">
+                        {item.inventory_quantity === -1
+                          ? "∞"
+                          : t("card.slots", { count: item.inventory_quantity })}
+                      </span>
+                      <p className="text-xs text-muted-foreground">
+                        {t("card.activeBookings", { count: item.active_bookings || 0 })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Manage button */}
+                <Button
+                  className="w-full"
+                  variant="default"
+                  onClick={() => router.push(`/admin/zones/${zoneId}/items/${item.id}/edit`)}
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  {t("card.manage")}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

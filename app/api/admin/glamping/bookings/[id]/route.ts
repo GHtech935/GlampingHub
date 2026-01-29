@@ -87,11 +87,41 @@ export async function GET(
 
     const row = bookingResult.rows[0];
 
+    // Fetch booking tents (including per-tent discount fields)
+    const tentsQuery = `
+      SELECT
+        bt.id,
+        bt.item_id,
+        bt.check_in_date,
+        bt.check_out_date,
+        bt.nights,
+        bt.adults,
+        bt.children,
+        bt.total_guests,
+        bt.subtotal,
+        bt.special_requests,
+        bt.display_order,
+        bt.voucher_code,
+        bt.voucher_id,
+        bt.discount_type,
+        bt.discount_value,
+        bt.discount_amount,
+        i.name as item_name,
+        i.sku as item_sku
+      FROM glamping_booking_tents bt
+      LEFT JOIN glamping_items i ON bt.item_id = i.id
+      WHERE bt.booking_id = $1
+      ORDER BY bt.display_order
+    `;
+
+    const tentsResult = await client.query(tentsQuery, [id]);
+
     // Fetch booking items
     const itemsQuery = `
       SELECT
         bi.id,
         bi.item_id,
+        bi.booking_tent_id,
         bi.parameter_id,
         bi.quantity,
         bi.unit_price,
@@ -184,6 +214,25 @@ export async function GET(
         address: row.customer_address,
       },
       zone: zoneInfo,
+      tents: tentsResult.rows.map((tent) => ({
+        id: tent.id,
+        itemId: tent.item_id,
+        itemName: getLocalizedString(tent.item_name),
+        itemSku: tent.item_sku,
+        checkInDate: tent.check_in_date,
+        checkOutDate: tent.check_out_date,
+        nights: tent.nights,
+        adults: tent.adults,
+        children: tent.children,
+        totalGuests: tent.total_guests,
+        subtotal: parseFloat(tent.subtotal || 0),
+        specialRequests: tent.special_requests,
+        displayOrder: tent.display_order,
+        voucherCode: tent.voucher_code || null,
+        discountType: tent.discount_type || null,
+        discountValue: parseFloat(tent.discount_value || 0),
+        discountAmount: parseFloat(tent.discount_amount || 0),
+      })),
       items: itemsResult.rows.map((item) => ({
         id: item.id,
         itemId: item.item_id,
@@ -194,6 +243,7 @@ export async function GET(
         quantity: item.quantity,
         unitPrice: parseFloat(item.unit_price || 0),
         totalPrice: parseFloat(item.total_price || 0),
+        bookingTentId: item.booking_tent_id,
         metadata: item.metadata,
       })),
       payments: paymentsResult.rows.map((payment) => ({
@@ -382,7 +432,7 @@ export async function PUT(
 
           // 1. Send email to customer if status changed to confirmed
           if (finalStatus === 'confirmed' && current.status !== 'confirmed') {
-            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/glamping/booking/confirmation/${booking.booking_code}`;
+            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/glamping/booking/confirmation/${booking.booking_code}`;
 
             await sendTemplateEmail({
               templateSlug: 'glamping-booking-confirmed',
@@ -418,7 +468,7 @@ export async function PUT(
             [booking.zone_id]
           );
 
-          const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+          const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
           const bookingLink = `${appUrl}/admin/zones/all/bookings?booking_code=${booking.booking_code}`;
 
           // Determine template based on status change

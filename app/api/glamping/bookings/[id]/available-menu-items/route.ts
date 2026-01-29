@@ -29,7 +29,7 @@ export async function GET(
     const menuItemsResult = await query(`
       SELECT
         mi.id, mi.name, mi.description, mi.price, mi.unit,
-        mi.image_url, mi.max_quantity,
+        mi.image_url, mi.max_quantity, mi.min_guests, mi.max_guests,
         mc.id as category_id, mc.name as category_name,
         imp.is_required, imp.display_order
       FROM glamping_item_menu_products imp

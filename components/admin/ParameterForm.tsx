@@ -18,6 +18,7 @@ interface ParameterFormData {
   price_range: boolean;
   required: boolean;
   visibility: 'everyone' | 'staff' | 'hidden';
+  counted_for_menu: boolean;
 }
 
 interface ParameterFormProps {
@@ -42,6 +43,7 @@ export function ParameterForm({ onSubmit, onCancel, loading = false, showCard = 
     price_range: initialData?.price_range || false,
     required: initialData?.required || false,
     visibility: initialData?.visibility || "everyone",
+    counted_for_menu: initialData?.counted_for_menu || false,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,6 +115,25 @@ export function ParameterForm({ onSubmit, onCancel, loading = false, showCard = 
           </Label>
           <p className="text-sm text-gray-500">
             {t('linkToGuestsDescription')}
+          </p>
+        </div>
+      </div>
+
+      {/* 4.5 Counted for Menu Section */}
+      <div className="flex items-start space-x-2">
+        <Checkbox
+          id="counted_for_menu"
+          checked={formData.counted_for_menu}
+          onCheckedChange={(checked) =>
+            setFormData({ ...formData, counted_for_menu: checked as boolean })
+          }
+        />
+        <div className="flex flex-col">
+          <Label htmlFor="counted_for_menu" className="cursor-pointer">
+            Được chọn món ăn
+          </Label>
+          <p className="text-sm text-gray-500">
+            Khách với tham số này sẽ được tính vào việc chọn menu combo
           </p>
         </div>
       </div>

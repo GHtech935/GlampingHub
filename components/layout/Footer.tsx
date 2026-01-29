@@ -52,7 +52,7 @@ export function Footer() {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <Image
-                src="/images/logo_new.jpg"
+                src="/images/logo_glamping_transparent.png"
                 alt="CampingHub Logo"
                 width={200}
                 height={32}

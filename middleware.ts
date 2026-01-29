@@ -142,7 +142,7 @@ async function authMiddleware(request: NextRequest, response?: NextResponse) {
 
     if (isStaffSession(session)) {
       // Check staff role permissions
-      const allowedRoles = ['admin', 'sale', 'operations', 'owner'];
+      const allowedRoles = ['admin', 'sale', 'operations', 'owner', 'glamping_owner'];
       if (!allowedRoles.includes(session.role)) {
         // Unknown role - redirect to login
         return NextResponse.redirect(new URL('/login-admin', request.url));

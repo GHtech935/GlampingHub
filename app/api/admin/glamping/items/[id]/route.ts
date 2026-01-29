@@ -102,12 +102,23 @@ export async function GET(
     `, [id]);
 
     // Get YouTube URL from media
-    const youtubeResult = await pool.query(`
-      SELECT url
-      FROM glamping_item_media
-      WHERE item_id = $1 AND type = 'youtube'
-      LIMIT 1
-    `, [id]);
+    let youtubeResult;
+    try {
+      youtubeResult = await pool.query(`
+        SELECT url, video_start_time
+        FROM glamping_item_media
+        WHERE item_id = $1 AND type = 'youtube'
+        LIMIT 1
+      `, [id]);
+    } catch {
+      // Fallback if video_start_time column doesn't exist yet
+      youtubeResult = await pool.query(`
+        SELECT url
+        FROM glamping_item_media
+        WHERE item_id = $1 AND type = 'youtube'
+        LIMIT 1
+      `, [id]);
+    }
 
     // Get pricing rows
     const pricingResult = await pool.query(`
@@ -373,6 +384,7 @@ export async function GET(
         parameters: parametersResult.rows,
         media: mediaResult.rows,
         youtube_url: youtubeResult.rows[0]?.url || '',
+        video_start_time: youtubeResult.rows[0]?.video_start_time || 0,
         pricing_rate: pricingResult.rows[0]?.rate_type || 'per_night',
         calendar_status: item.default_calendar_status || 'available',
         base_price: getInventoryBasePrice(basePricingRows),
@@ -433,6 +445,7 @@ export async function PUT(
       // New fields for Phase 6.3
       images,
       youtube_url,
+      video_start_time,
       pricing_rate,
       group_pricing,
       parameter_base_prices,
@@ -569,12 +582,22 @@ export async function PUT(
 
         // Insert new youtube URL if not empty
         if (youtube_url) {
-          await client.query(
-            `INSERT INTO glamping_item_media (
-              item_id, type, url, display_order
-            ) VALUES ($1, $2, $3, $4)`,
-            [id, 'youtube', youtube_url, 999]
-          );
+          try {
+            await client.query(
+              `INSERT INTO glamping_item_media (
+                item_id, type, url, display_order, video_start_time
+              ) VALUES ($1, $2, $3, $4, $5)`,
+              [id, 'youtube', youtube_url, 999, video_start_time || 0]
+            );
+          } catch {
+            // Fallback if video_start_time column doesn't exist yet
+            await client.query(
+              `INSERT INTO glamping_item_media (
+                item_id, type, url, display_order
+              ) VALUES ($1, $2, $3, $4)`,
+              [id, 'youtube', youtube_url, 999]
+            );
+          }
         }
       }
 

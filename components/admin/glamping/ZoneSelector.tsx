@@ -29,22 +29,33 @@ export function ZoneSelector({ currentZoneId, locale, variant = "sidebar" }: Zon
   const pathname = usePathname();
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchZones = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch("/api/admin/glamping/zones");
-        if (res.ok) {
-          const data = await res.json();
-          setZones(data.zones || []);
+        // Fetch zones
+        const zonesRes = await fetch("/api/admin/glamping/zones");
+        if (zonesRes.ok) {
+          const zonesData = await zonesRes.json();
+          setZones(zonesData.zones || []);
+        }
+
+        // Fetch user role
+        const userRes = await fetch('/api/auth/me');
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          if (userData.user && userData.user.type === 'staff') {
+            setUserRole(userData.user.role);
+          }
         }
       } catch (error) {
-        console.error("Failed to fetch zones:", error);
+        console.error("Failed to fetch data:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchZones();
+    fetchData();
   }, []);
 
   const handleZoneChange = (zoneId: string) => {
@@ -85,15 +96,17 @@ export function ZoneSelector({ currentZoneId, locale, variant = "sidebar" }: Zon
           <SelectValue placeholder="Select Zone" />
         </SelectTrigger>
         <SelectContent>
-          {/* All Zones option */}
-          <SelectItem value="all">
-            <div className="flex items-center gap-2">
-              <Grid3x3 className="w-4 h-4" />
-              <span className="font-medium">
-                {locale === "vi" ? "Tất cả Zones" : "All Zones"}
-              </span>
-            </div>
-          </SelectItem>
+          {/* All Zones option - only for admin/sale/operations/owner */}
+          {userRole !== 'glamping_owner' && (
+            <SelectItem value="all">
+              <div className="flex items-center gap-2">
+                <Grid3x3 className="w-4 h-4" />
+                <span className="font-medium">
+                  {locale === "vi" ? "Tất cả Zones" : "All Zones"}
+                </span>
+              </div>
+            </SelectItem>
+          )}
 
           {/* Individual zones */}
           {zones.map((zone) => (

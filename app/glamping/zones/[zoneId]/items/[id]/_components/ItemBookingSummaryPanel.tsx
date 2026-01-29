@@ -2,16 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
+import { useGlampingCart } from '@/components/providers/GlampingCartProvider';
+import { useToast } from '@/hooks/use-toast';
+import { ShoppingCart, Eye, Loader2 } from 'lucide-react';
 
 interface ItemParameter {
   id: string;
-  name: string;
+  name: string | { vi?: string; en?: string };
   color_code: string;
   min_quantity: number;
   max_quantity: number;
+  counted_for_menu?: boolean;
 }
 
 interface ItemBookingSummaryPanelProps {
@@ -26,6 +31,8 @@ interface ItemBookingSummaryPanelProps {
   zoneId: string;
   zoneName: string;
   itemName: string;
+  itemSku?: string;
+  itemImageUrl?: string;
   locale: 'vi' | 'en';
 }
 
@@ -41,13 +48,22 @@ export function ItemBookingSummaryPanel({
   zoneId,
   zoneName,
   itemName,
+  itemSku,
+  itemImageUrl,
   locale,
 }: ItemBookingSummaryPanelProps) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const { addToCart, cartCount, cart } = useGlampingCart();
+
   // State for parameter quantities
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  // State for pricing per parameter (event-based)
-  const [pricing, setPricing] = useState<Record<string, number>>({});
+  // State for calculated pricing from API (with group/tiered pricing)
+  const [calculatedPricing, setCalculatedPricing] = useState<any>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
 
   const nights = selectedStart && selectedEnd
     ? Math.ceil((new Date(selectedEnd).getTime() - new Date(selectedStart).getTime()) / (1000 * 60 * 60 * 24))
@@ -60,6 +76,8 @@ export function ItemBookingSummaryPanel({
     nights: locale === 'vi' ? 'đêm' : 'nights',
     total: locale === 'vi' ? 'Tổng cộng' : 'Total',
     bookNow: locale === 'vi' ? 'Đặt ngay' : 'Book Now',
+    addToCart: locale === 'vi' ? 'Thêm vào giỏ' : 'Add to Cart',
+    viewCart: locale === 'vi' ? 'Xem giỏ hàng' : 'View Cart',
     selectDates: locale === 'vi' ? 'Chọn ngày để xem giá' : 'Select dates to see pricing',
   };
 
@@ -72,59 +90,73 @@ export function ItemBookingSummaryPanel({
     setQuantities(initialQuantities);
   }, [parameters]);
 
-  // Fetch event-based pricing when dates are selected
+  // Debounced pricing calculation when dates or quantities change
   useEffect(() => {
-    const fetchEventBasedPricing = async () => {
-      if (!selectedStart || !selectedEnd) {
-        setPricing({});
-        return;
+    if (!selectedStart || !selectedEnd || !itemId || parameters.length === 0 || Object.keys(quantities).length === 0) {
+      setCalculatedPricing(null);
+      return;
+    }
+
+    // Show loading immediately when inputs change
+    setPricingLoading(true);
+
+    // Debounce to avoid calling API too frequently
+    const timeoutId = setTimeout(() => {
+      fetchCalculatedPricing();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedStart, selectedEnd, itemId, quantities]);
+
+  const fetchCalculatedPricing = async () => {
+    setPricingLoading(true);
+    try {
+      const params = new URLSearchParams({
+        itemId,
+        checkIn: selectedStart!,
+        checkOut: selectedEnd!,
+        adults: adults.toString(),
+        children: children.toString(),
+      });
+
+      // Add parameter quantities with prefix param_
+      // Use Math.max(qty, 1) so API always returns unit prices even for qty=0 params
+      Object.entries(quantities).forEach(([paramId, quantity]) => {
+        params.append(`param_${paramId}`, Math.max(quantity, 1).toString());
+      });
+
+      const response = await fetch(`/api/glamping/booking/calculate-pricing?${params}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to calculate pricing');
       }
 
-      try {
-        setLoading(true);
-        const response = await fetch(
-          `/api/glamping/items/${itemId}/availability?startDate=${selectedStart}&months=1`
-        );
+      const data = await response.json();
+      setCalculatedPricing(data);
+    } catch (error) {
+      console.error('Error calculating pricing:', error);
+      setCalculatedPricing(null);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể tính giá. Vui lòng thử lại.',
+        variant: 'destructive'
+      });
+    } finally {
+      setPricingLoading(false);
+    }
+  };
 
-        if (!response.ok) throw new Error('Failed to fetch pricing');
-
-        const data = await response.json();
-        const calendar = data.calendar || [];
-
-        // Aggregate pricing from all days in range
-        const pricingPerParameter: Record<string, number> = {};
-
-        calendar.forEach((day: any) => {
-          if (day.date >= selectedStart && day.date < selectedEnd && day.pricing) {
-            Object.entries(day.pricing).forEach(([paramId, price]) => {
-              if (!pricingPerParameter[paramId]) {
-                pricingPerParameter[paramId] = 0;
-              }
-              pricingPerParameter[paramId] += Number(price);
-            });
-          }
-        });
-
-        setPricing(pricingPerParameter);
-      } catch (error) {
-        console.error('Error fetching pricing:', error);
-        setPricing({});
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEventBasedPricing();
-  }, [itemId, selectedStart, selectedEnd]);
-
-  // Calculate total
+  // Calculate total using API response (with group/tiered pricing)
   const calculateTotal = () => {
+    if (!calculatedPricing) return 0;
+
+    // Use parameterPricing from API (already has group discount applied)
     let total = 0;
-    parameters.forEach((param) => {
-      const qty = quantities[param.id] || 0;
-      const price = pricing[param.id] || 0; // This is already sum of all nights
-      total += qty * price;
+    Object.entries(calculatedPricing.parameterPricing || {}).forEach(([paramId, pricePerUnit]) => {
+      const quantity = quantities[paramId] || 0;
+      total += quantity * (pricePerUnit as number);
     });
+
     return total;
   };
 
@@ -152,6 +184,86 @@ export function ItemBookingSummaryPanel({
     return `/glamping/booking/form?${params.toString()}`;
   };
 
+  // Add to cart handler
+  const handleAddToCart = () => {
+    if (!selectedStart || !selectedEnd || !hasValidSelection) {
+      toast({
+        title: 'Lỗi',
+        description: 'Vui lòng chọn ngày nhận phòng và trả phòng',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Build parameter details array
+    const parameterDetails = parameters
+      .filter(param => quantities[param.id] > 0)
+      .map(param => {
+        // Extract name from multilingual object if present
+        let name = '';
+        if (typeof param.name === 'object' && param.name !== null) {
+          name = param.name.vi || param.name.en || '';
+        } else {
+          name = param.name || '';
+        }
+
+        return {
+          id: param.id,
+          name,
+          color_code: param.color_code,
+          quantity: quantities[param.id],
+          counted_for_menu: param.counted_for_menu || false
+        };
+      });
+
+    // Create cart item
+    const cartItem = {
+      id: `${itemId}-${Date.now()}`, // Unique cart item ID
+      itemId,
+      itemName,
+      itemSku: itemSku || '',
+      zoneId,
+      zoneName: { vi: zoneName, en: zoneName },
+      checkIn: selectedStart,
+      checkOut: selectedEnd,
+      nights,
+      adults,
+      children,
+      parameterQuantities: quantities,
+      parameters: parameterDetails,
+      menuProducts: {}, // Empty initially, can be added later
+      basePrice: total,
+      totalPrice: total,
+      itemImageUrl,
+      addedAt: Date.now(),
+      // Store nightly breakdown and pricing metadata
+      nightlyPricing: calculatedPricing?.nightlyPricing || [],
+      pricingMetadata: {
+        parameterPricing: calculatedPricing?.parameterPricing || {},
+        appliedEvents: calculatedPricing?.appliedEvents || []
+      }
+    };
+
+    const result = addToCart(cartItem);
+
+    if (result.success) {
+      toast({
+        title: 'Đã thêm vào giỏ',
+        description: `${itemName} đã được thêm vào giỏ hàng`,
+      });
+    } else {
+      toast({
+        title: 'Không thể thêm vào giỏ',
+        description: result.error || 'Đã có lỗi xảy ra',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleViewCart = () => {
+    router.push('/glamping/booking/form?from=cart');
+  };
+
   return (
     <Card className="shadow-lg">
       <CardContent className="p-6 space-y-6">
@@ -170,19 +282,32 @@ export function ItemBookingSummaryPanel({
           <div className="space-y-4">
             {parameters.map((param) => {
               const qty = quantities[param.id] || 0;
-              const paramPrice = pricing[param.id] || 0;
-              const paramTotal = qty * paramPrice;
+
+              // Get price per unit from calculated pricing (already has group discount applied)
+              const pricePerUnitAllNights = calculatedPricing?.parameterPricing?.[param.id] || 0;
+              const paramTotal = pricePerUnitAllNights; // Already is total for all nights
+
+              // Extract name from multilingual object
+              const paramName = typeof param.name === 'object' && param.name !== null
+                ? (param.name.vi || param.name.en || '')
+                : (param.name || '');
 
               return (
                 <div key={param.id} className="flex items-center justify-between gap-4">
                   <div className="flex-1">
-                    <div className="font-medium text-sm">{param.name}</div>
-                    {hasValidSelection && paramPrice > 0 && (
-                      <div className="text-xs text-gray-500">
-                        {formatCurrency(paramPrice)}/khách ({nights} {t.nights})
+                    <div className="font-medium text-sm">{paramName}</div>
+                    {hasValidSelection && pricingLoading ? (
+                      <div className="text-xs text-gray-400 flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Đang tải giá...</span>
                       </div>
-                    )}
+                    ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
+                      <div className="text-xs text-gray-500">
+                        {formatCurrency(pricePerUnitAllNights)}/khách ({nights} {t.nights})
+                      </div>
+                    ) : null}
                   </div>
+
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -197,12 +322,18 @@ export function ItemBookingSummaryPanel({
                         }));
                       }}
                       className="w-16 px-2 py-1 border rounded text-center text-sm"
+                      disabled={pricingLoading}
                     />
-                    {hasValidSelection && (
-                      <div className="text-sm font-medium w-24 text-right">
-                        {formatCurrency(paramTotal)}
+
+                    {hasValidSelection && pricingLoading ? (
+                      <div className="text-sm w-24 text-right">
+                        <Loader2 className="h-4 w-4 animate-spin text-gray-400 ml-auto" />
                       </div>
-                    )}
+                    ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
+                      <div className="text-sm font-medium w-24 text-right">
+                        {formatCurrency(paramTotal * qty)}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -218,13 +349,20 @@ export function ItemBookingSummaryPanel({
         )}
 
         {/* Pricing Summary */}
-        {hasValidSelection && total > 0 && (
+        {hasValidSelection && (total > 0 || pricingLoading) && (
           <div className="pt-4 border-t space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-lg font-semibold">{t.total}</span>
-              <span className="text-2xl font-bold text-green-600">
-                {formatCurrency(total)}
-              </span>
+              {pricingLoading ? (
+                <span className="text-xl text-gray-400 flex items-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Đang tính...
+                </span>
+              ) : (
+                <span className="text-2xl font-bold text-green-600">
+                  {formatCurrency(total)}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -236,22 +374,37 @@ export function ItemBookingSummaryPanel({
           </div>
         )}
 
-        {/* Book Now Button */}
-        {hasValidSelection && total > 0 && !loading ? (
-          <Button asChild className="w-full" size="lg">
-            <Link href={buildBookingUrl()}>
-              {t.bookNow}
-            </Link>
-          </Button>
-        ) : (
-          <Button
-            className="w-full"
-            size="lg"
-            disabled
-          >
-            {loading ? 'Đang tải...' : t.bookNow}
-          </Button>
-        )}
+        {/* Action Button */}
+        <div className="space-y-2">
+          {hasValidSelection && total > 0 && !loading && !pricingLoading && calculatedPricing ? (
+            <Button
+              onClick={() => {
+                // Check if same item + dates already in cart
+                const alreadyInCart = cart?.items.some(
+                  ci => ci.itemId === itemId && ci.checkIn === selectedStart && ci.checkOut === selectedEnd
+                );
+                if (alreadyInCart) {
+                  router.push('/glamping/booking/form?from=cart');
+                  return;
+                }
+                handleAddToCart();
+                router.push('/glamping/booking/form?from=cart');
+              }}
+              className="w-full"
+              size="lg"
+            >
+              {locale === 'vi' ? 'Đặt lều' : 'Book Tent'}
+            </Button>
+          ) : (
+            <Button
+              className="w-full"
+              size="lg"
+              disabled
+            >
+              {pricingLoading ? 'Đang tính giá...' : loading ? 'Đang tải...' : (locale === 'vi' ? 'Đặt lều' : 'Book Tent')}
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

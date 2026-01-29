@@ -21,6 +21,8 @@ interface VoucherInputProps {
   zoneId?: string;
   itemId?: string;
   validationEndpoint?: string; // Optional custom endpoint (default: /api/booking/validate-voucher)
+  applicationType?: 'accommodation' | 'menu_only' | 'all'; // Filter vouchers by type
+  appliedVoucher?: AppliedVoucher | null; // Controlled component support
 
   // Callbacks
   onVoucherApplied: (voucherData: AppliedVoucher) => void;
@@ -50,17 +52,34 @@ export default function VoucherInput({
   zoneId,
   itemId,
   validationEndpoint = "/api/booking/validate-voucher",
+  applicationType = 'all',
+  appliedVoucher: controlledAppliedVoucher,
   onVoucherApplied,
   onVoucherRemoved,
 }: VoucherInputProps) {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
+  const [internalAppliedVoucher, setInternalAppliedVoucher] = useState<AppliedVoucher | null>(null);
+
+  // Use controlled or internal state
+  const appliedVoucher = controlledAppliedVoucher !== undefined ? controlledAppliedVoucher : internalAppliedVoucher;
+  const setAppliedVoucher = controlledAppliedVoucher !== undefined ?
+    (voucher: AppliedVoucher | null) => { if (voucher) onVoucherApplied(voucher); else onVoucherRemoved(); } :
+    setInternalAppliedVoucher;
 
   // i18n labels
+  const getTitleByType = () => {
+    if (applicationType === 'menu_only') {
+      return locale === 'vi' ? 'Mã giảm giá' : 'Discount code';
+    } else if (applicationType === 'accommodation') {
+      return locale === 'vi' ? 'Mã giảm giá cho Lều' : 'Discount code for Tent';
+    }
+    return locale === 'vi' ? 'Mã giảm giá' : 'Discount code';
+  };
+
   const labels = {
-    title: locale === 'vi' ? 'Mã giảm giá' : 'Discount code',
+    title: getTitleByType(),
     placeholder: locale === 'vi' ? 'Nhập mã voucher' : 'Enter voucher code',
     apply: locale === 'vi' ? 'Áp dụng' : 'Apply',
     checking: locale === 'vi' ? 'Đang kiểm tra...' : 'Checking...',
@@ -94,6 +113,7 @@ export default function VoucherInput({
           // Glamping-specific params
           zoneId,
           itemId,
+          applicationType,
           // Common params
           checkIn,
           checkOut,
@@ -155,31 +175,28 @@ export default function VoucherInput({
       {/* Applied Voucher Display */}
       {appliedVoucher ? (
         <>
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-2 flex-1">
-                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="default" className="font-mono">
-                      {appliedVoucher.code}
-                    </Badge>
-                    <span className="font-semibold text-green-900">
-                      {appliedVoucher.name}
-                    </span>
-                  </div>
-                  {appliedVoucher.description && (
-                    <p className="text-sm text-green-700 mt-1">
-                      {appliedVoucher.description}
-                    </p>
-                  )}
-                </div>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center justify-between gap-4">
+              {/* Left side: Icon + Badge + Discount info */}
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <Badge variant="default" className="font-mono flex-shrink-0">
+                  {appliedVoucher.code}
+                </Badge>
+                <span className="text-sm text-green-700 truncate">
+                  {appliedVoucher.discountType === 'percentage'
+                    ? `(Giảm ${appliedVoucher.discountValue}%)`
+                    : `(Giảm ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(appliedVoucher.discountValue)})`
+                  }
+                </span>
               </div>
+
+              {/* Right side: Remove button */}
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={handleRemoveVoucher}
-                className="flex-shrink-0 ml-2"
+                className="flex-shrink-0"
               >
                 <X className="h-4 w-4" />
               </Button>

@@ -39,10 +39,13 @@ import {
   Key,
   Eye,
   AlertCircle,
-  LogIn
+  LogIn,
+  CheckCircle,
+  MapPin
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { StatCard, StatCardGrid } from '@/components/admin/StatCard';
 
 interface User {
   id: string;
@@ -112,6 +115,7 @@ export default function UsersPage() {
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [zoneFilterValue, setZoneFilterValue] = useState('all');
 
   // Form state
   const normalizeRoleValue = (role?: string | null) =>
@@ -135,8 +139,12 @@ export default function UsersPage() {
       if (roleFilter !== 'all') params.append('role', roleFilter);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (userSearch) params.append('search', userSearch);
-      // Filter users by zoneId
-      if (zoneId) params.append('zoneId', zoneId);
+      // Filter users by zoneId or zone filter dropdown
+      if (zoneId === 'all' && zoneFilterValue !== 'all') {
+        params.append('zoneId', zoneFilterValue);
+      } else if (zoneId && zoneId !== 'all') {
+        params.append('zoneId', zoneId);
+      }
 
       const response = await fetch(`/api/admin/users?${params.toString()}`);
       const data = await response.json();
@@ -192,7 +200,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
-  }, [roleFilter, statusFilter, userSearch]);
+  }, [roleFilter, statusFilter, userSearch, zoneFilterValue]);
 
 useEffect(() => {
   const fetchUserRole = async () => {
@@ -372,15 +380,20 @@ useEffect(() => {
         });
         // Redirect based on user role
         const role = data.user?.role;
-        let redirectUrl = '/admin-camping';
+        const glampingZoneIds = data.user?.glampingZoneIds;
+        let redirectUrl = '/admin';
 
-        // Redirect to appropriate page based on role permissions
-        if (role === 'operations') {
-          redirectUrl = '/admin-camping/bookings';
-        } else if (role === 'sale') {
-          redirectUrl = '/admin-camping/bookings';
+        // Redirect to appropriate page based on role
+        if (role === 'glamping_owner' && glampingZoneIds && glampingZoneIds.length > 0) {
+          // Glamping owner: redirect to their zone
+          redirectUrl = `/admin/zones/${glampingZoneIds[0]}/dashboard`;
+        } else if (role === 'owner' || role === 'admin') {
+          // Admin/Owner: redirect to all zones dashboard
+          redirectUrl = '/admin/zones/all/dashboard';
+        } else if (role === 'operations' || role === 'sale') {
+          // Operations/Sale: redirect to all zones bookings
+          redirectUrl = '/admin/zones/all/bookings';
         }
-        // admin and owner go to dashboard
 
         window.location.href = redirectUrl;
       } else {
@@ -461,6 +474,36 @@ useEffect(() => {
         </div>
       </div>
 
+      {/* Stats */}
+      {!usersLoading && (
+        <StatCardGrid>
+          <StatCard
+            title={t('stats.totalUsers')}
+            value={users.length}
+            icon={Users}
+            color="blue"
+          />
+          <StatCard
+            title={t('stats.active')}
+            value={users.filter((u) => u.is_active).length}
+            icon={CheckCircle}
+            color="green"
+          />
+          <StatCard
+            title={t('stats.admins')}
+            value={users.filter((u) => u.role === 'admin').length}
+            icon={Shield}
+            color="purple"
+          />
+          <StatCard
+            title={t('stats.zones')}
+            value={new Set(users.map((u) => u.glamping_zone_id).filter(Boolean)).size}
+            icon={MapPin}
+            color="orange"
+          />
+        </StatCardGrid>
+      )}
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
@@ -517,6 +560,21 @@ useEffect(() => {
                     <SelectItem value="inactive">{t('status.inactive')}</SelectItem>
                   </SelectContent>
                 </Select>
+                {zoneId === 'all' && (
+                  <Select value={zoneFilterValue} onValueChange={setZoneFilterValue}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder={t('zoneFilter')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('allZones')}</SelectItem>
+                      {zones.map((zone) => (
+                        <SelectItem key={zone.id} value={zone.id}>
+                          {zone.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </CardContent>
           </Card>

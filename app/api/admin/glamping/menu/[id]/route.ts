@@ -34,6 +34,9 @@ export async function GET(
         sort_order,
         weight,
         status,
+        min_guests,
+        max_guests,
+        stock,
         created_at,
         updated_at
        FROM glamping_menu_items
@@ -82,7 +85,10 @@ export async function PUT(
       advance_hours,
       image_url,
       weight,
-      status
+      status,
+      min_guests,
+      max_guests,
+      stock
     } = body;
 
     // Validate required fields
@@ -90,7 +96,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    if (!price || price < 0) {
+    if (price === null || price === undefined || price < 0) {
       return NextResponse.json({ error: 'Valid price is required' }, { status: 400 });
     }
 
@@ -111,8 +117,11 @@ export async function PUT(
          image_url = $12,
          weight = $13,
          status = $14,
+         min_guests = $15,
+         max_guests = $16,
+         stock = $17,
          updated_at = NOW()
-       WHERE id = $15
+       WHERE id = $18
        RETURNING *`,
       [
         name,
@@ -129,6 +138,9 @@ export async function PUT(
         image_url || null,
         weight || 0,
         status || 'active',
+        min_guests || null,
+        max_guests || null,
+        stock || null,
         id
       ]
     );

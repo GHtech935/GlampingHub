@@ -454,7 +454,7 @@ export async function POST(request: NextRequest) {
             const zoneName = booking.zone_name || '';
 
             // 1. Send email to customer
-            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/glamping/booking/confirmation/${bookingReference}`;
+            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/glamping/booking/confirmation/${bookingReference}`;
 
             await sendTemplateEmail({
               templateSlug: 'glamping-booking-confirmed',
@@ -496,7 +496,7 @@ export async function POST(request: NextRequest) {
               [zoneId]
             );
 
-            const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+            const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
             const bookingLink = `${appUrl}/admin/zones/all/bookings?booking_code=${bookingReference}`;
 
             for (const staff of staffResult.rows) {
@@ -1036,7 +1036,7 @@ export async function POST(request: NextRequest) {
           });
 
           // Gửi EMAIL cho admin về late payment
-          const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+          const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
           const notificationLink = `${appUrl}/admin/bookings/${foundBooking.id}`;
 
           // Lấy danh sách admin emails

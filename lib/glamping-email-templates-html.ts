@@ -1236,9 +1236,95 @@ export const glampingAdminLatePaymentHTML = `
 </html>
 `;
 
-// =============================================================================
-// GLAMPING EMAIL TEMPLATES WITH FULL METADATA
-// =============================================================================
+export const glampingMenuSelectionReminderHTML = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nhắc nhở chọn món ăn - {booking_code}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">🍽️ Đừng quên chọn món ăn nhé!</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Xin chào <strong>{customer_name}</strong>,
+              </p>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Chúng tôi nhận thấy bạn chưa chọn món ăn cho chuyến đi glamping sắp tới của mình.
+              </p>
+
+              <!-- Booking Info Box -->
+              <div style="background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Mã đặt phòng</p>
+                <p style="margin: 0 0 15px 0; font-size: 18px; font-weight: bold; color: #333;">{booking_code}</p>
+
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Địa điểm</p>
+                <p style="margin: 0 0 15px 0; font-size: 16px; color: #333;">{property_name}</p>
+
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Check-in</p>
+                <p style="margin: 0; font-size: 16px; color: #333;">{check_in_date} lúc {check_in_time}</p>
+              </div>
+
+              <!-- Warning Box -->
+              <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #856404; font-size: 15px; line-height: 1.6;">
+                  ⚠️ <strong>Lưu ý quan trọng:</strong> Bạn chỉ có thể chỉnh sửa món ăn đến <strong>24 giờ trước khi check-in</strong>.
+                  Sau thời gian này, hệ thống sẽ không cho phép thay đổi.
+                </p>
+              </div>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 20px 0;">
+                Hãy chọn món ăn yêu thích của bạn ngay để đảm bảo chúng tôi chuẩn bị đầy đủ cho chuyến đi của bạn!
+              </p>
+
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{management_url}"
+                   style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(102, 126, 234, 0.4);">
+                  Chọn món ăn ngay
+                </a>
+              </div>
+
+              <p style="font-size: 14px; line-height: 1.6; color: #666; margin: 20px 0 0 0;">
+                Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; font-size: 14px; color: #666;">
+                Cảm ơn bạn đã chọn dịch vụ glamping của chúng tôi! 🌟
+              </p>
+              <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">
+                Email này được gửi tự động, vui lòng không trả lời.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
 
 export interface GlampingEmailTemplateDefinition {
   slug: string;
@@ -1280,26 +1366,6 @@ export const GLAMPING_EMAIL_TEMPLATES: Record<string, GlampingEmailTemplateDefin
     type: 'booking_confirmation',
     description: 'Email gửi cho khách khi admin xác nhận đặt chỗ',
     availableVariables: ['customer_name', 'booking_reference', 'zone_name', 'checkin_date', 'checkout_date', 'notification_link'],
-    isActive: true,
-  },
-  'glamping-pre-arrival-reminder': {
-    slug: 'glamping-pre-arrival-reminder',
-    name: 'Nhắc nhở trước khi đến',
-    subject: 'Sắp đến ngày check-in - #{booking_reference} - GlampingHub',
-    html: glampingPreArrivalReminderHTML,
-    type: 'pre_arrival',
-    description: 'Email nhắc nhở gửi 2 ngày trước khi check-in',
-    availableVariables: ['customer_name', 'booking_reference', 'zone_name', 'check_in_date', 'check_in_time', 'zone_address'],
-    isActive: true,
-  },
-  'glamping-post-stay-thank-you': {
-    slug: 'glamping-post-stay-thank-you',
-    name: 'Cảm ơn sau khi lưu trú',
-    subject: 'Cảm ơn bạn đã lưu trú tại GlampingHub!',
-    html: glampingPostStayThankYouHTML,
-    type: 'post_stay',
-    description: 'Email cảm ơn gửi 1 ngày sau khi check-out',
-    availableVariables: ['customer_name', 'booking_reference', 'zone_name'],
     isActive: true,
   },
   'glamping-payment-reminder': {
@@ -1410,6 +1476,36 @@ export const GLAMPING_EMAIL_TEMPLATES: Record<string, GlampingEmailTemplateDefin
     type: 'admin_notification',
     description: 'Email thông báo cho admin khi khách cập nhật món ăn',
     availableVariables: ['booking_reference', 'customer_name', 'old_total', 'new_total', 'price_difference', 'price_increased', 'requires_payment', 'notification_link'],
+    isActive: true,
+  },
+  'glamping-pre-arrival-reminder': {
+    slug: 'glamping-pre-arrival-reminder',
+    name: 'Nhắc nhở trước khi nhận phòng',
+    subject: '🏕️ Chuẩn bị cho chuyến đi - Booking #{booking_code}',
+    html: glampingPreArrivalReminderHTML,
+    type: 'pre_arrival',
+    description: 'Email nhắc nhở gửi 2 ngày trước check-in',
+    availableVariables: ['customer_name', 'booking_code', 'property_name', 'check_in_date', 'check_in_time', 'management_url'],
+    isActive: true,
+  },
+  'glamping-post-stay-thank-you': {
+    slug: 'glamping-post-stay-thank-you',
+    name: 'Cảm ơn sau chuyến đi',
+    subject: '🙏 Cảm ơn bạn đã trải nghiệm - Booking #{booking_code}',
+    html: glampingPostStayThankYouHTML,
+    type: 'post_stay',
+    description: 'Email cảm ơn gửi 1 ngày sau check-out',
+    availableVariables: ['customer_name', 'booking_code', 'property_name', 'review_url'],
+    isActive: true,
+  },
+  'glamping-menu-selection-reminder': {
+    slug: 'glamping-menu-selection-reminder',
+    name: 'Nhắc nhở chọn món ăn',
+    subject: '🍽️ Nhắc nhở chọn món ăn cho chuyến glamping - {booking_code}',
+    html: glampingMenuSelectionReminderHTML,
+    type: 'menu_reminder',
+    description: 'Email nhắc khách chọn món ăn 48h trước check-in',
+    availableVariables: ['customer_name', 'booking_code', 'property_name', 'check_in_date', 'check_in_time', 'management_url'],
     isActive: true,
   },
 };

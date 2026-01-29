@@ -17,7 +17,7 @@ export async function PUT(
     }
 
     const isAdmin = session.role === "admin";
-    const isOwnerEditingSelf = session.role === "owner" && session.id === id;
+    const isOwnerEditingSelf = (session.role === "owner" || session.role === "glamping_owner") && session.id === id;
 
     if (!isAdmin && !isOwnerEditingSelf) {
       return NextResponse.json({ error: "Unauthorized to update this user" }, { status: 403 });
@@ -27,7 +27,7 @@ export async function PUT(
 
     const body = await request.json();
 
-    // If owner is editing themselves, only allow specific fields
+    // If owner or glamping_owner is editing themselves, only allow specific fields
     if (isOwnerEditingSelf) {
       const allowedFields = ['phone', 'owner_bank_name', 'owner_bank_id', 'owner_account_number', 'owner_account_holder', 'owner_bank_branch'];
       const providedFields = Object.keys(body);
@@ -35,7 +35,7 @@ export async function PUT(
 
       if (unauthorizedFields.length > 0) {
         return NextResponse.json(
-          { error: `Owner can only update: ${allowedFields.join(', ')}` },
+          { error: `You can only update: ${allowedFields.join(', ')}` },
           { status: 403 }
         );
       }

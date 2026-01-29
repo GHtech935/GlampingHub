@@ -361,15 +361,20 @@ useEffect(() => {
         });
         // Redirect based on user role
         const role = data.user?.role;
-        let redirectUrl = '/admin-camping';
+        const glampingZoneIds = data.user?.glampingZoneIds;
+        let redirectUrl = '/admin';
 
-        // Redirect to appropriate page based on role permissions
-        if (role === 'operations') {
-          redirectUrl = '/admin-camping/bookings';
-        } else if (role === 'sale') {
-          redirectUrl = '/admin-camping/bookings';
+        // Redirect to appropriate page based on role
+        if (role === 'glamping_owner' && glampingZoneIds && glampingZoneIds.length > 0) {
+          // Glamping owner: redirect to their zone
+          redirectUrl = `/admin/zones/${glampingZoneIds[0]}/dashboard`;
+        } else if (role === 'owner' || role === 'admin') {
+          // Admin/Owner: redirect to all zones dashboard
+          redirectUrl = '/admin/zones/all/dashboard';
+        } else if (role === 'operations' || role === 'sale') {
+          // Operations/Sale: redirect to all zones bookings
+          redirectUrl = '/admin/zones/all/bookings';
         }
-        // admin and owner go to dashboard
 
         window.location.href = redirectUrl;
       } else {
@@ -394,7 +399,8 @@ useEffect(() => {
       admin: { label: t('roles.admin'), className: 'bg-purple-100 text-purple-700' },
       sale: { label: t('roles.sale'), className: 'bg-blue-100 text-blue-700' },
       operations: { label: t('roles.operations'), className: 'bg-green-100 text-green-700' },
-      owner: { label: 'Owner', className: 'bg-orange-100 text-orange-700' }
+      owner: { label: 'Owner', className: 'bg-orange-100 text-orange-700' },
+      glamping_owner: { label: 'Chủ Glamping', className: 'bg-teal-100 text-teal-700' }
     };
 
     const badge = badges[role] || badges.operations;

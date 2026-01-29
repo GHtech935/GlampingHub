@@ -1,0 +1,351 @@
+"use client";
+
+import React, { useState } from 'react';
+import Image from 'next/image';
+import { X, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
+import { useGlampingCart, GlampingCartItem, isPerNightMenuProducts } from '@/components/providers/GlampingCartProvider';
+import { CartItemInlineEditForm } from './CartItemInlineEditForm';
+import { format, addDays } from 'date-fns';
+import { vi } from 'date-fns/locale';
+
+export function CartItemsList() {
+  const { cart, removeFromCart, clearCart } = useGlampingCart();
+  const [expandedMenuItems, setExpandedMenuItems] = useState<Set<string>>(new Set());
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+  if (!cart || cart.items.length === 0) {
+    return null;
+  }
+
+  const toggleMenuExpansion = (itemId: string) => {
+    setExpandedMenuItems((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleEditItem = (itemId: string) => {
+    if (editingItemId && editingItemId !== itemId) {
+      // Another item is being edited
+      if (confirm('Bạn đang chỉnh sửa lều khác. Bỏ các thay đổi và chỉnh sửa lều này?')) {
+        setEditingItemId(itemId);
+      }
+    } else {
+      setEditingItemId(editingItemId === itemId ? null : itemId);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      return format(new Date(dateString), 'dd/MM/yyyy', { locale: vi });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND'
+    }).format(price);
+  };
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold">
+          Giỏ hàng của bạn ({cart.items.length} {cart.items.length === 1 ? 'lều' : 'lều'})
+        </h2>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={clearCart}
+          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+        >
+          Xóa tất cả
+        </Button>
+      </div>
+
+      {/* Zone Info */}
+      <div className="mb-4 rounded-lg">
+        <p className="text-sm">
+          <strong>Khu glamping:</strong> {cart.zoneName.vi}
+        </p>
+        <p className="text-xs mt-1">
+          Tất cả lều trong giỏ hàng phải thuộc cùng một khu glamping
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {cart.items.map((item) => {
+          const isMenuExpanded = expandedMenuItems.has(item.id);
+          const hasMenuProducts = item.menuProducts && Object.keys(item.menuProducts).length > 0;
+          const isEditing = editingItemId === item.id;
+
+          return (
+            <Card key={item.id} className="overflow-hidden">
+              <CardContent className="p-4">
+                {/* Summary View - Clickable */}
+                <div
+                  className={`flex gap-4 cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded-lg transition-colors ${
+                    isEditing ? 'bg-blue-50' : ''
+                  }`}
+                  onClick={() => handleEditItem(item.id)}
+                >
+                  {/* Item Image */}
+                  {item.itemImageUrl && (
+                    <div className="relative w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden">
+                      <Image
+                        src={item.itemImageUrl}
+                        alt={item.itemName}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                  )}
+
+                  {/* Item Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-lg truncate">
+                          {item.itemName}
+                          {isEditing && (
+                            <span className="ml-2 text-sm text-blue-600 font-normal">
+                              (Đang chỉnh sửa)
+                            </span>
+                          )}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">{item.zoneName.vi}</p>
+                      </div>
+                      <div
+                        className="flex items-center gap-2 flex-shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditItem(item.id);
+                          }}
+                          className={`h-8 w-8 ${isEditing ? 'text-blue-600' : ''}`}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isEditing) {
+                              if (confirm('Bỏ các thay đổi và xóa lều này?')) {
+                                setEditingItemId(null);
+                                removeFromCart(item.id);
+                              }
+                            } else {
+                              removeFromCart(item.id);
+                            }
+                          }}
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Dates Info */}
+                    <div className="flex flex-wrap gap-2 mb-2 text-sm">
+                      <Badge variant="secondary">
+                        {formatDate(item.checkIn)} - {formatDate(item.checkOut)}
+                      </Badge>
+                      <Badge variant="secondary">
+                        {item.nights} {item.nights === 1 ? 'đêm' : 'đêm'}
+                      </Badge>
+                    </div>
+
+                    {/* Parameters */}
+                    {item.parameters && item.parameters.length > 0 && (
+                      <div className="mb-2">
+                        <div className="flex flex-wrap gap-2">
+                          {item.parameters.map((param) => {
+                            // Handle multilingual text
+                            const paramName = typeof param.name === 'object' && param.name !== null
+                              ? (param.name.vi || param.name.en || '')
+                              : (param.name || '')
+
+                            return (
+                              <Badge
+                                key={param.id}
+                                variant="outline"
+                                style={{
+                                  borderColor: param.color_code || undefined,
+                                  color: param.color_code || undefined
+                                }}
+                              >
+                                {paramName}: {param.quantity}
+                              </Badge>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Menu Products (Collapsible) - Only show when not editing */}
+                    {!isEditing && hasMenuProducts && (
+                      <div className="mb-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleMenuExpansion(item.id);
+                          }}
+                          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {isMenuExpanded ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                          <span>
+                            Món ăn & đồ uống
+                          </span>
+                        </button>
+
+                        {isMenuExpanded && (
+                          <div className="mt-2 pl-5 space-y-3">
+                            {/* Check if per-night format */}
+                            {isPerNightMenuProducts(item.menuProducts) ? (
+                              // Display per-night menu products
+                              Object.entries(item.menuProducts).map(([nightIndex, nightSelections]) => {
+                                const night = parseInt(nightIndex);
+                                const nightDate = addDays(new Date(item.checkIn), night);
+                                const nightLabel = `Ngày ${night + 1} (${format(nightDate, 'dd/MM')})`;
+
+                                return (
+                                  <div key={nightIndex} className="border-l-2 border-blue-200 pl-3">
+                                    <div className="font-medium text-sm text-blue-700 mb-1">{nightLabel}</div>
+                                    <div className="space-y-2">
+                                      {Object.entries(nightSelections).map(([productId, selection]) => {
+                                        const itemTotal = selection.price * selection.quantity;
+                                        const discount = selection.voucher?.discountAmount || 0;
+                                        const finalPrice = itemTotal - discount;
+
+                                        return (
+                                          <div key={productId} className="space-y-1">
+                                            <div className="flex justify-between text-sm text-muted-foreground">
+                                              <span>
+                                                {selection.name} x {selection.quantity}
+                                              </span>
+                                              <span>{formatPrice(finalPrice)}</span>
+                                            </div>
+                                            {selection.voucher && (
+                                              <div className="flex justify-between text-xs text-green-600 pl-4">
+                                                <span>🎫 {selection.voucher.code}</span>
+                                                <span>-{formatPrice(discount)}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              // Display flat (legacy) menu products
+                              Object.entries(item.menuProducts).map(([productId, selection]) => {
+                                const itemTotal = selection.price * selection.quantity;
+                                const discount = selection.voucher?.discountAmount || 0;
+                                const finalPrice = itemTotal - discount;
+
+                                return (
+                                  <div key={productId} className="space-y-1">
+                                    <div className="flex justify-between text-sm text-muted-foreground">
+                                      <span>
+                                        {selection.name} x {selection.quantity}
+                                      </span>
+                                      <span>{formatPrice(finalPrice)}</span>
+                                    </div>
+                                    {selection.voucher && (
+                                      <div className="flex justify-between text-xs text-green-600 pl-4">
+                                        <span>🎫 {selection.voucher.code}</span>
+                                        <span>-{formatPrice(discount)}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Accommodation Voucher badge - Only show when not editing */}
+                    {!isEditing && item.accommodationVoucher && (
+                      <div className="mt-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-blue-600">
+                            🎫 Voucher lều: {item.accommodationVoucher.code}
+                          </span>
+                          <span className="text-green-600 font-medium">
+                            -{formatPrice(item.accommodationVoucher.discountAmount)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Price display - Only show when not editing */}
+                    {!isEditing && (
+                      <div className="flex justify-between items-center pt-3 border-t mt-3">
+                        <span className="text-sm text-muted-foreground">Giá lều này:</span>
+                        <div className="text-right">
+                          {(item.accommodationVoucher || Object.values(item.menuProducts).some(s => s.voucher)) && (
+                            <div className="text-sm text-gray-400 line-through">
+                              {formatPrice(
+                                (item.pricingBreakdown?.accommodationCost || 0) +
+                                (item.pricingBreakdown?.menuProductsCost || 0)
+                              )}
+                            </div>
+                          )}
+                          <span className="text-lg font-semibold text-blue-600">
+                            {formatPrice(item.pricingBreakdown?.subtotal || item.totalPrice || item.basePrice)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Inline Edit Form - Collapsible */}
+                <Collapsible open={isEditing}>
+                  <CollapsibleContent>
+                    <CartItemInlineEditForm
+                      item={item}
+                      onSave={() => setEditingItemId(null)}
+                      onCancel={() => setEditingItemId(null)}
+                      isOpen={isEditing}
+                    />
+                  </CollapsibleContent>
+                </Collapsible>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

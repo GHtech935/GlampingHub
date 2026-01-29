@@ -24,6 +24,8 @@ import { toast } from 'react-hot-toast';
 import { AddPaymentDialog } from '@/components/admin/AddPaymentDialog';
 import { EditPaymentDialog } from '@/components/admin/EditPaymentDialog';
 import { DeletePaymentDialog } from '@/components/admin/DeletePaymentDialog';
+import { PaymentAllocationInfo } from './tabs/PaymentAllocationInfo';
+import type { BookingItem } from './types';
 
 interface Payment {
   id: string;
@@ -47,6 +49,7 @@ interface GlampingBookingPaymentsTabProps {
     pricing: {
       totalAmount: number;
     };
+    items?: BookingItem[];
   };
   locale?: Locale;
   onRefresh: () => void;
@@ -438,6 +441,16 @@ export function GlampingBookingPaymentsTab({
           </div>
         )}
       </div>
+
+      {/* Payment Allocation by Tent */}
+      {booking.items && booking.items.length > 0 && (
+        <PaymentAllocationInfo
+          items={booking.items}
+          totalPaid={totalPaid}
+          totalAmount={booking.pricing.totalAmount}
+          locale={locale}
+        />
+      )}
 
       {/* Dialogs */}
       <AddPaymentDialog

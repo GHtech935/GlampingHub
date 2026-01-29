@@ -47,6 +47,16 @@ export async function POST(request: NextRequest) {
       campsiteIds = campsitesResult.rows.map(row => row.id);
     }
 
+    // For glamping_owner role, fetch their zones from user_glamping_zones
+    let glampingZoneIds: string[] | undefined;
+    if (targetUser.role === 'glamping_owner') {
+      const zonesResult = await pool.query(
+        'SELECT zone_id FROM user_glamping_zones WHERE user_id = $1 AND role = $2',
+        [targetUser.id, 'glamping_owner']
+      );
+      glampingZoneIds = zonesResult.rows.map(row => row.zone_id);
+    }
+
     // Create session for target user
     const targetSession: StaffSession = {
       type: 'staff',
@@ -54,9 +64,10 @@ export async function POST(request: NextRequest) {
       email: targetUser.email,
       firstName: targetUser.first_name,
       lastName: targetUser.last_name,
-      role: targetUser.role as 'admin' | 'sale' | 'operations' | 'owner',
+      role: targetUser.role as 'admin' | 'sale' | 'operations' | 'owner' | 'glamping_owner',
       campsiteId: targetUser.campsite_id,
       campsiteIds,
+      glampingZoneIds,
     };
 
     // Log impersonation action
@@ -77,6 +88,7 @@ export async function POST(request: NextRequest) {
         firstName: targetSession.firstName,
         lastName: targetSession.lastName,
         role: targetSession.role,
+        glampingZoneIds: targetSession.glampingZoneIds,
       },
     });
   } catch (error) {

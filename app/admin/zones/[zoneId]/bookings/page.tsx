@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Search, RotateCcw, ChevronLeft, ChevronRight, RefreshCw, Eye, Mail, Phone, Calendar, Users, MapPin } from "lucide-react";
+import { Search, RotateCcw, ChevronLeft, ChevronRight, RefreshCw, Eye, Mail, Phone, Calendar, Users, MapPin, Plus, BookOpen, CheckCircle, Clock, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,6 +19,8 @@ import { useAdminLocale } from "@/components/providers/AdminI18nProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { type MultilingualText, getLocalizedText } from "@/lib/i18n-utils";
 import { GlampingBookingDetailModal } from "@/components/admin/glamping/GlampingBookingDetailModal";
+import { AdminGlampingBookingFormModal } from "@/components/admin/AdminGlampingBookingFormModal";
+import { StatCard, StatCardGrid } from "@/components/admin/StatCard";
 
 // Types
 interface GlampingBooking {
@@ -168,9 +170,17 @@ export default function GlampingBookingsPage() {
   });
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [showCreateBookingModal, setShowCreateBookingModal] = useState(false);
+  const [stats, setStats] = useState<{
+    totalBookings: number;
+    confirmedBookings: number;
+    pendingBookings: number;
+    totalRevenue: number;
+  } | null>(null);
 
   useEffect(() => {
     fetchBookings();
+    fetchStats();
   }, [filters, pagination.currentPage, zoneId]);
 
   const fetchBookings = async () => {
@@ -218,6 +228,39 @@ export default function GlampingBookingsPage() {
       toast.error(t('fetchError'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (zoneId && zoneId !== "all") {
+        params.append("zoneId", zoneId);
+      }
+      if (filters.status && filters.status !== "all") {
+        params.append("status", filters.status);
+      }
+      if (filters.paymentStatus && filters.paymentStatus !== "all") {
+        params.append("paymentStatus", filters.paymentStatus);
+      }
+      if (filters.dateRange && filters.dateRange !== "all") {
+        params.append("dateRange", filters.dateRange);
+        if (filters.dateRange === "custom" && filters.dateFrom && filters.dateTo) {
+          params.append("dateFrom", filters.dateFrom);
+          params.append("dateTo", filters.dateTo);
+        }
+      }
+      if (filters.search) {
+        params.append("search", filters.search);
+      }
+
+      const response = await fetch(`/api/admin/glamping/bookings/stats?${params.toString()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data.stats);
+      }
+    } catch (error) {
+      console.error("Failed to fetch booking stats:", error);
     }
   };
 
@@ -275,6 +318,15 @@ export default function GlampingBookingsPage() {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <Button
+            variant="default"
+            size="sm"
+            onClick={() => setShowCreateBookingModal(true)}
+            className="flex items-center gap-1.5 sm:gap-2 h-9 sm:h-10 touch-manipulation"
+          >
+            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="text-xs sm:text-sm">{locale === 'vi' ? 'Tạo Booking' : 'Create Booking'}</span>
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             onClick={fetchBookings}
@@ -285,6 +337,36 @@ export default function GlampingBookingsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Stats */}
+      {stats && (
+        <StatCardGrid>
+          <StatCard
+            title={locale === 'vi' ? 'Tổng Booking' : 'Total Bookings'}
+            value={stats.totalBookings}
+            icon={BookOpen}
+            color="blue"
+          />
+          <StatCard
+            title={locale === 'vi' ? 'Đã Xác Nhận' : 'Confirmed'}
+            value={stats.confirmedBookings}
+            icon={CheckCircle}
+            color="green"
+          />
+          <StatCard
+            title={locale === 'vi' ? 'Chờ Xử Lý' : 'Pending'}
+            value={stats.pendingBookings}
+            icon={Clock}
+            color="orange"
+          />
+          <StatCard
+            title={locale === 'vi' ? 'Tổng Doanh Thu' : 'Total Revenue'}
+            value={formatCurrency(stats.totalRevenue)}
+            icon={DollarSign}
+            color="emerald"
+          />
+        </StatCardGrid>
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
@@ -682,6 +764,19 @@ export default function GlampingBookingsPage() {
         isOpen={isDetailModalOpen}
         onClose={handleCloseDetailModal}
         onUpdate={handleUpdateBooking}
+      />
+
+      {/* Create Booking Modal */}
+      <AdminGlampingBookingFormModal
+        open={showCreateBookingModal}
+        onClose={() => setShowCreateBookingModal(false)}
+        onSuccess={() => {
+          setShowCreateBookingModal(false);
+          fetchBookings();
+          toast.success(locale === 'vi' ? 'Tạo booking thành công' : 'Booking created successfully');
+        }}
+        zoneId={zoneId}
+        locale={locale}
       />
     </div>
   );

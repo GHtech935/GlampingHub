@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Edit, Trash, Star, Users, TrendingUp } from "lucide-react";
+import { Edit, Trash, Star, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -141,20 +141,8 @@ export default function BankAccountTable({
                   <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Users className="w-3 h-3" />
-                      <span>{account._usage?.campsite_count || 0} {t('campsites')}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="w-3 h-3" />
                       <span>{account._usage?.glamping_zone_count || 0} {t('glampingZones')}</span>
                     </div>
-                    {account._usage && account._usage.transaction_count > 0 && (
-                      <div className="flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3" />
-                        <span>
-                          {account._usage.transaction_count} {t('transactions')} ({formatCurrency(account._usage.total_amount)})
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </TableCell>
 

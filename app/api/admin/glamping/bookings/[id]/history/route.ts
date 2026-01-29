@@ -37,7 +37,7 @@ export async function GET(
 
     const booking = bookingResult.rows[0];
 
-    // Fetch status history
+    // Fetch status history (including edit logs)
     const historyResult = await client.query(
       `SELECT
         h.id,
@@ -47,6 +47,8 @@ export async function GET(
         h.new_payment_status,
         h.changed_by_user_id,
         h.created_at,
+        h.action_type,
+        h.description as edit_description,
         s.first_name,
         s.last_name,
         s.email
@@ -71,11 +73,25 @@ export async function GET(
       payment_amount: null,
     });
 
-    // Add status change events
+    // Add status change events and edit log entries
     historyResult.rows.forEach(row => {
       const actorName = row.first_name && row.last_name
         ? `${row.first_name} ${row.last_name}`
         : row.email || 'Admin';
+
+      // Edit/delete log entries
+      if (row.action_type === 'item_edit' || row.action_type === 'item_delete') {
+        history.push({
+          id: `edit-${row.id}`,
+          action: row.action_type,
+          description: row.edit_description || (row.action_type === 'item_edit' ? 'Item edited' : 'Item deleted'),
+          created_at: row.created_at,
+          actor_name: actorName,
+          actor_type: 'staff',
+          payment_amount: null,
+        });
+        return;
+      }
 
       // Status change
       if (row.previous_status !== row.new_status) {

@@ -124,6 +124,7 @@ export interface ItemFormWizardProps {
     tags?: Array<{id: string; name: string}>;
     images?: Array<{url?: string; file?: File; preview: string; caption: string}>;
     youtube_url?: string;
+    video_start_time?: number;
     pricing_rate?: string;
     group_pricing?: Record<string, Array<{min: number; max: number; price: number}>>;
     parameter_base_prices?: Record<string, number>;
@@ -202,6 +203,7 @@ export function ItemFormWizard({
   // Media state (Phase 6.3)
   const [images, setImages] = useState<Array<{file?: File, url?: string, preview: string, caption: string}>>([]);
   const [youtubeUrl, setYoutubeUrl] = useState<string>('');
+  const [youtubeStartTime, setYoutubeStartTime] = useState<number>(0);
   const [uploadingImages, setUploadingImages] = useState(false);
 
   // Menu products state (Food/Beverages)
@@ -489,6 +491,9 @@ export function ItemFormWizard({
       }
       if (initialData.youtube_url) {
         setYoutubeUrl(initialData.youtube_url);
+      }
+      if (initialData.video_start_time !== undefined) {
+        setYoutubeStartTime(initialData.video_start_time);
       }
       // Set tags - both IDs and objects
       if (initialData.tags && initialData.tags.length > 0) {
@@ -975,6 +980,7 @@ export function ItemFormWizard({
         // Media (Step 2)
         images: validImages,
         youtube_url: youtubeUrl,
+        video_start_time: youtubeStartTime,
         // Parameters (Step 3)
         parameters: attachedParameters.map((param, index) => ({
           parameter_id: param.id,
@@ -2523,10 +2529,24 @@ export function ItemFormWizard({
                                   alt={`Preview ${index + 1}`}
                                   className="w-full h-40 object-cover"
                                 />
-                                {index === 0 && (
+                                {index === 0 ? (
                                   <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
                                     {t('main')}
                                   </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      // Move this image to the first position (set as main)
+                                      const newImages = [...images];
+                                      const [movedImage] = newImages.splice(index, 1);
+                                      newImages.unshift(movedImage);
+                                      setImages(newImages);
+                                    }}
+                                    className="absolute top-2 left-2 bg-gray-800/80 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    {t('setAsMain')}
+                                  </button>
                                 )}
                                 <button
                                   type="button"
@@ -2556,18 +2576,52 @@ export function ItemFormWizard({
                     </div>
 
                     {/* YouTube Video Section */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {t('youtubeVideo')}
-                      </label>
-                      <Input
-                        placeholder={t('youtubeVideoPlaceholder')}
-                        value={youtubeUrl}
-                        onChange={(e) => setYoutubeUrl(e.target.value)}
-                      />
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {t('youtubeHint')}
-                      </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-24">
+                      {/* Left: Inputs + Preview */}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            {t('youtubeVideo')}
+                          </label>
+                          <Input
+                            placeholder={t('youtubeVideoPlaceholder')}
+                            value={youtubeUrl}
+                            onChange={(e) => setYoutubeUrl(e.target.value)}
+                          />
+                        </div>
+
+                        
+
+                        {youtubeUrl && (
+                          <div className="aspect-video w-full rounded-lg overflow-hidden border">
+                            <iframe
+                              src={`https://www.youtube.com/embed/${youtubeUrl}${youtubeStartTime > 0 ? `?start=${youtubeStartTime}` : ''}`}
+                              className="w-full h-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        {youtubeUrl && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              {t('youtubeStartTime')}
+                            </label>
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder="0"
+                              value={youtubeStartTime || ''}
+                              onChange={(e) => setYoutubeStartTime(parseInt(e.target.value) || 0)}
+                              className="w-32"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                  
                     </div>
                   </div>
                 )}
@@ -3884,11 +3938,9 @@ export function ItemFormWizard({
                         {depositType === 'fixed_amount' && (
                           <div className="mt-3">
                             <label className="block text-sm text-gray-600 mb-1">{t('taxes.amountLabel')}</label>
-                            <Input
-                              type="number"
-                              min="0"
+                            <CurrencyInput
                               value={depositValue}
-                              onChange={(e) => setDepositValue(parseInt(e.target.value) || 0)}
+                              onValueChange={(value) => setDepositValue(value || 0)}
                               className="w-64"
                             />
                           </div>
@@ -3897,11 +3949,9 @@ export function ItemFormWizard({
                         {depositType === 'per_hour' && (
                           <div className="mt-3">
                             <label className="block text-sm text-gray-600 mb-1">Amount per hour</label>
-                            <Input
-                              type="number"
-                              min="0"
+                            <CurrencyInput
                               value={depositValue}
-                              onChange={(e) => setDepositValue(parseInt(e.target.value) || 0)}
+                              onValueChange={(value) => setDepositValue(value || 0)}
                               className="w-64"
                             />
                           </div>
@@ -3910,11 +3960,9 @@ export function ItemFormWizard({
                         {depositType === 'per_qty' && (
                           <div className="mt-3">
                             <label className="block text-sm text-gray-600 mb-1">Amount per quantity</label>
-                            <Input
-                              type="number"
-                              min="0"
+                            <CurrencyInput
                               value={depositValue}
-                              onChange={(e) => setDepositValue(parseInt(e.target.value) || 0)}
+                              onValueChange={(value) => setDepositValue(value || 0)}
                               className="w-64"
                             />
                           </div>

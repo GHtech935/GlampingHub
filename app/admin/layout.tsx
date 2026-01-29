@@ -17,6 +17,7 @@ import {
   X,
   LogOut,
   ChevronDown,
+  ChevronRight,
   DollarSign,
   Languages,
   Settings,
@@ -28,10 +29,18 @@ import {
   Mail,
   Scale,
   Sliders,
+  ClipboardList,
+  CreditCard,
+  TrendingUp,
+  BarChart2,
+  Receipt,
+  Activity,
+  List,
+  StickyNote,
 } from "lucide-react";
 
 // Role type
-type UserRole = 'admin' | 'sale' | 'operations' | 'owner';
+type UserRole = 'admin' | 'sale' | 'operations' | 'owner' | 'glamping_owner';
 
 // Navigation types
 type NavigationItem = {
@@ -39,6 +48,7 @@ type NavigationItem = {
   href: string;
   icon: React.ComponentType<any>;
   roles: UserRole[];
+  children?: NavigationItem[];
 };
 
 type NavigationGroup = {
@@ -73,9 +83,19 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [userFirstName, setUserFirstName] = useState<string>('');
   const [userLastName, setUserLastName] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [glampingZoneIds, setGlampingZoneIds] = useState<string[]>([]);
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const t = useTranslations('admin');
   const tHeader = useTranslations('header');
   const { locale, changeLocale } = useAdminLocale();
+
+  const toggleMenu = (key: string) => {
+    setExpandedMenus(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   // Extract zone ID from pathname
   const getZoneIdFromPath = (pathname: string): string | "all" => {
@@ -112,6 +132,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             setUserLastName(data.user.lastName || '');
             setUserName(`${data.user.firstName || ''} ${data.user.lastName || ''}`.trim() || 'User');
             setUserEmail(data.user.email || '');
+            setGlampingZoneIds(data.user.glampingZoneIds || []);
           }
         }
       } catch (error) {
@@ -128,6 +149,25 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     localStorage.setItem('last_admin_system', 'glamping');
   }, []);
 
+  // Redirect glamping_owner from "all" zones to their specific zone
+  useEffect(() => {
+    if (!loading && userRole === 'glamping_owner' && currentZoneId === 'all' && glampingZoneIds.length > 0) {
+      // Replace /admin/zones/all/* with /admin/zones/{firstZoneId}/*
+      const newPath = pathname.replace('/admin/zones/all', `/admin/zones/${glampingZoneIds[0]}`);
+      router.replace(newPath);
+    }
+  }, [loading, userRole, currentZoneId, glampingZoneIds, pathname, router]);
+
+  // Auto-expand reports menu when on a reports page
+  useEffect(() => {
+    if (pathname.includes('/reports/')) {
+      setExpandedMenus(prev => new Set([...prev, 'reports']));
+    }
+    if (pathname.includes('/bookings')) {
+      setExpandedMenus(prev => new Set([...prev, 'bookings']));
+    }
+  }, [pathname]);
+
   // Navigation with role-based access (GLAMPING ONLY)
   // Build zone-aware hrefs
   const zonePrefix = `/admin/zones/${currentZoneId}`;
@@ -135,25 +175,94 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const allNavigationGroups: NavigationGroup[] = [
     // Main navigation (no title) - GLAMPING FEATURES ONLY
     {
-      roles: ['admin', 'sale', 'operations', 'owner'],
+      roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
       items: [
-        { name: currentZoneId === "all" ? t('zone') : t('dashboard'), href: `${zonePrefix}/dashboard`, icon: LayoutDashboard, roles: ['admin', 'sale', 'operations', 'owner'] },
-        { name: t('items'), href: `${zonePrefix}/items`, icon: Package, roles: ['admin', 'operations', 'owner'] },
-        { name: t('menu'), href: `${zonePrefix}/menu`, icon: UtensilsCrossed, roles: ['admin', 'operations', 'owner'] },
-        { name: t('bookings'), href: `${zonePrefix}/bookings`, icon: BookOpen, roles: ['admin', 'sale', 'operations', 'owner'] },
-        { name: t('categoryTag'), href: `${zonePrefix}/categories`, icon: Folder, roles: ['admin', 'owner'] },
-        { name: t('parameters'), href: `${zonePrefix}/parameters`, icon: Sliders, roles: ['admin', 'owner'] },
-        { name: t('events'), href: `${zonePrefix}/events`, icon: CalendarDays, roles: ['admin', 'sale', 'operations', 'owner'] },
-        { name: t('discounts'), href: `${zonePrefix}/discounts`, icon: Percent, roles: ['admin', 'sale', 'owner'] },
-        { name: t('rules'), href: `${zonePrefix}/rules`, icon: Scale, roles: ['admin', 'owner'] },
-        { name: t('zoneSettings'), href: `${zonePrefix}/settings`, icon: Settings, roles: ['admin', 'owner'] },
+        { name: currentZoneId === "all" ? t('zone') : t('dashboard'), href: `${zonePrefix}/dashboard`, icon: LayoutDashboard, roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'] },
+        { name: t('items'), href: `${zonePrefix}/items`, icon: Package, roles: ['admin', 'operations', 'owner', 'glamping_owner'] },
+        { name: t('menu'), href: `${zonePrefix}/menu`, icon: UtensilsCrossed, roles: ['admin', 'operations', 'owner', 'glamping_owner'] },
+        {
+          name: t('bookings'),
+          href: 'bookings',
+          icon: BookOpen,
+          roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+          children: [
+            {
+              name: t('bookingsList'),
+              href: `${zonePrefix}/bookings`,
+              icon: BookOpen,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('dailyManifest'),
+              href: `${zonePrefix}/bookings/daily-manifest`,
+              icon: ClipboardList,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('dailyList'),
+              href: `${zonePrefix}/bookings/daily-list`,
+              icon: List,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('bookingNotes'),
+              href: `${zonePrefix}/bookings/notes`,
+              icon: StickyNote,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+          ],
+        },
+        {
+          name: t('reports'),
+          href: 'reports',
+          icon: BarChart3,
+          roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+          children: [
+            {
+              name: t('reportsBookingIndex'),
+              href: `${zonePrefix}/reports/booking-index`,
+              icon: ClipboardList,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('reportsBookingSales'),
+              href: `${zonePrefix}/reports/booking-sales`,
+              icon: DollarSign,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('reportsTransactions'),
+              href: `${zonePrefix}/reports/transactions`,
+              icon: CreditCard,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('reportsRevenue'),
+              href: `${zonePrefix}/reports/revenue`,
+              icon: TrendingUp,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('reportsBookingVolume'),
+              href: `${zonePrefix}/reports/booking-volume`,
+              icon: BarChart2,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+          ],
+        },
+        { name: t('categoryTag'), href: `${zonePrefix}/categories`, icon: Folder, roles: ['admin', 'owner', 'glamping_owner'] },
+        { name: t('parameters'), href: `${zonePrefix}/parameters`, icon: Sliders, roles: ['admin', 'owner', 'glamping_owner'] },
+        { name: t('events'), href: `${zonePrefix}/events`, icon: CalendarDays, roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'] },
+        { name: t('discounts'), href: `${zonePrefix}/discounts`, icon: Percent, roles: ['admin', 'sale', 'owner', 'glamping_owner'] },
+        { name: t('rules'), href: `${zonePrefix}/rules`, icon: Scale, roles: ['admin', 'owner', 'glamping_owner'] },
+        { name: t('zoneSettings'), href: `${zonePrefix}/settings`, icon: Settings, roles: ['admin', 'owner', 'glamping_owner'] },
         // TODO: Add when implemented
-        // { name: "Calendar", href: `${zonePrefix}/calendar`, icon: Calendar, roles: ['admin', 'sale', 'operations', 'owner'] },
-        // { name: "Pricing", href: `${zonePrefix}/pricing`, icon: DollarSign, roles: ['admin', 'operations', 'owner'] },
-        { name: t('customers'), href: `${zonePrefix}/customers`, icon: Users2, roles: ['admin', 'sale', 'owner'] },
-        { name: t('users'), href: `${zonePrefix}/users`, icon: Users, roles: ['admin', 'owner'] }, // Zone-specific users
-        { name: t('bankAccounts'), href: "/admin/settings/bank-accounts", icon: Landmark, roles: ['admin', 'owner'] }, // Bank accounts are global
-        { name: t('emailTemplates'), href: "/admin/emails", icon: Mail, roles: ['admin', 'owner'] }, // Email templates are global, not zone-specific
+        // { name: "Calendar", href: `${zonePrefix}/calendar`, icon: Calendar, roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'] },
+        // { name: "Pricing", href: `${zonePrefix}/pricing`, icon: DollarSign, roles: ['admin', 'operations', 'owner', 'glamping_owner'] },
+        { name: t('customers'), href: `${zonePrefix}/customers`, icon: Users2, roles: ['admin', 'sale', 'owner', 'glamping_owner'] },
+        { name: t('users'), href: `${zonePrefix}/users`, icon: Users, roles: ['admin', 'owner', 'glamping_owner'] }, // Zone-specific users
+        { name: t('bankAccounts'), href: `${zonePrefix}/bank-accounts`, icon: Landmark, roles: ['admin', 'owner', 'glamping_owner'] },
+        // { name: t('emailTemplates'), href: "/admin/emails", icon: Mail, roles: ['admin', 'owner'] }, // Email templates are global, not zone-specific
         // TODO: Add settings when implemented
         // { name: "Settings", href: "/admin/settings", icon: Settings, roles: ['admin'] },
       ]
@@ -167,8 +276,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         .map(group => ({
           ...group,
           items: group.items.filter(item => {
-            // Hide zone settings when on "all" zone
-            if (currentZoneId === "all" && item.name === t('zoneSettings')) {
+            // Hide zone-specific items when on "all" zone
+            if (currentZoneId === "all" && (item.name === t('zoneSettings') || item.name === t('rules'))) {
               return false;
             }
             return item.roles.includes(userRole);
@@ -220,10 +329,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 className="flex items-center gap-2"
               >
                 <Image
-                  src="/images/logo_new.jpg"
+                  src="/images/logo_glamping_transparent.png"
                   alt="GlampingHub Logo"
-                  width={200}
-                  height={32}
+                  width={60}
+                  height={60}
                   className="rounded"
                 />
               </Link>
@@ -271,7 +380,62 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                   {/* Group items */}
                   <div className="space-y-1">
                     {group.items.map((item) => {
-                      const isActive = pathname === item.href;
+                      // Expandable parent with children
+                      if (item.children && item.children.length > 0) {
+                        const isExpanded = expandedMenus.has(item.href);
+                        const hasActiveChild = item.children.some(child => pathname === child.href || pathname.startsWith(child.href));
+                        return (
+                          <div key={item.name}>
+                            <button
+                              onClick={() => toggleMenu(item.href)}
+                              className={`
+                                flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium w-full
+                                transition-colors duration-150
+                                ${
+                                  hasActiveChild
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                }
+                              `}
+                            >
+                              <item.icon className="w-5 h-5" />
+                              <span className="flex-1 text-left">{item.name}</span>
+                              <ChevronRight className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                            </button>
+                            {isExpanded && (
+                              <div className="ml-4 border-l-2 border-gray-100 pl-3 mt-1 space-y-1">
+                                {item.children
+                                  .filter(child => userRole && child.roles.includes(userRole))
+                                  .map((child) => {
+                                    const isChildActive = pathname === child.href || pathname.startsWith(child.href);
+                                    return (
+                                      <Link
+                                        key={child.name}
+                                        href={child.href}
+                                        className={`
+                                          flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium
+                                          transition-colors duration-150
+                                          ${
+                                            isChildActive
+                                              ? "bg-primary/10 text-primary"
+                                              : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                          }
+                                        `}
+                                        onClick={() => setSidebarOpen(false)}
+                                      >
+                                        <child.icon className="w-3.5 h-3.5 flex-shrink-0" />
+                                        <span className="leading-tight">{child.name}</span>
+                                      </Link>
+                                    );
+                                  })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // Regular nav item (no children)
+                      const isActive = pathname === item.href || pathname === item.href.replace(zonePrefix, '/admin/settings');
                       return (
                         <Link
                           key={item.name}
@@ -326,10 +490,11 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                         <span className={`inline-block text-xs px-1.5 py-0.5 rounded mt-0.5 ${
                           userRole === 'admin' ? 'bg-red-100 text-red-700' :
                           userRole === 'owner' ? 'bg-blue-100 text-blue-700' :
+                          userRole === 'glamping_owner' ? 'bg-purple-100 text-purple-700' :
                           userRole === 'sale' ? 'bg-green-100 text-green-700' :
                           'bg-gray-100 text-gray-700'
                         }`}>
-                          {userRole}
+                          {userRole === 'glamping_owner' ? 'Glamping Owner' : userRole}
                         </span>
                       )}
                     </div>

@@ -129,7 +129,7 @@ export async function GET() {
 }
 ```
 
-3. Visit `http://localhost:3000/api/test-db`
+3. Visit `http://localhost:4000/api/test-db`
 4. You should see JSON response with regions data
 
 ## Step 7: Configure Row Level Security (RLS)

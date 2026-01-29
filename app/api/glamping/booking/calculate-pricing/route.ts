@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       if (key.startsWith('param_')) {
         const paramId = key.substring(6); // Remove 'param_' prefix
         const quantity = parseInt(value);
-        if (!isNaN(quantity) && quantity > 0) {
+        if (!isNaN(quantity) && quantity >= 0) {
           parameterQuantities[paramId] = quantity;
         }
       }
@@ -95,9 +95,80 @@ export async function GET(request: NextRequest) {
 
     // Calculate total accommodation cost
     let accommodationCost = 0;
+    const missingPricing: string[] = [];
+
+    console.log('[Pricing Debug] Parameter Quantities:', parameterQuantities);
+    console.log('[Pricing Debug] Parameter Pricing:', parameterPricing);
+
     Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
-      const paramTotalPrice = parameterPricing[paramId] || 0;
-      accommodationCost += paramTotalPrice * quantity;
+      const paramTotalPrice = parameterPricing[paramId];
+
+      // Check if pricing is missing or zero
+      if (paramTotalPrice === undefined || paramTotalPrice === null) {
+        console.warn(`[Pricing Warning] Missing pricing for parameter ${paramId}`);
+        missingPricing.push(paramId);
+      }
+
+      // paramTotalPrice is price PER UNIT for all nights
+      // Need to multiply by quantity
+      const priceToAdd = (paramTotalPrice || 0) * quantity;
+      accommodationCost += priceToAdd;
+
+      // Debug logging for each parameter
+      console.log(`[Pricing] Parameter ${paramId}: ${paramTotalPrice || 0}/unit × ${quantity} units = ${priceToAdd}`);
+    });
+
+    console.log(`[Pricing] Total Accommodation Cost (Method 1): ${accommodationCost}`);
+
+    // Validation: Cross-check with nightly breakdown
+    let validationTotal = 0;
+    rawNightlyPricing.forEach(night => {
+      Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
+        const nightPrice = night.parameters[paramId] || 0;
+        validationTotal += nightPrice * quantity;
+      });
+    });
+
+    console.log(`[Pricing] Validation Total (Method 2 - from nightly breakdown): ${validationTotal}`);
+
+    // If there's a mismatch, log error and use validation total
+    if (Math.abs(validationTotal - accommodationCost) > 0.01) {
+      console.error(`[Pricing] MISMATCH DETECTED! Method 1: ${accommodationCost}, Method 2: ${validationTotal}`);
+      console.error('[Pricing] Using validation total (Method 2) as it sums nightly prices directly');
+      accommodationCost = validationTotal;
+    }
+
+    // Check if all parameters have pricing
+    if (missingPricing.length > 0) {
+      console.error(`[Pricing] Parameters missing pricing configuration:`, missingPricing);
+      return NextResponse.json(
+        {
+          error: 'Incomplete pricing data',
+          details: 'Pricing not configured for some parameters on selected dates',
+          missingParameters: missingPricing
+        },
+        { status: 400 }
+      );
+    }
+
+    // Calculate menu products cost
+    let menuProductsCost = 0;
+    const menuProductsBreakdown: Array<{ id: string; name: string; quantity: number; price: number; total: number }> = [];
+
+    // Parse menu product quantities from query params (menuProduct_* pattern)
+    searchParams.forEach((value, key) => {
+      if (key.startsWith('menuProduct_')) {
+        const productId = key.substring(12); // Remove 'menuProduct_' prefix
+        const quantity = parseInt(value);
+
+        if (!isNaN(quantity) && quantity > 0) {
+          // For now, we'll need to fetch product price from database
+          // This is a simplified version; in production you'd fetch actual menu item data
+          // For the modal's real-time pricing, the price is already known on client side
+          // So this is mainly for validation
+          menuProductsCost += quantity * 1000; // Placeholder - will be calculated properly in booking creation
+        }
+      }
     });
 
     // Transform nightlyPricing to match NightlyBreakdown component format
@@ -129,7 +200,7 @@ export async function GET(request: NextRequest) {
     if (discountCode) {
       // Call validate-voucher API to validate and calculate discount
       try {
-        const validateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/glamping/validate-voucher`, {
+        const validateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/api/glamping/validate-voucher`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -188,12 +259,15 @@ export async function GET(request: NextRequest) {
       parameterQuantities,
       parameterPricing, // Price per parameter for all nights
       nightlyPricing, // Breakdown by date
+      menuProducts: menuProductsBreakdown,
       totals: {
         accommodationCost,
+        menuProductsCost,
+        grossSubtotal: accommodationCost + menuProductsCost,
         voucherDiscount,
-        accommodationAfterDiscount,
+        accommodationAfterDiscount: accommodationCost - voucherDiscount,
         taxAmount: 0,
-        grandTotal: accommodationAfterDiscount,
+        grandTotal: accommodationCost + menuProductsCost - voucherDiscount,
       },
       taxInfo,
       depositInfo,

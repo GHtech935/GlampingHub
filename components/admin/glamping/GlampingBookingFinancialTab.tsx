@@ -9,11 +9,14 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { SimpleRichTextEditor } from '@/components/ui/SimpleRichTextEditor';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { type Locale } from '@/lib/i18n-utils';
-import { DollarSign, Receipt, User, Clock, FileDown, FileText } from 'lucide-react';
+import { DollarSign, Receipt, User, Clock, FileDown, FileText, CalendarDays } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { downloadInvoicePDF } from '@/lib/invoice-generator';
+import { ItemFinancialBreakdown } from './tabs/ItemFinancialBreakdown';
+import { useItemColor } from './shared';
+import type { BookingItem, BookingPeriod } from './types';
 
 interface GlampingBookingFinancialTabProps {
   booking: {
@@ -52,7 +55,9 @@ interface GlampingBookingFinancialTabProps {
     taxRate?: number;
     invoiceNotes?: string;
     specialRequirements?: string;
+    items?: BookingItem[];
   };
+  bookingPeriods?: BookingPeriod[];
   locale?: Locale;
   onPaidAndCheckout?: (paymentMethod: string) => void;
   onAddVatPayment?: (amount: number, paymentMethod: string) => void;
@@ -71,12 +76,18 @@ interface PricingItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  taxRate: number; // Per-item tax rate
   taxAmount: number;
   totalWithTax: number;
+  bookingTentId?: string | null; // For grouping by tent
+  voucherCode?: string | null;
+  discountAmount?: number;
+  servingDate?: string | null; // Per-night serving date
 }
 
 export function GlampingBookingFinancialTab({
   booking,
+  bookingPeriods = [],
   locale = 'vi',
   onPaidAndCheckout,
   onAddVatPayment,
@@ -87,6 +98,17 @@ export function GlampingBookingFinancialTab({
   onRefresh,
 }: GlampingBookingFinancialTabProps) {
   const paymentStatus = currentPaymentStatus || booking.paymentStatus;
+
+  // Color context for multi-item display
+  let getColorForItemId: (itemId: string) => any;
+  try {
+    const colorContext = useItemColor();
+    getColorForItemId = colorContext.getColorForItemId;
+  } catch {
+    // Fallback if not inside ItemColorProvider
+    const defaultColor = { bg: 'bg-gray-50', border: 'border-l-gray-500', text: 'text-gray-700', dot: 'bg-gray-500' };
+    getColorForItemId = () => defaultColor;
+  }
 
   const texts = {
     vi: {
@@ -166,6 +188,13 @@ export function GlampingBookingFinancialTab({
   const [taxInvoiceRequired, setTaxInvoiceRequired] = useState(booking.taxInvoiceRequired || false);
   const [items, setItems] = useState<PricingItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
+  // Per-tent discount data from pricing-details API
+  const [tentDiscounts, setTentDiscounts] = useState<Array<{
+    tentId: string;
+    itemId: string;
+    voucherCode: string;
+    discountAmount: number;
+  }>>([]);
   const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
   const [showVatPaymentDialog, setShowVatPaymentDialog] = useState(false);
   const [vatPaymentMethod, setVatPaymentMethod] = useState<string>('cash');
@@ -186,14 +215,14 @@ export function GlampingBookingFinancialTab({
 
           const itemsList: PricingItem[] = [];
           let counter = 0;
-          const currentTaxRate = data.booking?.taxRate || booking.taxRate || 10;
           const isTaxEnabled = data.booking?.taxEnabled || false;
 
-          // Add accommodation items
+          // Add accommodation items (using per-item taxRate from API)
           if (data.nightlyPricing && data.nightlyPricing.length > 0) {
             data.nightlyPricing.forEach((night: any) => {
               const subtotal = night.subtotalAfterDiscounts || 0;
-              const taxAmount = isTaxEnabled ? subtotal * (currentTaxRate / 100) : 0;
+              const itemTaxRate = isTaxEnabled ? (night.taxRate || 0) : 0;
+              const taxAmount = isTaxEnabled ? (night.taxAmount || 0) : 0;
               itemsList.push({
                 id: `item-${counter++}`,
                 type: 'accommodation',
@@ -202,14 +231,15 @@ export function GlampingBookingFinancialTab({
                 quantity: night.quantity || 1,
                 unitPrice: night.unitPrice || subtotal,
                 subtotal: subtotal,
+                taxRate: itemTaxRate,
                 taxAmount,
                 totalWithTax: subtotal + taxAmount,
+                bookingTentId: night.bookingTentId || null,
               });
             });
           } else if (booking.pricing.subtotalAmount > 0) {
             // Fallback: if no nightly pricing but booking has subtotal, show it
             const subtotal = booking.pricing.subtotalAmount;
-            const taxAmount = isTaxEnabled ? subtotal * (currentTaxRate / 100) : 0;
             itemsList.push({
               id: `item-${counter++}`,
               type: 'accommodation',
@@ -218,16 +248,18 @@ export function GlampingBookingFinancialTab({
               quantity: 1,
               unitPrice: subtotal,
               subtotal: subtotal,
-              taxAmount,
-              totalWithTax: subtotal + taxAmount,
+              taxRate: 0,
+              taxAmount: 0,
+              totalWithTax: subtotal,
             });
           }
 
-          // Add products
+          // Add products (using per-product taxRate from API)
           if (data.products && data.products.length > 0) {
             data.products.forEach((product: any) => {
               const subtotal = product.subtotal || 0;
-              const taxAmount = isTaxEnabled ? subtotal * (currentTaxRate / 100) : 0;
+              const productTaxRate = isTaxEnabled ? (product.taxRate || 0) : 0;
+              const taxAmount = isTaxEnabled ? (product.taxAmount || 0) : 0;
               itemsList.push({
                 id: `item-${counter++}`,
                 type: 'product',
@@ -236,14 +268,24 @@ export function GlampingBookingFinancialTab({
                 quantity: product.quantity || 1,
                 unitPrice: product.originalUnitPrice || 0,
                 subtotal: subtotal,
+                taxRate: productTaxRate,
                 taxAmount: taxAmount,
                 totalWithTax: subtotal + taxAmount,
+                bookingTentId: product.bookingTentId || null,
+                voucherCode: product.voucherCode || null,
+                discountAmount: product.discountAmount || 0,
+                servingDate: product.servingDate || null,
               });
             });
           }
 
           setItems(itemsList);
           setTaxInvoiceRequired(isTaxEnabled);
+
+          // Store per-tent discount data
+          if (data.tentDiscounts && data.tentDiscounts.length > 0) {
+            setTentDiscounts(data.tentDiscounts);
+          }
         } else {
           console.error('[Financial Tab] API error:', response.status);
         }
@@ -262,6 +304,42 @@ export function GlampingBookingFinancialTab({
   const totalTax = items.reduce((sum, item) => sum + item.taxAmount, 0);
   const discountAmount = booking.pricing.discountAmount || 0;
   const calculatedTotal = subtotal - discountAmount + totalTax;
+
+  // Group items by booking_tent_id and calculate breakdowns
+  const groupedByTent: Record<string, PricingItem[]> = {};
+  const sharedItems: PricingItem[] = [];
+
+  items.forEach(item => {
+    if (item.bookingTentId) {
+      if (!groupedByTent[item.bookingTentId]) {
+        groupedByTent[item.bookingTentId] = [];
+      }
+      groupedByTent[item.bookingTentId].push(item);
+    } else {
+      sharedItems.push(item);
+    }
+  });
+
+  // Calculate financial breakdown for visualization (using booking periods)
+  const itemBreakdowns = bookingPeriods?.map(period => {
+    // Use tentId directly from period (populated by tentsToBookingPeriods)
+    const tentId = period.tentId;
+
+    const tentPricingItems = tentId ? (groupedByTent[tentId] || []) : [];
+
+    const itemSubtotal = tentPricingItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const itemTax = tentPricingItems.reduce((sum, item) => sum + item.taxAmount, 0);
+    const itemTotal = itemSubtotal + itemTax;
+    const percentage = calculatedTotal > 0 ? (itemTotal / calculatedTotal) * 100 : 0;
+
+    return {
+      itemId: period.itemId,
+      itemName: period.itemName,
+      total: itemTotal,
+      percentage,
+      tentId,
+    };
+  }) || [];
 
   // Calculate actual paid amount from payments
   const totalPaid = booking.payments
@@ -323,7 +401,7 @@ export function GlampingBookingFinancialTab({
         subtotal: item.subtotal,
         discount: 0,
         finalPrice: item.subtotal,
-        taxRate: booking.taxRate || 0,
+        taxRate: item.taxRate,
         taxAmount: item.taxAmount,
         total: item.totalWithTax,
         totalWithTax: item.totalWithTax,
@@ -400,35 +478,342 @@ export function GlampingBookingFinancialTab({
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item, index) => (
-                      <React.Fragment key={item.id}>
-                        <tr className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="px-3 py-3 text-gray-600">{index + 1}</td>
-                          <td className="px-3 py-3">
-                            <div className="font-medium text-gray-900">{item.name}</div>
-                            {item.description && (
-                              <div className="text-xs text-gray-500 mt-1">{item.description}</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 text-center">{item.quantity}</td>
-                          <td className="px-3 py-3 text-right">{formatCurrency(item.unitPrice)}</td>
-                          <td className="px-3 py-3 text-right font-medium">{formatCurrency(item.subtotal)}</td>
-                        </tr>
+                    {/* Render per-tent sections if multi-tent booking */}
+                    {bookingPeriods && bookingPeriods.length > 0 ? (
+                      <>
+                        {bookingPeriods.map((period, tentIndex) => {
+                          const periodKey = `${period.itemId}|${period.checkInDate}|${period.checkOutDate}`;
+                          const colorScheme = getColorForItemId(periodKey);
 
-                        {/* Tax sub-row (when toggle ON) */}
-                        {taxInvoiceRequired && item.taxAmount > 0 && (
-                          <tr className="bg-blue-50 border-t border-blue-100">
-                            <td></td>
-                            <td colSpan={3} className="px-3 py-2 pl-8 text-sm text-blue-600">
-                              ↳ VAT ({booking.taxRate || 10}%)
-                            </td>
-                            <td className="px-3 py-2 text-right text-blue-600">
-                              {formatCurrency(item.taxAmount)}
-                            </td>
-                          </tr>
+                          // Use tentId directly from period
+                          const tentId = period.tentId;
+
+                          // Collect all pricing items for this tent
+                          const tentPricingItems = tentId ? (groupedByTent[tentId] || []) : [];
+
+                          const itemSubtotal = tentPricingItems.reduce((sum, item) => sum + item.subtotal, 0);
+                          const itemProductDiscounts = tentPricingItems.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+                          const itemTax = tentPricingItems.reduce((sum, item) => sum + item.taxAmount, 0);
+                          const itemTotal = itemSubtotal + itemTax;
+
+                          return (
+                            <React.Fragment key={periodKey}>
+                              {/* Section Header */}
+                              <tr className={cn('border-t-2', colorScheme.bg, colorScheme.border)}>
+                                <td colSpan={5} className="px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className={cn('w-2 h-2 rounded-full', colorScheme.dot)} />
+                                    <span className="font-semibold text-sm">
+                                      {locale === 'vi' ? 'Lều' : 'Tent'} {tentIndex + 1}: {period.itemName}
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+
+                              {/* Tent pricing rows */}
+                              {tentPricingItems.length > 0 ? (
+                                (() => {
+                                  // Check if any product items have servingDate
+                                  const hasServingDates = tentPricingItems.some(i => i.type === 'product' && i.servingDate);
+                                  const accommodationItems = tentPricingItems.filter(i => i.type === 'accommodation');
+                                  const productItems = tentPricingItems.filter(i => i.type === 'product');
+
+                                  // Group products by servingDate if per-night data exists
+                                  const dateGroups: Record<string, PricingItem[]> = {};
+                                  if (hasServingDates) {
+                                    productItems.forEach(p => {
+                                      const key = p.servingDate || '_no_date';
+                                      if (!dateGroups[key]) dateGroups[key] = [];
+                                      dateGroups[key].push(p);
+                                    });
+                                  }
+
+                                  let rowIndex = 0;
+
+                                  return (
+                                    <>
+                                      {/* Accommodation items first */}
+                                      {accommodationItems.map((item) => {
+                                        rowIndex++;
+                                        return (
+                                          <React.Fragment key={item.id}>
+                                            <tr className="bg-white">
+                                              <td className="px-3 py-2 text-gray-600 text-xs">{rowIndex}</td>
+                                              <td className="px-3 py-2">
+                                                <div className="font-medium text-gray-900 text-sm">{item.name}</div>
+                                                {item.description && (
+                                                  <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-2 text-center text-sm">{item.quantity}</td>
+                                              <td className="px-3 py-2 text-right text-sm">{formatCurrency(item.unitPrice)}</td>
+                                              <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(item.subtotal)}</td>
+                                            </tr>
+                                            {taxInvoiceRequired && item.taxAmount > 0 && (
+                                              <tr className="bg-blue-50">
+                                                <td></td>
+                                                <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-blue-600">
+                                                  ↳ VAT ({item.taxRate}%)
+                                                </td>
+                                                <td className="px-3 py-1 text-right text-xs text-blue-600">
+                                                  {formatCurrency(item.taxAmount)}
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+
+                                      {/* Product items - grouped by date if per-night, or flat */}
+                                      {hasServingDates ? (
+                                        Object.entries(dateGroups)
+                                          .sort(([a], [b]) => a.localeCompare(b))
+                                          .map(([dateKey, dateProducts]) => {
+                                            const dateLabel = dateKey === '_no_date'
+                                              ? (locale === 'vi' ? 'Không xác định ngày' : 'No date')
+                                              : new Date(dateKey.substring(0, 10) + 'T12:00:00').toLocaleDateString(locale === 'vi' ? 'vi-VN' : 'en-US', {
+                                                  day: '2-digit', month: '2-digit', year: 'numeric'
+                                                });
+
+                                            return (
+                                              <React.Fragment key={dateKey}>
+                                                <tr className="bg-gray-50">
+                                                  <td></td>
+                                                  <td colSpan={4} className="px-3 py-1.5 text-xs font-medium text-gray-600">
+                                                    <span className="inline-flex items-center gap-1">
+                                                      <CalendarDays className="h-3 w-3" />
+                                                      {dateLabel}
+                                                    </span>
+                                                  </td>
+                                                </tr>
+                                                {dateProducts.map((item) => {
+                                                  rowIndex++;
+                                                  return (
+                                                    <React.Fragment key={item.id}>
+                                                      <tr className="bg-white">
+                                                        <td className="px-3 py-2 text-gray-600 text-xs">{rowIndex}</td>
+                                                        <td className="px-3 py-2">
+                                                          <div className="font-medium text-gray-900 text-sm">{item.name}</div>
+                                                          {item.description && (
+                                                            <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+                                                          )}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-center text-sm">{item.quantity}</td>
+                                                        <td className="px-3 py-2 text-right text-sm">{formatCurrency(item.unitPrice)}</td>
+                                                        <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(item.subtotal)}</td>
+                                                      </tr>
+                                                      {item.voucherCode && item.discountAmount && item.discountAmount > 0 && (
+                                                        <tr className="bg-green-50">
+                                                          <td></td>
+                                                          <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-green-600">
+                                                            <span className="inline-flex items-center gap-1">
+                                                              ↳ Voucher
+                                                              <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-mono">
+                                                                {item.voucherCode}
+                                                              </span>
+                                                            </span>
+                                                          </td>
+                                                          <td className="px-3 py-1 text-right text-xs font-medium text-green-600">
+                                                            -{formatCurrency(item.discountAmount)}
+                                                          </td>
+                                                        </tr>
+                                                      )}
+                                                      {taxInvoiceRequired && item.taxAmount > 0 && (
+                                                        <tr className="bg-blue-50">
+                                                          <td></td>
+                                                          <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-blue-600">
+                                                            ↳ VAT ({item.taxRate}%)
+                                                          </td>
+                                                          <td className="px-3 py-1 text-right text-xs text-blue-600">
+                                                            {formatCurrency(item.taxAmount)}
+                                                          </td>
+                                                        </tr>
+                                                      )}
+                                                    </React.Fragment>
+                                                  );
+                                                })}
+                                              </React.Fragment>
+                                            );
+                                          })
+                                      ) : (
+                                        productItems.map((item) => {
+                                          rowIndex++;
+                                          return (
+                                            <React.Fragment key={item.id}>
+                                              <tr className="bg-white">
+                                                <td className="px-3 py-2 text-gray-600 text-xs">{rowIndex}</td>
+                                                <td className="px-3 py-2">
+                                                  <div className="font-medium text-gray-900 text-sm">{item.name}</div>
+                                                  {item.description && (
+                                                    <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+                                                  )}
+                                                </td>
+                                                <td className="px-3 py-2 text-center text-sm">{item.quantity}</td>
+                                                <td className="px-3 py-2 text-right text-sm">{formatCurrency(item.unitPrice)}</td>
+                                                <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(item.subtotal)}</td>
+                                              </tr>
+                                              {item.voucherCode && item.discountAmount && item.discountAmount > 0 && (
+                                                <tr className="bg-green-50">
+                                                  <td></td>
+                                                  <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-green-600">
+                                                    <span className="inline-flex items-center gap-1">
+                                                      ↳ Voucher
+                                                      <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-mono">
+                                                        {item.voucherCode}
+                                                      </span>
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-3 py-1 text-right text-xs font-medium text-green-600">
+                                                    -{formatCurrency(item.discountAmount)}
+                                                  </td>
+                                                </tr>
+                                              )}
+                                              {taxInvoiceRequired && item.taxAmount > 0 && (
+                                                <tr className="bg-blue-50">
+                                                  <td></td>
+                                                  <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-blue-600">
+                                                    ↳ VAT ({item.taxRate}%)
+                                                  </td>
+                                                  <td className="px-3 py-1 text-right text-xs text-blue-600">
+                                                    {formatCurrency(item.taxAmount)}
+                                                  </td>
+                                                </tr>
+                                              )}
+                                            </React.Fragment>
+                                          );
+                                        })
+                                      )}
+                                    </>
+                                  );
+                                })()
+                              ) : (
+                                <tr className="bg-white">
+                                  <td colSpan={5} className="px-3 py-2 text-center text-sm text-gray-500 italic">
+                                    {locale === 'vi' ? 'Không có chi phí' : 'No charges'}
+                                  </td>
+                                </tr>
+                              )}
+
+                              {/* Item Subtotal/Tax/Total */}
+                              <tr className={cn('border-t', colorScheme.bg)}>
+                                <td colSpan={4} className="px-3 py-2 text-right font-medium text-sm">
+                                  {locale === 'vi' ? 'Tổng' : 'Subtotal'}:
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold text-sm">{formatCurrency(itemSubtotal - itemProductDiscounts)}</td>
+                              </tr>
+
+                              {/* Per-tent voucher discount */}
+                              {(() => {
+                                const tentDiscountInfo = tentDiscounts.find(td => td.tentId === tentId);
+                                if (tentDiscountInfo && tentDiscountInfo.discountAmount > 0) {
+                                  return (
+                                    <tr className={cn(colorScheme.bg)}>
+                                      <td colSpan={4} className="px-3 py-1 text-right text-sm text-green-600">
+                                        <span className="inline-flex items-center gap-1">
+                                          {locale === 'vi' ? 'Voucher' : 'Voucher'}
+                                          <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-mono">
+                                            {tentDiscountInfo.voucherCode}
+                                          </span>
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-1 text-right font-medium text-sm text-green-600">
+                                        -{formatCurrency(tentDiscountInfo.discountAmount)}
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+                                return null;
+                              })()}
+
+                              {taxInvoiceRequired && itemTax > 0 && (() => {
+                                // Collect unique tax rates from this tent's items
+                                const uniqueRates = [...new Set(tentPricingItems.filter(i => i.taxRate > 0).map(i => i.taxRate))];
+                                const vatLabel = uniqueRates.length === 1
+                                  ? `VAT ${uniqueRates[0]}%:`
+                                  : (locale === 'vi' ? 'Tổng thuế VAT:' : 'Total VAT:');
+                                return (
+                                  <tr className={cn(colorScheme.bg)}>
+                                    <td colSpan={4} className="px-3 py-1 text-right text-sm text-blue-600">
+                                      {vatLabel}
+                                    </td>
+                                    <td className="px-3 py-1 text-right font-medium text-sm text-blue-600">{formatCurrency(itemTax)}</td>
+                                  </tr>
+                                );
+                              })()}
+                              <tr className={cn('border-b-2', colorScheme.bg)}>
+                                <td colSpan={4} className="px-3 py-2 text-right font-semibold">
+                                  {locale === 'vi' ? 'Tổng' : 'Total'}:
+                                </td>
+                                <td className={cn('px-3 py-2 text-right font-bold', colorScheme.text)}>
+                                  {formatCurrency(
+                                    itemTotal - (tentDiscounts.find(td => td.tentId === tentId)?.discountAmount || 0) - itemProductDiscounts
+                                  )}
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
+
+                        {/* Shared items section */}
+                        {sharedItems.length > 0 && (
+                          <>
+                            <tr className="bg-slate-100 border-t-2 border-slate-400">
+                              <td colSpan={5} className="px-3 py-2">
+                                <span className="font-semibold text-sm">
+                                  {locale === 'vi' ? 'Sản phẩm chung' : 'Shared Items'}
+                                </span>
+                              </td>
+                            </tr>
+                            {sharedItems.map((item, index) => (
+                              <React.Fragment key={item.id}>
+                                <tr className="bg-white">
+                                  <td className="px-3 py-2 text-gray-600 text-xs">{index + 1}</td>
+                                  <td className="px-3 py-2">
+                                    <div className="font-medium text-gray-900 text-sm">{item.name}</div>
+                                    {item.description && (
+                                      <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 text-center text-sm">{item.quantity}</td>
+                                  <td className="px-3 py-2 text-right text-sm">{formatCurrency(item.unitPrice)}</td>
+                                  <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(item.subtotal)}</td>
+                                </tr>
+                              </React.Fragment>
+                            ))}
+                          </>
                         )}
-                      </React.Fragment>
-                    ))}
+                      </>
+                    ) : (
+                      /* Fallback: Simple flat list if no booking items */
+                      items.map((item, index) => (
+                        <React.Fragment key={item.id}>
+                          <tr className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-3 py-3 text-gray-600">{index + 1}</td>
+                            <td className="px-3 py-3">
+                              <div className="font-medium text-gray-900">{item.name}</div>
+                              {item.description && (
+                                <div className="text-xs text-gray-500 mt-1">{item.description}</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-center">{item.quantity}</td>
+                            <td className="px-3 py-3 text-right">{formatCurrency(item.unitPrice)}</td>
+                            <td className="px-3 py-3 text-right font-medium">{formatCurrency(item.subtotal)}</td>
+                          </tr>
+
+                          {taxInvoiceRequired && item.taxAmount > 0 && (
+                            <tr className="bg-blue-50 border-t border-blue-100">
+                              <td></td>
+                              <td colSpan={3} className="px-3 py-2 pl-8 text-sm text-blue-600">
+                                ↳ VAT ({item.taxRate}%)
+                              </td>
+                              <td className="px-3 py-2 text-right text-blue-600">
+                                {formatCurrency(item.taxAmount)}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -566,6 +951,7 @@ export function GlampingBookingFinancialTab({
             </div>
           </CardContent>
         </Card>
+
       </div>
 
       {/* Checkout Dialog */}

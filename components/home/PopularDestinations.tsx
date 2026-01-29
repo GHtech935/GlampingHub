@@ -46,10 +46,26 @@ export function PopularDestinations() {
     return locale === 'vi' ? (name.vi || name.en) : (name.en || name.vi)
   }
 
+  const stripHtml = (html: string): string => {
+    if (!html) return ''
+    // Remove HTML tags and decode entities
+    return html
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+      .replace(/&amp;/g, '&')  // Decode &amp;
+      .replace(/&lt;/g, '<')   // Decode &lt;
+      .replace(/&gt;/g, '>')   // Decode &gt;
+      .replace(/&quot;/g, '"') // Decode &quot;
+      .replace(/&#39;/g, "'")  // Decode &#39;
+      .trim()
+  }
+
   const getDescription = (desc: { vi: string; en: string } | string | null): string => {
     if (!desc) return ''
-    if (typeof desc === 'string') return desc
-    return locale === 'vi' ? (desc.vi || desc.en || '') : (desc.en || desc.vi || '')
+    const rawDesc = typeof desc === 'string'
+      ? desc
+      : (locale === 'vi' ? (desc.vi || desc.en || '') : (desc.en || desc.vi || ''))
+    return stripHtml(rawDesc)
   }
 
   if (loading) {

@@ -29,11 +29,22 @@ export async function GET(request: NextRequest) {
         z.name->>'vi' as zone_name,
         COALESCE(a.inventory_quantity, 1) as inventory_quantity,
         COALESCE(a.unlimited_inventory, false) as unlimited_inventory,
-        COALESCE(a.default_calendar_status, 'available') as status
+        COALESCE(a.default_calendar_status, 'available') as status,
+        a.visibility,
+        a.allocation_type,
+        (SELECT url FROM glamping_item_media WHERE item_id = i.id AND type = 'image' ORDER BY display_order ASC, created_at ASC LIMIT 1) as image_url,
+        (SELECT MIN(amount) FROM glamping_pricing WHERE item_id = i.id AND event_id IS NULL AND amount > 0) as base_price,
+        (SELECT COUNT(DISTINCT gb.id)::int FROM glamping_bookings gb
+          JOIN glamping_booking_items gbi ON gb.id = gbi.booking_id
+          WHERE gbi.item_id = i.id AND gb.status IN ('confirmed', 'checked_in')
+        ) as active_bookings,
+        COALESCE(ds.type, 'system_default') as deposit_type,
+        COALESCE(ds.amount, 0) as deposit_value
       FROM glamping_items i
       LEFT JOIN glamping_categories c ON i.category_id = c.id
       LEFT JOIN glamping_zones z ON i.zone_id = z.id
       LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+      LEFT JOIN glamping_deposit_settings ds ON i.id = ds.item_id
     `;
 
     const params: any[] = [];
@@ -114,6 +125,7 @@ export async function POST(request: NextRequest) {
       // New fields for Phase 6.3
       images,
       youtube_url,
+      video_start_time,
       pricing_rate,
       group_pricing,
       parameter_base_prices,
@@ -228,12 +240,22 @@ export async function POST(request: NextRequest) {
 
       // Insert YouTube URL if provided
       if (youtube_url) {
-        await client.query(
-          `INSERT INTO glamping_item_media (
-            item_id, type, url, display_order
-          ) VALUES ($1, $2, $3, $4)`,
-          [itemId, 'youtube', youtube_url, 999]
-        );
+        try {
+          await client.query(
+            `INSERT INTO glamping_item_media (
+              item_id, type, url, display_order, video_start_time
+            ) VALUES ($1, $2, $3, $4, $5)`,
+            [itemId, 'youtube', youtube_url, 999, video_start_time || 0]
+          );
+        } catch {
+          // Fallback if video_start_time column doesn't exist yet
+          await client.query(
+            `INSERT INTO glamping_item_media (
+              item_id, type, url, display_order
+            ) VALUES ($1, $2, $3, $4)`,
+            [itemId, 'youtube', youtube_url, 999]
+          );
+        }
       }
 
       // Insert pricing data if provided
