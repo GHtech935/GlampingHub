@@ -89,6 +89,57 @@ export async function PATCH(
       values
     );
 
+    // Send in-app notifications for payment update
+    try {
+      const {
+        broadcastToRole,
+        notifyGlampingOwnersOfBooking,
+      } = await import('@/lib/notifications');
+
+      // Get booking details for notifications
+      const bookingDetailsResult = await client.query(
+        `SELECT
+          gb.id,
+          gb.booking_code,
+          gb.total_amount,
+          c.first_name,
+          c.last_name
+        FROM glamping_bookings gb
+        JOIN customers c ON gb.customer_id = c.id
+        WHERE gb.id = $1`,
+        [id]
+      );
+
+      if (bookingDetailsResult.rows.length > 0) {
+        const bookingDetails = bookingDetailsResult.rows[0];
+        const customerName = `${bookingDetails.first_name} ${bookingDetails.last_name}`.trim();
+
+        const notificationData = {
+          booking_reference: bookingDetails.booking_code,
+          booking_code: bookingDetails.booking_code,
+          booking_id: id,
+          payment_status: 'Đã cập nhật',
+          amount: amount !== undefined
+            ? new Intl.NumberFormat('vi-VN').format(amount) + ' ₫'
+            : new Intl.NumberFormat('vi-VN').format(bookingDetails.total_amount) + ' ₫',
+          customer_name: customerName,
+        };
+
+        // Notify staff
+        await Promise.all([
+          broadcastToRole('admin', 'payment_status_updated', notificationData, 'glamping'),
+          broadcastToRole('operations', 'payment_status_updated', notificationData, 'glamping'),
+        ]);
+
+        // Notify zone owners
+        await notifyGlampingOwnersOfBooking(id, 'payment_status_updated', notificationData);
+
+        console.log('✅ In-app notifications sent for payment update');
+      }
+    } catch (notificationError) {
+      console.error('⚠️ Failed to send in-app notifications:', notificationError);
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error updating glamping payment:", error);
@@ -147,6 +198,13 @@ export async function DELETE(
       );
     }
 
+    // Get payment amount before deleting
+    const paymentAmountResult = await client.query(
+      `SELECT amount FROM glamping_booking_payments WHERE id = $1`,
+      [paymentId]
+    );
+    const deletedAmount = paymentAmountResult.rows[0]?.amount || 0;
+
     // Soft delete by updating status
     await client.query(
       `UPDATE glamping_booking_payments
@@ -154,6 +212,55 @@ export async function DELETE(
        WHERE id = $2`,
       [reason || 'No reason provided', paymentId]
     );
+
+    // Send in-app notifications for payment deletion
+    try {
+      const {
+        broadcastToRole,
+        notifyGlampingOwnersOfBooking,
+      } = await import('@/lib/notifications');
+
+      // Get booking details for notifications
+      const bookingDetailsResult = await client.query(
+        `SELECT
+          gb.id,
+          gb.booking_code,
+          gb.total_amount,
+          c.first_name,
+          c.last_name
+        FROM glamping_bookings gb
+        JOIN customers c ON gb.customer_id = c.id
+        WHERE gb.id = $1`,
+        [id]
+      );
+
+      if (bookingDetailsResult.rows.length > 0) {
+        const bookingDetails = bookingDetailsResult.rows[0];
+        const customerName = `${bookingDetails.first_name} ${bookingDetails.last_name}`.trim();
+
+        const notificationData = {
+          booking_reference: bookingDetails.booking_code,
+          booking_code: bookingDetails.booking_code,
+          booking_id: id,
+          payment_status: 'Đã xóa thanh toán',
+          amount: new Intl.NumberFormat('vi-VN').format(deletedAmount) + ' ₫',
+          customer_name: customerName,
+        };
+
+        // Notify staff
+        await Promise.all([
+          broadcastToRole('admin', 'payment_status_updated', notificationData, 'glamping'),
+          broadcastToRole('operations', 'payment_status_updated', notificationData, 'glamping'),
+        ]);
+
+        // Notify zone owners
+        await notifyGlampingOwnersOfBooking(id, 'payment_status_updated', notificationData);
+
+        console.log('✅ In-app notifications sent for payment deletion');
+      }
+    } catch (notificationError) {
+      console.error('⚠️ Failed to send in-app notifications:', notificationError);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

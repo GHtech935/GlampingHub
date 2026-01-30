@@ -2997,8 +2997,9 @@ export function ItemFormWizard({
                               {/* per Day */}
                               <button
                                 type="button"
+                                disabled
                                 onClick={() => field.onChange('per_day')}
-                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors ${
+                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors opacity-50 pointer-events-none cursor-not-allowed ${
                                   field.value === 'per_day'
                                     ? 'border-primary bg-white'
                                     : 'border-gray-200 bg-white hover:border-gray-300'
@@ -3035,8 +3036,9 @@ export function ItemFormWizard({
                               {/* per Time */}
                               <button
                                 type="button"
+                                disabled
                                 onClick={() => field.onChange('per_hour')}
-                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors ${
+                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors opacity-50 pointer-events-none cursor-not-allowed ${
                                   field.value === 'per_hour'
                                     ? 'border-primary bg-white'
                                     : 'border-gray-200 bg-white hover:border-gray-300'
@@ -3054,8 +3056,9 @@ export function ItemFormWizard({
                               {/* Timeslots */}
                               <button
                                 type="button"
+                                disabled
                                 onClick={() => field.onChange('timeslots')}
-                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors ${
+                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors opacity-50 pointer-events-none cursor-not-allowed ${
                                   field.value === 'timeslots'
                                     ? 'border-primary bg-white'
                                     : 'border-gray-200 bg-white hover:border-gray-300'

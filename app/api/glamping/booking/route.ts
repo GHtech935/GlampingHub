@@ -563,7 +563,8 @@ export async function POST(request: NextRequest) {
       const totalAdults = items.reduce((sum: number, item: any) => sum + (item.adults || 0), 0);
       const totalChildren = items.reduce((sum: number, item: any) => sum + (item.children || 0), 0);
 
-      const paymentExpiresAt = (paymentMethod === 'pay_now' && !isAdminBooking)
+      const paymentRequired = paymentMethod === 'pay_now' || depositDue > 0;
+      const paymentExpiresAt = (paymentRequired && !isAdminBooking)
         ? new Date(Date.now() + (parseInt(process.env.SEPAY_PAYMENT_TIMEOUT_MINUTES || '30') * 60 * 1000)).toISOString()
         : null;
 
@@ -907,7 +908,7 @@ export async function POST(request: NextRequest) {
       console.log('[Multi-Item Booking] Successfully committed booking:', booking.booking_code);
 
       // Step 16: Send emails
-      const paymentRequired = paymentMethod === 'pay_now' || depositDue > 0;
+      // Note: paymentRequired already calculated above for paymentExpiresAt
       let redirectUrl = `/glamping/booking/confirmation/${booking.id}`;
 
       if (paymentRequired) {
@@ -974,7 +975,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Send staff notification
+      // Send staff notification (including zone owners)
       try {
         await sendGlampingBookingNotificationToStaff({
           bookingCode: booking.booking_code,
@@ -989,6 +990,7 @@ export async function POST(request: NextRequest) {
           totalAmount: parseFloat(booking.total_amount),
           paymentStatus: 'Chờ thanh toán',
           glampingBookingId: booking.id,
+          zoneId,
         });
       } catch (emailError) {
         console.error('[Multi-Item Booking] Failed to send staff notification:', emailError);
@@ -1493,8 +1495,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate payment expiry timestamp (same logic as CampingHub-App)
-    // Admin bookings with pay_later don't expire; pay_now still expires after timeout
-    const paymentExpiresAt = (paymentMethod === 'pay_now' && !isAdminBooking)
+    // Admin bookings don't expire; payment required for pay_now OR when deposit > 0
+    const paymentRequired = paymentMethod === 'pay_now' || depositDue > 0;
+    const paymentExpiresAt = (paymentRequired && !isAdminBooking)
       ? new Date(Date.now() + (parseInt(process.env.SEPAY_PAYMENT_TIMEOUT_MINUTES || '30') * 60 * 1000)).toISOString()
       : null;
 
@@ -1755,7 +1758,7 @@ export async function POST(request: NextRequest) {
     client.release();
 
     // Determine payment requirement
-    const paymentRequired = paymentMethod === 'pay_now' || depositDue > 0;
+    // Note: paymentRequired already calculated above for paymentExpiresAt
     let redirectUrl = `/glamping/booking/confirmation/${booking.id}`;
 
     if (paymentRequired) {
@@ -1789,7 +1792,7 @@ export async function POST(request: NextRequest) {
       console.error('⚠️ Failed to send glamping booking confirmation email:', emailError);
     }
 
-    // 2. Send notification emails to staff (admin, sale, operations - NOT owner)
+    // 2. Send notification emails to staff (admin, sale, operations, zone owners)
     try {
       await sendGlampingBookingNotificationToStaff({
         bookingCode: booking.booking_code,
@@ -1804,6 +1807,7 @@ export async function POST(request: NextRequest) {
         totalAmount: parseFloat(booking.total_amount),
         paymentStatus: 'Chờ thanh toán',
         glampingBookingId: booking.id,
+        zoneId,
       });
     } catch (staffEmailError) {
       console.error('⚠️ Failed to send glamping staff notification emails:', staffEmailError);

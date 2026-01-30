@@ -893,8 +893,8 @@ export async function sendGlampingBookingExpiredEmail({
 }
 
 /**
- * Send email to all admin/sale/operations staff for glamping booking
- * Note: Glamping system does NOT have owner role
+ * Send email to all admin/sale/operations staff AND zone owners for glamping booking
+ * Zone owners are identified via user_glamping_zones table with role = 'glamping_owner'
  */
 export async function sendGlampingBookingNotificationToStaff({
   bookingCode,
@@ -909,6 +909,7 @@ export async function sendGlampingBookingNotificationToStaff({
   totalAmount,
   paymentStatus,
   glampingBookingId,
+  zoneId,
 }: {
   bookingCode: string;
   guestName: string;
@@ -922,15 +923,21 @@ export async function sendGlampingBookingNotificationToStaff({
   totalAmount: number;
   paymentStatus: string;
   glampingBookingId: string;
+  zoneId?: string;
 }): Promise<void> {
   try {
-    // Get all staff with roles: admin, sale, operations (NOT owner - glamping doesn't have owner role)
+    // Get all staff with roles: admin, sale, operations AND zone owners (glamping_owner)
     const result = await query<{ email: string; first_name: string; last_name: string }>(
-      `SELECT email, first_name, last_name
-       FROM users
-       WHERE role IN ('admin', 'sale', 'operations')
-         AND email IS NOT NULL`,
-      []
+      `SELECT DISTINCT u.email, u.first_name, u.last_name
+       FROM users u
+       LEFT JOIN user_glamping_zones ugz ON u.id = ugz.user_id AND ugz.zone_id = $1
+       WHERE u.is_active = true
+         AND u.email IS NOT NULL
+         AND (
+           u.role IN ('admin', 'sale', 'operations')
+           OR (u.role = 'glamping_owner' AND ugz.zone_id IS NOT NULL)
+         )`,
+      [zoneId || null]
     );
 
     if (result.rows.length === 0) {

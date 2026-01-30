@@ -104,6 +104,82 @@ export async function POST(
 
     console.log(`✅ Payment record created for glamping booking ${booking.booking_code}: ${amount} VND`);
 
+    // Send in-app notifications
+    try {
+      const {
+        broadcastToRole,
+        notifyGlampingOwnersOfBooking,
+        sendNotificationToCustomer,
+      } = await import('@/lib/notifications');
+
+      // Get booking details for notifications
+      const bookingDetailsResult = await pool.query(
+        `SELECT
+          gb.id,
+          gb.booking_code,
+          gb.customer_id,
+          gb.total_amount,
+          c.first_name,
+          c.last_name
+        FROM glamping_bookings gb
+        JOIN customers c ON gb.customer_id = c.id
+        WHERE gb.id = $1`,
+        [id]
+      );
+
+      if (bookingDetailsResult.rows.length > 0) {
+        const bookingDetails = bookingDetailsResult.rows[0];
+        const customerName = `${bookingDetails.first_name} ${bookingDetails.last_name}`.trim();
+
+        // Format payment method for display
+        const paymentMethodMap: Record<string, string> = {
+          'cash': 'Tiền mặt',
+          'bank_transfer': 'Chuyển khoản',
+          'card': 'Thẻ',
+          'sepay': 'SePay',
+        };
+        const paymentMethodDisplay = paymentMethodMap[paymentMethod || 'cash'] || paymentMethod || 'Tiền mặt';
+
+        const staffNotificationData = {
+          booking_reference: bookingDetails.booking_code,
+          booking_code: bookingDetails.booking_code,
+          booking_id: id,
+          amount: new Intl.NumberFormat('vi-VN').format(amount) + ' ₫',
+          payment_method: paymentMethodDisplay,
+          customer_name: customerName,
+        };
+
+        // Notify staff (admin, operations)
+        await Promise.all([
+          broadcastToRole('admin', 'payment_record_added', staffNotificationData, 'glamping'),
+          broadcastToRole('operations', 'payment_record_added', staffNotificationData, 'glamping'),
+        ]);
+
+        // Notify zone owners
+        await notifyGlampingOwnersOfBooking(id, 'payment_record_added', staffNotificationData);
+
+        // If payment status changed, notify customer
+        if (newPaymentStatus !== booking.payment_status) {
+          await sendNotificationToCustomer(
+            bookingDetails.customer_id,
+            'payment_received',
+            {
+              booking_reference: bookingDetails.booking_code,
+              booking_id: id,
+              booking_code: bookingDetails.booking_code,
+              amount: new Intl.NumberFormat('vi-VN').format(amount) + ' ₫',
+            },
+            'glamping'
+          );
+        }
+
+        console.log('✅ In-app notifications sent for payment record');
+      }
+    } catch (notificationError) {
+      console.error('⚠️ Failed to send in-app notifications:', notificationError);
+      // Don't fail the request if notifications fail
+    }
+
     return NextResponse.json({
       success: true,
       message: "Payment recorded successfully",

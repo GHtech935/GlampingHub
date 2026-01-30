@@ -531,6 +531,131 @@ export async function PUT(
         console.error('⚠️ Failed to send status change emails:', emailError);
         // Don't fail the request if email sending fails
       }
+
+      // Send in-app (bell) notifications
+      try {
+        const {
+          sendNotificationToCustomer,
+          broadcastToRole,
+          notifyGlampingOwnersOfBooking,
+        } = await import('@/lib/notifications');
+
+        // Fetch booking details for notifications
+        const notificationBookingResult = await pool.query(
+          `SELECT
+            gb.id,
+            gb.booking_code,
+            gb.customer_id,
+            gb.check_in_date,
+            gb.check_out_date,
+            gb.total_amount,
+            c.first_name as customer_first_name,
+            c.last_name as customer_last_name,
+            gz.name as zone_name
+          FROM glamping_bookings gb
+          JOIN customers c ON gb.customer_id = c.id
+          LEFT JOIN glamping_booking_items gbi ON gb.id = gbi.booking_id
+          LEFT JOIN glamping_items gi ON gbi.item_id = gi.id
+          LEFT JOIN glamping_zones gz ON gi.zone_id = gz.id
+          WHERE gb.id = $1
+          LIMIT 1`,
+          [id]
+        );
+        const bookingData = notificationBookingResult.rows[0];
+
+        if (bookingData) {
+          const customerName = `${bookingData.customer_first_name} ${bookingData.customer_last_name}`.trim();
+          const zoneName = typeof bookingData.zone_name === 'object'
+            ? (bookingData.zone_name.vi || bookingData.zone_name.en)
+            : bookingData.zone_name;
+
+          const finalStatus = status || current.status;
+          const finalPaymentStatus = paymentStatus || current.payment_status;
+
+          // Prepare notification data
+          const notificationData = {
+            booking_reference: bookingData.booking_code,
+            booking_code: bookingData.booking_code,
+            booking_id: id,
+            customer_name: customerName,
+            campsite_name: zoneName,
+            checkin_date: new Date(bookingData.check_in_date).toLocaleDateString('vi-VN'),
+            checkout_date: new Date(bookingData.check_out_date).toLocaleDateString('vi-VN'),
+            refund_message: '',
+          };
+
+          // 1. Status changed to 'confirmed'
+          if (finalStatus === 'confirmed' && current.status !== 'confirmed') {
+            // Notify customer
+            await sendNotificationToCustomer(
+              bookingData.customer_id,
+              'booking_confirmed',
+              notificationData,
+              'glamping'
+            );
+
+            // Notify staff
+            await Promise.all([
+              broadcastToRole('admin', 'owner_booking_confirmed', notificationData, 'glamping'),
+              broadcastToRole('operations', 'owner_booking_confirmed', notificationData, 'glamping'),
+            ]);
+
+            // Notify zone owners
+            await notifyGlampingOwnersOfBooking(id, 'owner_booking_confirmed', notificationData);
+          }
+
+          // 2. Status changed to 'cancelled'
+          if (finalStatus === 'cancelled' && current.status !== 'cancelled') {
+            // Notify customer
+            await sendNotificationToCustomer(
+              bookingData.customer_id,
+              'booking_cancelled',
+              notificationData,
+              'glamping'
+            );
+
+            // Notify staff
+            await Promise.all([
+              broadcastToRole('admin', 'owner_booking_cancelled', notificationData, 'glamping'),
+              broadcastToRole('operations', 'owner_booking_cancelled', notificationData, 'glamping'),
+            ]);
+
+            // Notify zone owners
+            await notifyGlampingOwnersOfBooking(id, 'owner_booking_cancelled', notificationData);
+          }
+
+          // 3. Payment status changed
+          if (paymentStatus && paymentStatus !== current.payment_status) {
+            const paymentStatusMap: Record<string, string> = {
+              'fully_paid': 'Đã thanh toán đủ',
+              'deposit_paid': 'Đã đặt cọc',
+              'pending': 'Chờ thanh toán',
+              'refunded': 'Đã hoàn tiền',
+            };
+            const paymentStatusDisplay = paymentStatusMap[finalPaymentStatus] || finalPaymentStatus;
+
+            const paymentNotificationData = {
+              ...notificationData,
+              payment_status: paymentStatusDisplay,
+              amount: new Intl.NumberFormat('vi-VN').format(bookingData.total_amount) + ' ₫',
+            };
+
+            // Notify staff
+            await Promise.all([
+              broadcastToRole('admin', 'payment_status_updated', paymentNotificationData, 'glamping'),
+              broadcastToRole('operations', 'payment_status_updated', paymentNotificationData, 'glamping'),
+            ]);
+
+            // Notify zone owners
+            await notifyGlampingOwnersOfBooking(id, 'payment_status_updated', paymentNotificationData);
+          }
+
+          console.log('✅ In-app notifications sent for booking status change');
+        }
+      } catch (notificationError) {
+        console.error('⚠️ Failed to send in-app notifications:', notificationError);
+        // Don't fail the request if notification sending fails
+      }
     }
 
     return NextResponse.json({ success: true });
