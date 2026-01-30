@@ -178,7 +178,7 @@ export function GlampingMyDetailsSection({
                 defaultValue="+84"
                 onValueChange={(value) => setValue("phoneCountryCode", value)}
               >
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-[100px] flex-shrink-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -197,7 +197,7 @@ export function GlampingMyDetailsSection({
                 type="tel"
                 {...register("phoneNumber")}
                 placeholder="912 345 678"
-                className={`flex-1 ${errors.phoneNumber ? "border-red-500" : ""}`}
+                className={`flex-1 min-w-0 ${errors.phoneNumber ? "border-red-500" : ""}`}
               />
             </div>
             {errors.phoneNumber && (
@@ -237,7 +237,7 @@ export function GlampingMyDetailsSection({
         {/* Social Media URL */}
         <div className="space-y-2">
           <Label htmlFor="socialMediaUrl">
-            {t('socialMediaUrl')} <span className="text-red-500">*</span>
+            {t('socialMediaUrl')}
           </Label>
           <Input
             id="socialMediaUrl"
@@ -260,13 +260,14 @@ export function GlampingMyDetailsSection({
         {/* Photo Consent */}
         <div className="space-y-2">
           <Label htmlFor="photoConsent">
-            {t('photoConsent')} <span className="text-red-500">*</span>
+            {t('photoConsent')}
           </Label>
           <Select
+            defaultValue="true"
             onValueChange={(value) => setValue("photoConsent", value === "true")}
           >
             <SelectTrigger className={errors.photoConsent ? "border-red-500" : ""}>
-              <SelectValue placeholder={t('photoConsentOptions.agree')} />
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="true">{t('photoConsentOptions.agree')}</SelectItem>
@@ -287,7 +288,7 @@ export function GlampingMyDetailsSection({
         {/* Referral Source */}
         <div className="space-y-2">
           <Label>
-            {t('referralSource')} <span className="text-red-500">*</span>
+            {t('referralSource')}
           </Label>
           <div className="space-y-2">
             {[

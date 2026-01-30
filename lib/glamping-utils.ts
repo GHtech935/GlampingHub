@@ -68,9 +68,6 @@ export function groupBookingItemsByPeriod(
         checkInDate: checkIn,
         checkOutDate: checkOut,
         parameterGroups: [],
-        totalGuests: 0,
-        adultsCount: 0,
-        childrenCount: 0,
         totalNights: nights,
         totalPrice: 0,
         metadata: item.metadata || {},
@@ -91,22 +88,6 @@ export function groupBookingItemsByPeriod(
         totalPrice: item.totalPrice,
       });
     }
-
-    // Aggregate guest counts based on parameter name
-    // This is a heuristic - adjust keywords as needed
-    const paramNameLower = (item.parameterName || '').toLowerCase();
-
-    if (paramNameLower.includes('adult') || paramNameLower.includes('người lớn')) {
-      period.adultsCount += item.quantity;
-      period.totalGuests += item.quantity;
-    } else if (paramNameLower.includes('child') || paramNameLower.includes('trẻ em') || paramNameLower.includes('trẻ')) {
-      period.childrenCount += item.quantity;
-      period.totalGuests += item.quantity;
-    } else if (paramNameLower.includes('guest') || paramNameLower.includes('khách')) {
-      // Generic guest parameter
-      period.totalGuests += item.quantity;
-    }
-    // Other parameters (pets, vehicles, etc.) don't count towards totalGuests
 
     // Aggregate total price
     period.totalPrice += item.totalPrice;
@@ -140,11 +121,11 @@ export function groupBookingItemsByPeriod(
 }
 
 /**
- * Calculate total number of guests for a booking period
- * This is redundant with the totalGuests field but kept for convenience
+ * Calculate total number of guests for a booking period from its parameterGroups
  */
 export function calculateTotalGuestsForPeriod(period: BookingPeriod): number {
-  return period.adultsCount + period.childrenCount;
+  if (!period.parameterGroups || period.parameterGroups.length === 0) return 0;
+  return period.parameterGroups.reduce((sum, pg) => sum + (pg.quantity || 0), 0);
 }
 
 /**
@@ -186,7 +167,7 @@ export function getNightsRange(bookingPeriods: BookingPeriod[]): string {
  * Calculate total guests across all booking periods
  */
 export function getTotalGuestsAcrossPeriods(bookingPeriods: BookingPeriod[]): number {
-  return bookingPeriods.reduce((sum, period) => sum + period.totalGuests, 0);
+  return bookingPeriods.reduce((sum, period) => sum + calculateTotalGuestsForPeriod(period), 0);
 }
 
 /**
@@ -215,35 +196,20 @@ export function getTentColor(index: number) {
 }
 
 /**
- * Format guest count for display
- * Examples: "2 adults", "2 adults, 1 child", "3 guests"
+ * Format guest count for display using parameterGroups
+ * Examples: "2 Adults", "2 Adults, 1 Child", "3 Guests"
  */
 export function formatGuestCount(period: BookingPeriod, locale: 'en' | 'vi' = 'en'): string {
-  const { adultsCount, childrenCount } = period;
-
-  if (adultsCount === 0 && childrenCount === 0) {
+  if (!period.parameterGroups || period.parameterGroups.length === 0) {
     return locale === 'vi' ? 'Không có khách' : 'No guests';
   }
 
-  const parts: string[] = [];
-
-  if (adultsCount > 0) {
-    if (locale === 'vi') {
-      parts.push(`${adultsCount} người lớn`);
-    } else {
-      parts.push(`${adultsCount} adult${adultsCount !== 1 ? 's' : ''}`);
-    }
+  const paramsWithGuests = period.parameterGroups.filter(pg => pg.quantity > 0);
+  if (paramsWithGuests.length === 0) {
+    return locale === 'vi' ? 'Không có khách' : 'No guests';
   }
 
-  if (childrenCount > 0) {
-    if (locale === 'vi') {
-      parts.push(`${childrenCount} trẻ em`);
-    } else {
-      parts.push(`${childrenCount} child${childrenCount !== 1 ? 'ren' : ''}`);
-    }
-  }
-
-  return parts.join(locale === 'vi' ? ', ' : ', ');
+  return paramsWithGuests.map(pg => `${pg.quantity} ${pg.parameterName}`).join(', ');
 }
 
 /**
@@ -309,18 +275,11 @@ export function tentToBookingPeriod(
     checkInDate: tent.checkInDate,
     checkOutDate: tent.checkOutDate,
     parameterGroups,
-    totalGuests: tent.totalGuests,
-    adultsCount: tent.adults,
-    childrenCount: tent.children,
     totalNights: tent.nights,
     totalPrice: totalPrice || tent.subtotal,
     metadata: {
       checkInDate: tent.checkInDate,
       checkOutDate: tent.checkOutDate,
-      guests: {
-        adults: tent.adults,
-        children: tent.children,
-      },
       specialRequests: tent.specialRequests,
     },
     specialRequests: tent.specialRequests,

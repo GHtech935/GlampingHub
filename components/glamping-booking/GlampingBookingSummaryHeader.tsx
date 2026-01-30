@@ -35,9 +35,9 @@ export function GlampingBookingSummaryHeader({
       <div className="w-full mx-auto px-4 py-4">
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
           {/* Left: Campsite Info */}
-          <div className="flex gap-4 items-start">
+          <div className="flex gap-4 items-center">
             {/* Pitch Image */}
-            <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-white/10">
+            <div className="relative w-20 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-white/10">
               <Image
                 src={bookingData.pitchImageUrl || `https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=200&h=200&fit=crop`}
                 alt={bookingData.pitchName}
@@ -48,9 +48,6 @@ export function GlampingBookingSummaryHeader({
 
             {/* Campsite Details */}
             <div>
-              <h1 className="text-xl font-semibold mb-1">
-                {bookingData.pitchName}
-              </h1>
               <div className="flex items-center gap-2 text-sm text-white/90 mb-2">
                 <MapPin className="h-4 w-4" />
                 <span>

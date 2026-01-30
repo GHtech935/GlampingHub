@@ -64,24 +64,11 @@ export const glampingBookingConfirmationHTML = `
             <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Khu vực:</td>
             <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{zone_name}</td>
           </tr>
-          <tr style="border-bottom: 1px solid #e5e7eb;">
-            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Lều:</td>
-            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{item_name}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #e5e7eb;">
-            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Ngày check-in:</td>
-            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{checkin_date}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #e5e7eb;">
-            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Ngày check-out:</td>
-            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{checkout_date}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Số khách:</td>
-            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{number_of_guests} người</td>
-          </tr>
         </table>
       </div>
+
+      <!-- Tents Section -->
+      {tents_section}
 
       <!-- Payment Info -->
       <div style="${emailStyles.section}">
@@ -107,10 +94,10 @@ export const glampingBookingConfirmationHTML = `
       <!-- Menu Editing Notice -->
       <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 4px;">
         <p style="margin: 0 0 10px 0; color: #065f46; font-size: 15px; font-weight: bold;">
-          💡 Bạn có thể chỉnh sửa món ăn/đồ uống
+          💡 Chọn món ăn/đồ uống cho chuyến đi
         </p>
         <p style="margin: 0; color: #047857; font-size: 14px; line-height: 1.6;">
-          Truy cập trang quản lý đặt phòng để thay đổi món ăn và đồ uống cho đến <strong>24 giờ trước khi check-in</strong>.
+          Sau khi <strong>đặt cọc hoặc thanh toán đầy đủ</strong>, bạn có thể chọn và chỉnh sửa món ăn, đồ uống cho đến <strong>24 giờ trước khi check-in</strong>.
         </p>
       </div>
 
@@ -1236,6 +1223,386 @@ export const glampingAdminLatePaymentHTML = `
 </html>
 `;
 
+// Menu Selection Reminder - Day 3 (3 days before check-in)
+export const glampingMenuSelectionReminderDay3HTML = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nhắc nhở chọn món ăn - {booking_code}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">🍽️ Còn 3 ngày - Đừng quên chọn món ăn!</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Xin chào <strong>{customer_name}</strong>,
+              </p>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Chuyến glamping của bạn chỉ còn <strong>3 ngày nữa</strong>! Chúng tôi nhận thấy bạn chưa chọn món ăn cho chuyến đi.
+              </p>
+
+              <!-- Booking Info Box -->
+              <div style="background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Mã đặt phòng</p>
+                <p style="margin: 0 0 15px 0; font-size: 18px; font-weight: bold; color: #333;">{booking_code}</p>
+
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Địa điểm</p>
+                <p style="margin: 0 0 15px 0; font-size: 16px; color: #333;">{property_name}</p>
+
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Check-in</p>
+                <p style="margin: 0; font-size: 16px; color: #333;">{check_in_date} lúc {check_in_time}</p>
+              </div>
+
+              <!-- Info Box -->
+              <div style="background-color: #e0f2fe; border-left: 4px solid #0284c7; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #0369a1; font-size: 15px; line-height: 1.6;">
+                  💡 <strong>Mẹo:</strong> Chọn món ăn sớm để chúng tôi chuẩn bị nguyên liệu tươi ngon nhất cho bạn!
+                </p>
+              </div>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 20px 0;">
+                Hãy chọn món ăn yêu thích của bạn ngay để đảm bảo chúng tôi chuẩn bị đầy đủ cho chuyến đi của bạn!
+              </p>
+
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{management_url}"
+                   style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(102, 126, 234, 0.4);">
+                  Chọn món ăn ngay
+                </a>
+              </div>
+
+              <p style="font-size: 14px; line-height: 1.6; color: #666; margin: 20px 0 0 0;">
+                Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; font-size: 14px; color: #666;">
+                Cảm ơn bạn đã chọn dịch vụ glamping của chúng tôi! 🌟
+              </p>
+              <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">
+                Email này được gửi tự động, vui lòng không trả lời.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+// Menu Selection Reminder - Day 2 (2 days before check-in)
+export const glampingMenuSelectionReminderDay2HTML = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nhắc nhở chọn món ăn - {booking_code}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">🍽️ Còn 2 ngày - Chọn món ăn ngay!</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Xin chào <strong>{customer_name}</strong>,
+              </p>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Chuyến glamping của bạn chỉ còn <strong>2 ngày nữa</strong>! Bạn vẫn chưa chọn món ăn cho chuyến đi.
+              </p>
+
+              <!-- Booking Info Box -->
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #92400e; font-size: 14px;">Mã đặt phòng</p>
+                <p style="margin: 0 0 15px 0; font-size: 18px; font-weight: bold; color: #333;">{booking_code}</p>
+
+                <p style="margin: 0 0 10px 0; color: #92400e; font-size: 14px;">Địa điểm</p>
+                <p style="margin: 0 0 15px 0; font-size: 16px; color: #333;">{property_name}</p>
+
+                <p style="margin: 0 0 10px 0; color: #92400e; font-size: 14px;">Check-in</p>
+                <p style="margin: 0; font-size: 16px; color: #333;">{check_in_date} lúc {check_in_time}</p>
+              </div>
+
+              <!-- Warning Box -->
+              <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #856404; font-size: 15px; line-height: 1.6;">
+                  ⏰ <strong>Lưu ý:</strong> Bạn chỉ có thể chỉnh sửa món ăn đến <strong>24 giờ trước khi check-in</strong>. Hãy chọn món ngay hôm nay!
+                </p>
+              </div>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 20px 0;">
+                Hãy chọn món ăn yêu thích của bạn ngay để đảm bảo chúng tôi chuẩn bị đầy đủ cho chuyến đi của bạn!
+              </p>
+
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{management_url}"
+                   style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); color: white; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(245, 158, 11, 0.4);">
+                  Chọn món ăn ngay
+                </a>
+              </div>
+
+              <p style="font-size: 14px; line-height: 1.6; color: #666; margin: 20px 0 0 0;">
+                Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; font-size: 14px; color: #666;">
+                Cảm ơn bạn đã chọn dịch vụ glamping của chúng tôi! 🌟
+              </p>
+              <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">
+                Email này được gửi tự động, vui lòng không trả lời.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+// Menu Selection Reminder - Day 1 (1 day before check-in - URGENT)
+export const glampingMenuSelectionReminderDay1HTML = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚠️ KHẨN CẤP: Chọn món ăn NGAY - {booking_code}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">⚠️ KHẨN CẤP: Chọn món ăn NGAY!</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Xin chào <strong>{customer_name}</strong>,
+              </p>
+
+              <!-- Urgent Alert -->
+              <div style="background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #991b1b; font-size: 18px; font-weight: bold; line-height: 1.6;">
+                  🚨 Chuyến glamping của bạn là <strong>NGÀY MAI</strong>!<br>
+                  Bạn chưa chọn món ăn và sắp hết thời hạn!
+                </p>
+              </div>
+
+              <!-- Booking Info Box -->
+              <div style="background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #991b1b; font-size: 14px;">Mã đặt phòng</p>
+                <p style="margin: 0 0 15px 0; font-size: 18px; font-weight: bold; color: #333;">{booking_code}</p>
+
+                <p style="margin: 0 0 10px 0; color: #991b1b; font-size: 14px;">Địa điểm</p>
+                <p style="margin: 0 0 15px 0; font-size: 16px; color: #333;">{property_name}</p>
+
+                <p style="margin: 0 0 10px 0; color: #991b1b; font-size: 14px;">Check-in</p>
+                <p style="margin: 0; font-size: 16px; color: #333;">{check_in_date} lúc {check_in_time}</p>
+              </div>
+
+              <!-- Critical Warning -->
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #92400e; font-size: 15px; line-height: 1.6;">
+                  ⏰ <strong>QUAN TRỌNG:</strong> Sau <strong>hôm nay</strong>, bạn sẽ không thể chọn hoặc thay đổi món ăn được nữa!
+                </p>
+              </div>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 20px 0;">
+                Nếu bạn không chọn món, chúng tôi sẽ không thể chuẩn bị đồ ăn cho bạn. Hãy chọn ngay!
+              </p>
+
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{management_url}"
+                   style="display: inline-block; padding: 18px 50px; background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color: white; text-decoration: none; border-radius: 6px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.4);">
+                  🍽️ CHỌN MÓN ĂN NGAY
+                </a>
+              </div>
+
+              <p style="font-size: 14px; line-height: 1.6; color: #666; margin: 20px 0 0 0;">
+                Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi ngay.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; font-size: 14px; color: #666;">
+                Cảm ơn bạn đã chọn dịch vụ glamping của chúng tôi! 🌟
+              </p>
+              <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">
+                Email này được gửi tự động, vui lòng không trả lời.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+// Trip Reminder - 24h before check-in (for customers who HAVE selected menu)
+export const glampingTripReminderHTML = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🏕️ Chuyến đi của bạn là NGÀY MAI! - {booking_code}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #10b981 0%, #34d399 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">🏕️ Chuyến đi của bạn là NGÀY MAI!</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Xin chào <strong>{customer_name}</strong>,
+              </p>
+
+              <!-- Excitement Box -->
+              <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #065f46; font-size: 18px; font-weight: bold; line-height: 1.6;">
+                  🎉 Chỉ còn 24 giờ nữa thôi! Chuyến glamping tuyệt vời đang chờ đón bạn!
+                </p>
+              </div>
+
+              <!-- Booking Info Box -->
+              <div style="background-color: #f8f9fa; border-left: 4px solid #10b981; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Mã đặt phòng</p>
+                <p style="margin: 0 0 15px 0; font-size: 18px; font-weight: bold; color: #333;">{booking_code}</p>
+
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Địa điểm</p>
+                <p style="margin: 0 0 15px 0; font-size: 16px; color: #333;">{property_name}</p>
+
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Check-in</p>
+                <p style="margin: 0; font-size: 16px; color: #333;">{check_in_date} lúc {check_in_time}</p>
+              </div>
+
+              <!-- Menu Ready Notice -->
+              <div style="background-color: #dcfce7; border-left: 4px solid #22c55e; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #166534; font-size: 15px; line-height: 1.6;">
+                  ✅ <strong>Món ăn đã được chọn!</strong> Chúng tôi đang chuẩn bị nguyên liệu tươi ngon nhất cho bạn.
+                </p>
+              </div>
+
+              <!-- Checklist -->
+              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0;">
+                <h3 style="color: #333; margin: 0 0 15px 0; font-size: 16px;">📋 Checklist trước khi đi:</h3>
+                <ul style="color: #4b5563; margin: 0; padding-left: 20px; line-height: 2;">
+                  <li>Mang theo giấy tờ tùy thân</li>
+                  <li>Chuẩn bị quần áo thoải mái</li>
+                  <li>Mang theo kem chống nắng và thuốc chống muỗi</li>
+                  <li>Đèn pin hoặc đèn đầu (nếu có)</li>
+                  <li>Đến đúng giờ check-in: <strong>{check_in_time}</strong></li>
+                </ul>
+              </div>
+
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{management_url}"
+                   style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #10b981 0%, #34d399 100%); color: white; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.4);">
+                  Xem chi tiết đặt phòng
+                </a>
+              </div>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 20px 0;">
+                Chúng tôi rất háo hức được đón tiếp bạn! Chúc bạn có một chuyến đi tuyệt vời! 🌟
+              </p>
+
+              <p style="font-size: 14px; line-height: 1.6; color: #666; margin: 20px 0 0 0;">
+                Nếu bạn cần hỗ trợ gì, vui lòng liên hệ với chúng tôi ngay.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; font-size: 14px; color: #666;">
+                Cảm ơn bạn đã chọn dịch vụ glamping của chúng tôi! 🏕️
+              </p>
+              <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">
+                Email này được gửi tự động, vui lòng không trả lời.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+// Keep the old template for backward compatibility
 export const glampingMenuSelectionReminderHTML = `
 <!DOCTYPE html>
 <html lang="vi">
@@ -1504,7 +1871,47 @@ export const GLAMPING_EMAIL_TEMPLATES: Record<string, GlampingEmailTemplateDefin
     subject: '🍽️ Nhắc nhở chọn món ăn cho chuyến glamping - {booking_code}',
     html: glampingMenuSelectionReminderHTML,
     type: 'menu_reminder',
-    description: 'Email nhắc khách chọn món ăn 48h trước check-in',
+    description: 'Email nhắc khách chọn món ăn 48h trước check-in (legacy)',
+    availableVariables: ['customer_name', 'booking_code', 'property_name', 'check_in_date', 'check_in_time', 'management_url'],
+    isActive: true,
+  },
+  'glamping-menu-selection-reminder-day-3': {
+    slug: 'glamping-menu-selection-reminder-day-3',
+    name: 'Nhắc nhở chọn món ăn - Ngày 3',
+    subject: '🍽️ Còn 3 ngày - Đừng quên chọn món ăn! - {booking_code}',
+    html: glampingMenuSelectionReminderDay3HTML,
+    type: 'menu_reminder',
+    description: 'Email nhắc khách chọn món ăn 3 ngày trước check-in',
+    availableVariables: ['customer_name', 'booking_code', 'property_name', 'check_in_date', 'check_in_time', 'management_url'],
+    isActive: true,
+  },
+  'glamping-menu-selection-reminder-day-2': {
+    slug: 'glamping-menu-selection-reminder-day-2',
+    name: 'Nhắc nhở chọn món ăn - Ngày 2',
+    subject: '🍽️ Còn 2 ngày - Chọn món ăn ngay! - {booking_code}',
+    html: glampingMenuSelectionReminderDay2HTML,
+    type: 'menu_reminder',
+    description: 'Email nhắc khách chọn món ăn 2 ngày trước check-in',
+    availableVariables: ['customer_name', 'booking_code', 'property_name', 'check_in_date', 'check_in_time', 'management_url'],
+    isActive: true,
+  },
+  'glamping-menu-selection-reminder-day-1': {
+    slug: 'glamping-menu-selection-reminder-day-1',
+    name: 'Nhắc nhở chọn món ăn - KHẨN CẤP',
+    subject: '⚠️ KHẨN CẤP: Chọn món ăn NGAY - Ngày mai check-in! - {booking_code}',
+    html: glampingMenuSelectionReminderDay1HTML,
+    type: 'menu_reminder',
+    description: 'Email KHẨN CẤP nhắc khách chọn món ăn 1 ngày trước check-in',
+    availableVariables: ['customer_name', 'booking_code', 'property_name', 'check_in_date', 'check_in_time', 'management_url'],
+    isActive: true,
+  },
+  'glamping-trip-reminder': {
+    slug: 'glamping-trip-reminder',
+    name: 'Nhắc nhở chuyến đi 24h',
+    subject: '🏕️ Chuyến đi của bạn là NGÀY MAI! - {booking_code}',
+    html: glampingTripReminderHTML,
+    type: 'trip_reminder',
+    description: 'Email nhắc nhở 24h trước check-in cho khách ĐÃ chọn món ăn',
     availableVariables: ['customer_name', 'booking_code', 'property_name', 'check_in_date', 'check_in_time', 'management_url'],
     isActive: true,
   },

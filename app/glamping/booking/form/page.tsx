@@ -36,10 +36,10 @@ const createBookingFormSchema = (t: any) => {
     createPassword: z.string().optional(),
 
     // New customer info fields
-    dateOfBirth: z.string().min(1, "Vui lòng nhập ngày sinh"),
-    socialMediaUrl: z.string().min(1, "Vui lòng nhập đường dẫn Facebook/Instagram"),
-    photoConsent: z.boolean(),
-    referralSource: z.string().min(1, "Vui lòng chọn nguồn giới thiệu"),
+    dateOfBirth: z.string().min(1, t('validation.dateOfBirthRequired')),
+    socialMediaUrl: z.string().optional(),
+    photoConsent: z.boolean().default(true),
+    referralSource: z.string().optional(),
 
     // Other Details
     partyNames: z.string().optional(),
@@ -124,6 +124,7 @@ function GlampingBookingFormContent() {
       country: "Vietnam",
       agreeTerms: false,
       paymentMethod: "pay_now" as const,
+      photoConsent: true,
     },
   })
 
@@ -233,7 +234,7 @@ function GlampingBookingFormContent() {
         // Now check if cart is empty AFTER it's initialized
         if (!cart || cart.items.length === 0) {
           console.log('[Booking Form] Cart is empty after initialization, redirecting...')
-          toast.error('Giỏ hàng trống')
+          toast.error(t('cart.empty'))
           router.push('/')
           return
         }
@@ -619,12 +620,12 @@ function GlampingBookingFormContent() {
   // Voucher handlers
   const handleVoucherApplied = (voucher: AppliedVoucher) => {
     setAppliedVoucher(voucher)
-    toast.success(`Áp dụng voucher ${voucher.code} thành công`)
+    toast.success(t('voucher.applied', { code: voucher.code }))
   }
 
   const handleVoucherRemoved = () => {
     setAppliedVoucher(null)
-    toast.success("Đã xóa voucher")
+    toast.success(t('voucher.removed'))
   }
 
   const onSubmit = async (data: BookingFormData) => {
@@ -825,11 +826,9 @@ function GlampingBookingFormContent() {
         if (error.errorCode === 'DATES_NOT_AVAILABLE') {
           await Swal.fire({
             icon: 'error',
-            title: locale === 'vi' ? 'Ngày đã được đặt' : 'Dates Already Booked',
-            html: locale === 'vi'
-              ? `Rất tiếc, mặt hàng này đã được đặt trong khoảng thời gian bạn chọn.<br/><br/>Vui lòng chọn ngày khác hoặc quay lại trang chi tiết để chọn ngày còn trống.`
-              : `Sorry, this item is already booked for the selected dates.<br/><br/>Please choose different dates or go back to the item details page to select available dates.`,
-            confirmButtonText: locale === 'vi' ? 'Đồng ý' : 'OK',
+            title: t('datesAlreadyBooked'),
+            html: t('datesAlreadyBookedMessage'),
+            confirmButtonText: t('confirmButton'),
           })
           return
         }
@@ -848,9 +847,9 @@ function GlampingBookingFormContent() {
       }
 
       if (result.paymentRequired) {
-        toast.success(locale === 'vi' ? 'Đặt phòng thành công! Vui lòng thanh toán.' : 'Booking created! Please complete payment.')
+        toast.success(t('bookingSuccessPayment'))
       } else {
-        toast.success(locale === 'vi' ? 'Đặt phòng thành công!' : 'Booking confirmed!')
+        toast.success(t('bookingSuccess'))
       }
 
       // Redirect to payment page
@@ -882,7 +881,7 @@ function GlampingBookingFormContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="mt-4 text-gray-600">Đang tải giỏ hàng...</p>
+          <p className="mt-4 text-gray-600">{t('cart.loading')}</p>
         </div>
       </div>
     )

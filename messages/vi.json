@@ -62,7 +62,7 @@
         "totalBookings": "đặt phòng"
     },
     "home": {
-        "heroTitle": "Đâu đâu cũng là nhà",
+        "heroTitle": "Comfy in Wild",
         "province": "Tỉnh thành",
         "provincePlaceholder": "Chọn tỉnh thành",
         "whereToGo": "Chọn campsite",
@@ -355,13 +355,30 @@
             "lastNameRequired": "Vui lòng nhập họ",
             "countryRequired": "Vui lòng chọn quốc gia",
             "phoneInvalid": "Số điện thoại không hợp lệ",
-            "termsRequired": "Bạn phải đồng ý với điều khoản đặt chỗ"
+            "termsRequired": "Bạn phải đồng ý với điều khoản đặt chỗ",
+            "dateOfBirthRequired": "Vui lòng nhập ngày sinh",
+            "socialMediaUrlRequired": "Vui lòng nhập đường dẫn Facebook/Instagram",
+            "referralSourceRequired": "Vui lòng chọn nguồn giới thiệu"
         },
         "errors": {
             "noPricingTitle": "Không thể đặt phòng",
             "noPricingMessage": "Một số ngày trong khoảng thời gian bạn chọn chưa có giá. Vui lòng chọn ngày khác.",
             "goBackToSelectDates": "Quay lại chọn ngày"
-        }
+        },
+        "cart": {
+            "empty": "Giỏ hàng trống",
+            "loading": "Đang tải giỏ hàng..."
+        },
+        "voucher": {
+            "applied": "Áp dụng voucher {code} thành công",
+            "removed": "Đã xóa voucher"
+        },
+        "addMoreTents": "Thêm lều",
+        "datesAlreadyBooked": "Ngày đã được đặt",
+        "datesAlreadyBookedMessage": "Rất tiếc, mặt hàng này đã được đặt trong khoảng thời gian bạn chọn. Vui lòng chọn ngày khác hoặc quay lại trang chi tiết để chọn ngày còn trống.",
+        "confirmButton": "Đồng ý",
+        "bookingSuccess": "Đặt phòng thành công!",
+        "bookingSuccessPayment": "Đặt phòng thành công! Vui lòng thanh toán."
     },
     "adminLogin": {
         "staffPortal": "Cổng Nhân Viên",
@@ -419,6 +436,31 @@
         "dailyManifest": "Biểu Đồ Hàng Ngày",
         "dailyList": "Danh Sách Hàng Ngày",
         "bookingNotes": "Ghi Chú",
+        "bookingNotesPage": {
+            "title": "Ghi Chú Booking",
+            "subtitle": "Tổng cộng {count} booking có ghi chú",
+            "refresh": "Làm mới",
+            "search": "Tìm kiếm",
+            "searchPlaceholder": "Tìm ghi chú, mã booking, khách hàng...",
+            "dateRange": "Khoảng ngày",
+            "staff": "Nhân viên",
+            "all": "Tất cả",
+            "resetFilters": "Đặt lại bộ lọc",
+            "fromDate": "Từ ngày",
+            "toDate": "Đến ngày",
+            "loading": "Đang tải...",
+            "noNotes": "Không tìm thấy ghi chú nào",
+            "date": "Ngày",
+            "customer": "Khách hàng",
+            "note": "Ghi chú",
+            "failedToLoad": "Không thể tải ghi chú",
+            "dateRangeOptions": {
+                "today": "Hôm nay",
+                "last7Days": "7 ngày qua",
+                "last30Days": "30 ngày qua",
+                "custom": "Tùy chỉnh"
+            }
+        },
         "calendar": "Lịch",
         "pricing": "Giá",
         "products": "Sản phẩm",
@@ -577,6 +619,67 @@
         "reportsTransactions": "Giao dịch",
         "reportsRevenue": "Doanh thu",
         "reportsBookingVolume": "Lượng Booking",
+        "reportsAdditionalCosts": "Chi phí phát sinh",
+        "reportsKitchenFood": "Món ăn cho bếp",
+        "reportKitchenFood": {
+            "title": "Món ăn cho bếp",
+            "subtitle": "Món ăn hàng ngày cần chuẩn bị cho bếp",
+            "noData": "Không có món ăn cho ngày này",
+            "summary": {
+                "date": "Ngày",
+                "totalTents": "Tổng lều",
+                "menuItemsSummary": "Tổng hợp món ăn"
+            },
+            "columns": {
+                "tentCount": "Số lều",
+                "bookingCode": "Mã booking",
+                "booker": "Người đặt",
+                "item": "Lều",
+                "guests": "Khách",
+                "menuItem": "Món ăn",
+                "quantity": "SL",
+                "notes": "Ghi chú"
+            },
+            "actions": {
+                "export": "Xuất",
+                "exportExcel": "Xuất Excel",
+                "exportCSV": "Xuất CSV",
+                "viewBooking": "Xem booking"
+            }
+        },
+        "reportAdditionalCosts": {
+            "title": "Chi phí phát sinh",
+            "subtitle": "Báo cáo chi phí phát sinh từ các booking",
+            "noData": "Không có dữ liệu",
+            "filters": {
+                "dateFrom": "Từ ngày",
+                "dateTo": "Đến ngày",
+                "bookingCode": "Mã booking",
+                "bookingCodePlaceholder": "Nhập mã...",
+                "reset": "Đặt lại"
+            },
+            "summary": {
+                "totalCount": "Tổng số",
+                "totalAmount": "Tổng tiền"
+            },
+            "columns": {
+                "index": "STT",
+                "createdAt": "Ngày tạo",
+                "bookingCode": "Mã booking",
+                "customer": "Khách hàng",
+                "name": "Tên chi phí",
+                "quantity": "SL",
+                "unitPrice": "Đơn giá",
+                "totalPrice": "Thành tiền",
+                "notes": "Ghi chú"
+            },
+            "actions": {
+                "export": "Xuất",
+                "exportExcel": "Xuất Excel",
+                "exportCSV": "Xuất CSV",
+                "viewBooking": "Xem booking"
+            }
+        },
         "reportBookingIndex": {
             "title": "Booking Index",
             "subtitle": "Tổng quan tất cả booking",
@@ -3934,6 +4037,7 @@
                     "pending": "Chờ Xử Lý",
                     "confirmed": "Đã Xác Nhận",
                     "checked_in": "Đã Check-in",
+                    "checked_out": "Đã Check-out",
                     "completed": "Hoàn Thành",
                     "cancelled": "Đã Hủy"
                 }
@@ -4961,5 +5065,35 @@
             "error": "Lỗi",
             "success": "Thành công"
         }
+    },
+    "glampingPayment": {
+        "depositPaymentTitle": "Thanh toán đặt cọc",
+        "fullPaymentTitle": "Thanh toán đặt chỗ",
+        "bookingCode": "Mã đặt chỗ",
+        "depositNote": "Lưu ý:",
+        "depositDescription": "Đây là tiền đặt cọc. Số tiền còn lại {balance} sẽ thanh toán khi checkout.",
+        "paymentReceived": "Đã nhận thanh toán!",
+        "redirectingToConfirmation": "Đang chuyển đến trang xác nhận...",
+        "emailReminder": "📧 Vui lòng kiểm tra email xác nhận trong hộp thư đến (Inbox), thư rác (Spam) hoặc tất cả thư (All Mail).",
+        "timeRemaining": "Thời gian còn lại để thanh toán",
+        "paymentExpired": "Đã hết hạn thanh toán",
+        "redirectingToSearch": "Đang chuyển về trang tìm kiếm trong 5 giây...",
+        "scanQrToPay": "Quét mã QR để thanh toán",
+        "scanQrInstruction": "Mở app ngân hàng, quét mã QR và xác nhận thanh toán",
+        "manualTransfer": "Hoặc chuyển khoản thủ công:",
+        "bank": "Ngân hàng:",
+        "accountNumber": "Số tài khoản:",
+        "accountHolder": "Chủ tài khoản:",
+        "amount": "Số tiền:",
+        "transferContent": "Nội dung:",
+        "transferNote": "Lưu ý:",
+        "transferNoteText": "Vui lòng nhập chính xác nội dung chuyển khoản để hệ thống tự động xác nhận thanh toán.",
+        "waitingForPayment": "Đang chờ xác nhận thanh toán...",
+        "loadingPaymentInfo": "Đang tải thông tin thanh toán...",
+        "paymentStatusError": "Không thể kiểm tra trạng thái thanh toán",
+        "helpText": "Gặp vấn đề?",
+        "contactSupport": "Liên hệ hỗ trợ",
+        "qrCodeAlt": "QR Code thanh toán",
+        "currency": "VNĐ"
     }
 }

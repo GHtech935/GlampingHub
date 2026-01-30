@@ -113,6 +113,7 @@ export async function GET(request: NextRequest) {
     const bookingsQuery = `
       SELECT
         bt.item_id,
+        bt.id as tent_id,
         i.name as item_name,
         i.category_id,
         COALESCE(cat.name, '{}') as category_name,
@@ -123,9 +124,6 @@ export async function GET(request: NextRequest) {
         b.total_amount,
         bt.check_in_date,
         bt.check_out_date,
-        bt.adults,
-        bt.children,
-        bt.total_guests,
         c.first_name as customer_first_name,
         c.last_name as customer_last_name,
         c.email as customer_email,
@@ -169,9 +167,6 @@ export async function GET(request: NextRequest) {
         COALESCE(ia.inventory_quantity, 1) as inventory_total,
         COUNT(DISTINCT bt.id) as booked_count,
         COALESCE(SUM(b.total_amount), 0) as total_amount,
-        COALESCE(SUM(bt.total_guests), 0) as total_guests,
-        COALESCE(SUM(bt.adults), 0) as total_adults,
-        COALESCE(SUM(bt.children), 0) as total_children,
         COUNT(DISTINCT bt.id) as total_quantity
       FROM glamping_items i
       LEFT JOIN glamping_categories cat ON i.category_id = cat.id
@@ -245,8 +240,6 @@ export async function GET(request: NextRequest) {
           bookings: [],
           subtotals: {
             totalAmount: 0,
-            adults: 0,
-            children: 0,
             totalGuests: 0,
             totalQuantity: 0,
             parameterBreakdown: {},
@@ -256,6 +249,7 @@ export async function GET(request: NextRequest) {
 
       const item = category.items.get(itemKey);
       const paramBreakdown = paramBreakdownMap.get(row.booking_id) || {};
+      const totalGuests = Object.values(paramBreakdown).reduce((sum: number, qty) => sum + (qty as number), 0);
 
       item.bookings.push({
         id: row.booking_id,
@@ -267,9 +261,7 @@ export async function GET(request: NextRequest) {
         customerPhone: row.customer_phone || "",
         source: null,
         totalAmount: parseFloat(row.total_amount || 0),
-        adults: row.adults || 0,
-        children: row.children || 0,
-        totalGuests: row.total_guests || 0,
+        totalGuests,
         totalQuantity: 1,
         checkInDate: row.check_in_date,
         checkOutDate: row.check_out_date,
@@ -277,9 +269,7 @@ export async function GET(request: NextRequest) {
       });
 
       item.subtotals.totalAmount += parseFloat(row.total_amount || 0);
-      item.subtotals.adults += row.adults || 0;
-      item.subtotals.children += row.children || 0;
-      item.subtotals.totalGuests += row.total_guests || 0;
+      item.subtotals.totalGuests += totalGuests;
       item.subtotals.totalQuantity += 1;
 
       // Aggregate parameter breakdown for subtotals
@@ -294,7 +284,7 @@ export async function GET(request: NextRequest) {
       items: Array.from(cat.items.values()),
     }));
 
-    // Build summary
+    // Build summary with parameter aggregation
     const summary = summaryResult.rows.map((row: any) => ({
       itemId: row.item_id,
       itemName: getLocalizedString(row.item_name),
@@ -303,23 +293,37 @@ export async function GET(request: NextRequest) {
       bookedCount: parseInt(row.booked_count || 0),
       inventoryPercent: Math.min(100, Math.round((parseInt(row.booked_count || 0) / Math.max(1, parseInt(row.inventory_total || 1))) * 100)),
       totalAmount: parseFloat(row.total_amount || 0),
-      totalGuests: parseInt(row.total_guests || 0),
-      totalAdults: parseInt(row.total_adults || 0),
-      totalChildren: parseInt(row.total_children || 0),
+      totalGuests: 0, // Will be calculated from parameters
       totalQuantity: parseInt(row.total_quantity || 0),
       parameterBreakdown: {},
     }));
 
+    // Calculate total guests from categories
+    let overallTotalGuests = 0;
+    const overallParamBreakdown: Record<string, number> = {};
+    for (const cat of categories) {
+      for (const item of cat.items) {
+        overallTotalGuests += item.subtotals.totalGuests;
+        for (const [pid, qty] of Object.entries(item.subtotals.parameterBreakdown)) {
+          overallParamBreakdown[pid] = (overallParamBreakdown[pid] || 0) + (qty as number);
+        }
+        // Update summary item's totalGuests
+        const summaryItem = summary.find((s: any) => s.itemId === item.itemId);
+        if (summaryItem) {
+          summaryItem.totalGuests = item.subtotals.totalGuests;
+          summaryItem.parameterBreakdown = item.subtotals.parameterBreakdown;
+        }
+      }
+    }
+
     const summaryTotals = {
       totalBookings: summary.reduce((acc: number, s: any) => acc + s.bookedCount, 0),
       totalAmount: summary.reduce((acc: number, s: any) => acc + s.totalAmount, 0),
-      totalGuests: summary.reduce((acc: number, s: any) => acc + s.totalGuests, 0),
-      totalAdults: summary.reduce((acc: number, s: any) => acc + s.totalAdults, 0),
-      totalChildren: summary.reduce((acc: number, s: any) => acc + s.totalChildren, 0),
+      totalGuests: overallTotalGuests,
       totalQuantity: summary.reduce((acc: number, s: any) => acc + s.totalQuantity, 0),
       totalInventory: summary.reduce((acc: number, s: any) => acc + s.inventoryTotal, 0),
       totalBooked: summary.reduce((acc: number, s: any) => acc + s.bookedCount, 0),
-      parameterBreakdown: {},
+      parameterBreakdown: overallParamBreakdown,
     };
 
     // Filter options

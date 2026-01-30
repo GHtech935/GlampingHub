@@ -575,7 +575,97 @@ export async function sendGlampingTemplateEmail({
 }
 
 /**
+ * Interface for tent item in booking confirmation email
+ */
+interface TentItemForEmail {
+  name: string;
+  checkInDate: string;
+  checkOutDate: string;
+  guests: number;
+}
+
+/**
+ * Generate HTML for tents section in email
+ * Supports both single tent and multiple tents
+ */
+function generateTentsSectionHTML(items: TentItemForEmail[]): string {
+  if (items.length === 0) {
+    return '';
+  }
+
+  if (items.length === 1) {
+    // Single tent: simpler layout
+    const item = items[0];
+    return `
+      <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Lều:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">${item.name}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Ngày check-in:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">${item.checkInDate}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Ngày check-out:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">${item.checkOutDate}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Số khách:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">${item.guests} người</td>
+          </tr>
+        </table>
+      </div>
+    `;
+  }
+
+  // Multiple tents: detailed card layout for each tent
+  const totalGuests = items.reduce((sum, item) => sum + item.guests, 0);
+
+  let html = `
+    <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin: 15px 0;">
+      <h3 style="font-size: 15px; font-weight: bold; color: #7c3aed; margin: 0 0 15px 0;">
+        🏕️ Danh sách lều đã đặt (${items.length} lều)
+      </h3>
+  `;
+
+  items.forEach((item, index) => {
+    html += `
+      <div style="background-color: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: ${index < items.length - 1 ? '12px' : '0'};">
+        <div style="font-weight: 600; color: #1f2937; font-size: 14px; margin-bottom: 8px;">
+          ${index + 1}. ${item.name}
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span style="background-color: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 12px; color: #4b5563;">
+            📅 ${item.checkInDate} → ${item.checkOutDate}
+          </span>
+          <span style="background-color: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 12px; color: #4b5563;">
+            👥 ${item.guests} người
+          </span>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `
+      <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+        <table style="width: 100%;">
+          <tr>
+            <td style="color: #6b7280; font-size: 14px;">Tổng số khách:</td>
+            <td style="color: #1f2937; font-size: 14px; font-weight: 600; text-align: right;">${totalGuests} người</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  `;
+
+  return html;
+}
+
+/**
  * Send glamping booking confirmation email to customer
+ * Supports both single tent and multiple tents
  */
 export async function sendGlampingBookingConfirmation({
   customerEmail,
@@ -588,6 +678,7 @@ export async function sendGlampingBookingConfirmation({
   totalAmount,
   numberOfGuests,
   glampingBookingId,
+  items,
 }: {
   customerEmail: string;
   customerName: string;
@@ -599,9 +690,25 @@ export async function sendGlampingBookingConfirmation({
   totalAmount: number;
   numberOfGuests: number;
   glampingBookingId: string;
+  items?: TentItemForEmail[];
 }) {
   const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
   const confirmationUrl = `${appUrl}/glamping/booking/confirmation/${bookingCode}`;
+
+  // Generate tents section HTML
+  let tentsSection: string;
+  if (items && items.length > 0) {
+    // Use items array for detailed tent info
+    tentsSection = generateTentsSectionHTML(items);
+  } else {
+    // Fallback: generate from single item data
+    tentsSection = generateTentsSectionHTML([{
+      name: itemName || 'Lều',
+      checkInDate,
+      checkOutDate,
+      guests: numberOfGuests,
+    }]);
+  }
 
   return sendGlampingTemplateEmail({
     templateSlug: 'glamping-booking-confirmation',
@@ -610,11 +717,8 @@ export async function sendGlampingBookingConfirmation({
       customer_name: customerName,
       booking_reference: bookingCode,
       zone_name: zoneName,
-      item_name: itemName || '',
-      checkin_date: checkInDate,
-      checkout_date: checkOutDate,
+      tents_section: tentsSection,
       total_amount: formatCurrency(totalAmount),
-      number_of_guests: numberOfGuests,
       confirmation_url: confirmationUrl,
     },
     glampingBookingId,
@@ -1093,7 +1197,9 @@ export async function sendGlampingPostStayThankYou({
 }
 
 /**
- * Send menu selection reminder email (48h before check-in)
+ * Send menu selection reminder email
+ * @param daysUntilCheckin - Number of days until check-in (1, 2, or 3)
+ * Uses day-specific templates: glamping-menu-selection-reminder-day-{N}
  */
 export async function sendGlampingMenuSelectionReminder({
   customerEmail,
@@ -1102,6 +1208,8 @@ export async function sendGlampingMenuSelectionReminder({
   propertyName,
   checkInDate,
   checkInTime,
+  daysUntilCheckin,
+  glampingBookingId,
 }: {
   customerEmail: string;
   customerName: string;
@@ -1109,11 +1217,23 @@ export async function sendGlampingMenuSelectionReminder({
   propertyName: string;
   checkInDate: string;
   checkInTime: string;
+  daysUntilCheckin?: number;
+  glampingBookingId?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const managementUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${bookingCode}`;
 
+  // Determine template slug based on days until check-in
+  let templateSlug = 'glamping-menu-selection-reminder'; // fallback to legacy template
+  if (daysUntilCheckin === 3) {
+    templateSlug = 'glamping-menu-selection-reminder-day-3';
+  } else if (daysUntilCheckin === 2) {
+    templateSlug = 'glamping-menu-selection-reminder-day-2';
+  } else if (daysUntilCheckin === 1) {
+    templateSlug = 'glamping-menu-selection-reminder-day-1';
+  }
+
   return sendGlampingTemplateEmail({
-    templateSlug: 'glamping-menu-selection-reminder',
+    templateSlug,
     to: [{ email: customerEmail, name: customerName }],
     variables: {
       customer_name: customerName,
@@ -1123,5 +1243,43 @@ export async function sendGlampingMenuSelectionReminder({
       check_in_time: checkInTime,
       management_url: managementUrl,
     },
+    glampingBookingId,
+  });
+}
+
+/**
+ * Send trip reminder email 24h before check-in (for customers who HAVE selected menu)
+ */
+export async function sendGlampingTripReminder({
+  customerEmail,
+  customerName,
+  bookingCode,
+  propertyName,
+  checkInDate,
+  checkInTime,
+  glampingBookingId,
+}: {
+  customerEmail: string;
+  customerName: string;
+  bookingCode: string;
+  propertyName: string;
+  checkInDate: string;
+  checkInTime: string;
+  glampingBookingId?: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const managementUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${bookingCode}`;
+
+  return sendGlampingTemplateEmail({
+    templateSlug: 'glamping-trip-reminder',
+    to: [{ email: customerEmail, name: customerName }],
+    variables: {
+      customer_name: customerName,
+      booking_code: bookingCode,
+      property_name: propertyName,
+      check_in_date: checkInDate,
+      check_in_time: checkInTime,
+      management_url: managementUrl,
+    },
+    glampingBookingId,
   });
 }

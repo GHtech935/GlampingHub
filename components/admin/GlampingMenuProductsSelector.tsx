@@ -169,7 +169,14 @@ export function GlampingMenuProductsSelector({
       return currentQty // Keep current, don't allow increasing
     }
 
-    const guestBasedMax = Math.ceil(remainingGuests / max_guests)
+    // FIX: For fixed combos (min_guests = max_guests), use floor to ensure
+    // total servings don't exceed guest count
+    // For variable combos, ceil allows flexibility
+    const isFixedCombo = min_guests === max_guests
+    const guestBasedMax = isFixedCombo
+      ? Math.floor(remainingGuests / max_guests)  // Fixed: 5/2 = 2 (4 servings ≤ 5 guests)
+      : Math.ceil(remainingGuests / max_guests)   // Variable: allows flexibility
+
     // Also respect max_quantity if set
     return item.max_quantity ? Math.min(guestBasedMax, item.max_quantity) : guestBasedMax
   }

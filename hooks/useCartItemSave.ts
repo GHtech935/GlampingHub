@@ -1,6 +1,5 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { differenceInDays } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
 import { useGlampingCart, type GlampingCartItem, type MenuProductSelection } from '@/components/providers/GlampingCartProvider';
 import type { DateRange } from 'react-day-picker';
 import type { AppliedVoucher } from '@/components/booking/VoucherInput';
@@ -12,6 +11,7 @@ interface CartItemFormState {
   menuProducts: Record<number, Record<string, MenuProductSelection>>; // Per-night structure
   accommodationVoucher: AppliedVoucher | null;
   totalGuests: number;
+  isDirty?: boolean;
 }
 
 interface UseCartItemSaveParams {
@@ -21,7 +21,10 @@ interface UseCartItemSaveParams {
   pricingData: any;
   menuProductsData: MenuProduct[];
   parametersData?: any[]; // Add parameters data
+  autoSave?: boolean; // Enable auto-save mode
 }
+
+export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface UseCartItemSaveReturn {
   handleSave: () => Promise<void>;
@@ -29,12 +32,15 @@ interface UseCartItemSaveReturn {
   error: Error | null;
   menuProductsTotal: number;
   menuDiscountAmount: number;
+  autoSaveStatus: AutoSaveStatus;
 }
 
+const AUTO_SAVE_DELAY = 500; // 500ms debounce
+
 /**
- * Hook for saving cart item changes
+ * Hook for saving cart item changes with optional auto-save
  * @param params - Save parameters
- * @returns Save handler, saving state, and error
+ * @returns Save handler, saving state, error, and auto-save status
  */
 export function useCartItemSave({
   cartItemId,
@@ -42,12 +48,15 @@ export function useCartItemSave({
   formState,
   pricingData,
   menuProductsData,
-  parametersData = []
+  parametersData = [],
+  autoSave = false
 }: UseCartItemSaveParams): UseCartItemSaveReturn {
   const { updateCartItem } = useGlampingCart();
-  const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>('idle');
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const savedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Calculate menu products total (base price before discounts) - sum across all nights
   const menuProductsTotal = useMemo(() => {
@@ -77,17 +86,19 @@ export function useCartItemSave({
     }, 0);
   }, [formState.menuProducts]);
 
-  const handleSave = useCallback(async () => {
+  // Core save logic without toast (for auto-save)
+  const performSave = useCallback(async (silent: boolean = false) => {
     if (!item || !formState.dateRange?.from || !formState.dateRange?.to) {
-      toast({
-        title: 'Lỗi',
-        description: 'Vui lòng chọn ngày nhận phòng và trả phòng',
-        variant: 'destructive'
-      });
+      if (!silent) {
+        setError(new Error('Vui lòng chọn ngày nhận phòng và trả phòng'));
+      }
       return;
     }
 
     setIsSaving(true);
+    if (autoSave) {
+      setAutoSaveStatus('saving');
+    }
     setError(null);
 
     try {
@@ -182,29 +193,74 @@ export function useCartItemSave({
         totalPrice: subtotal
       });
 
-      toast({
-        title: 'Đã cập nhật',
-        description: 'Thông tin lều đã được cập nhật thành công',
-      });
+      if (autoSave) {
+        setAutoSaveStatus('saved');
+        // Clear "saved" status after 2 seconds
+        if (savedTimeoutRef.current) {
+          clearTimeout(savedTimeoutRef.current);
+        }
+        savedTimeoutRef.current = setTimeout(() => {
+          setAutoSaveStatus('idle');
+        }, 2000);
+      }
     } catch (err) {
       console.error('Error updating cart item:', err);
       setError(err as Error);
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể cập nhật thông tin lều',
-        variant: 'destructive'
-      });
+      if (autoSave) {
+        setAutoSaveStatus('error');
+      }
       throw err;
     } finally {
       setIsSaving(false);
     }
-  }, [item, formState, pricingData, menuProductsData, menuProductsTotal, menuDiscountAmount, cartItemId, updateCartItem, toast]);
+  }, [item, formState, pricingData, menuProductsTotal, menuDiscountAmount, cartItemId, updateCartItem, parametersData, autoSave]);
+
+  // Public handleSave function (for manual save)
+  const handleSave = useCallback(async () => {
+    await performSave(false);
+  }, [performSave]);
+
+  // Auto-save effect: debounce and save when form state changes
+  useEffect(() => {
+    if (!autoSave || !formState.isDirty) {
+      return;
+    }
+
+    // Clear any existing debounce timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set new debounce timeout
+    debounceTimeoutRef.current = setTimeout(() => {
+      performSave(true);
+    }, AUTO_SAVE_DELAY);
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [autoSave, formState, performSave]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+      if (savedTimeoutRef.current) {
+        clearTimeout(savedTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return {
     handleSave,
     isSaving,
     error,
     menuProductsTotal,
-    menuDiscountAmount
+    menuDiscountAmount,
+    autoSaveStatus
   };
 }

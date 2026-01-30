@@ -83,18 +83,22 @@ export function BookingStayItemsSection({
               </div>
             )}
 
-            {period.totalGuests > 0 && (
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-gray-400" />
-                <div>
-                  <p className="text-gray-600">{locale === 'vi' ? 'Khách' : 'Guests'}</p>
-                  <p className="font-medium">
-                    {period.adultsCount} {locale === 'vi' ? 'người lớn' : 'adults'}
-                    {period.childrenCount > 0 && `, ${period.childrenCount} ${locale === 'vi' ? 'trẻ em' : 'children'}`}
-                  </p>
+            {period.parameterGroups && period.parameterGroups.length > 0 && (() => {
+              const periodGuests = period.parameterGroups.reduce((sum, pg) => sum + (pg.quantity || 0), 0);
+              const guestsDisplay = period.parameterGroups
+                .filter(pg => pg.quantity > 0)
+                .map(pg => `${pg.quantity} ${pg.parameterName}`)
+                .join(', ');
+              return periodGuests > 0 && (
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-gray-400" />
+                  <div>
+                    <p className="text-gray-600">{locale === 'vi' ? 'Khách' : 'Guests'}</p>
+                    <p className="font-medium">{guestsDisplay}</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-gray-400" />
@@ -202,7 +206,7 @@ export function BookingStayItemsSection({
                 )}
 
                 {/* Guests */}
-                {period.totalGuests > 0 && (
+                {period.parameterGroups && period.parameterGroups.some(pg => pg.quantity > 0) && (
                   <div className="flex items-start gap-2">
                     <Users className="h-4 w-4 text-gray-400 mt-0.5" />
                     <div className="flex-1">
@@ -210,15 +214,7 @@ export function BookingStayItemsSection({
                         {locale === 'vi' ? 'Số khách' : 'Guests'}
                       </p>
                       <p className="font-medium">
-                        {period.parameterGroups && period.parameterGroups.filter(pg => pg.quantity > 0).length > 0
-                          ? period.parameterGroups.filter(pg => pg.quantity > 0).map(pg => `${pg.parameterName}: ${pg.quantity}`).join(', ')
-                          : (
-                            <>
-                              {period.adultsCount} {locale === 'vi' ? 'người lớn' : 'adults'}
-                              {period.childrenCount > 0 && `, ${period.childrenCount} ${locale === 'vi' ? 'trẻ em' : 'children'}`}
-                            </>
-                          )
-                        }
+                        {period.parameterGroups.filter(pg => pg.quantity > 0).map(pg => `${pg.parameterName}: ${pg.quantity}`).join(', ')}
                       </p>
                     </div>
                   </div>

@@ -103,7 +103,7 @@ export async function PATCH(
 
 /**
  * DELETE /api/admin/glamping/bookings/[id]/payments/[paymentId]
- * Delete (soft) a payment record
+ * Soft delete a payment record
  */
 export async function DELETE(
   request: NextRequest,
@@ -118,8 +118,8 @@ export async function DELETE(
     }
 
     const { id, paymentId } = await params;
-    const body = await request.json();
-    const { reason } = body;
+    const body = await request.json().catch(() => ({}));
+    const { reason } = body as { reason?: string };
 
     // Check if booking exists
     const bookingResult = await client.query(
@@ -150,7 +150,7 @@ export async function DELETE(
     // Soft delete by updating status
     await client.query(
       `UPDATE glamping_booking_payments
-       SET status = 'deleted', notes = CONCAT(COALESCE(notes, ''), ' [Deleted: ', $1, ']')
+       SET status = 'deleted', notes = CONCAT(COALESCE(notes, ''), ' [Deleted: ', $1::TEXT, ']')
        WHERE id = $2`,
       [reason || 'No reason provided', paymentId]
     );

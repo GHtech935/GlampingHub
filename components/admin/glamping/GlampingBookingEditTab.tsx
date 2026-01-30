@@ -13,13 +13,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Plus } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import type { Locale } from "@/lib/i18n-utils";
-import type { TentEditData, ProductEditData } from "./types";
+import type { TentEditData, ProductEditData, BookingAdditionalCost } from "./types";
 import { GlampingEditTentModal } from "./GlampingEditTentModal";
 import { GlampingEditMenuProductModal } from "./GlampingEditMenuProductModal";
+import { AddAdditionalCostModal } from "./AddAdditionalCostModal";
+import { GlampingEditAdditionalCostModal } from "./GlampingEditAdditionalCostModal";
 
 interface TentItem {
   id: string;
@@ -28,9 +30,6 @@ interface TentItem {
   checkInDate: string;
   checkOutDate: string;
   nights: number;
-  adults: number;
-  children: number;
-  totalGuests: number;
   subtotal: number;
   taxAmount: number;
   specialRequests?: string;
@@ -61,9 +60,21 @@ interface MenuProductItem {
   discountAmount: number;
 }
 
+interface AdditionalCostItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  taxRate: number;
+  taxAmount: number;
+  notes?: string | null;
+}
+
 interface EditItemsData {
   tents: TentItem[];
   menuProducts: MenuProductItem[];
+  additionalCosts: AdditionalCostItem[];
   totals: {
     subtotal: number;
     discountTotal: number;
@@ -106,6 +117,7 @@ const texts = {
     confirmDeleteTitle: 'Xác nhận xoá',
     confirmDeleteTent: 'Bạn có chắc muốn xoá lều này? Tất cả sản phẩm menu liên quan cũng sẽ bị xoá.',
     confirmDeleteProduct: 'Bạn có chắc muốn xoá sản phẩm menu này?',
+    confirmDeleteAdditionalCost: 'Bạn có chắc muốn xoá chi phí phát sinh này?',
     cancel: 'Huỷ',
     confirm: 'Xoá',
     deleteSuccess: 'Đã xoá thành công',
@@ -113,6 +125,9 @@ const texts = {
     guests: 'khách',
     nights: 'đêm',
     voucher: 'Voucher',
+    additionalCosts: 'Chi phí phát sinh',
+    addAdditionalCost: 'Thêm',
+    unitPrice: 'Đơn giá',
   },
   en: {
     loading: 'Loading...',
@@ -134,6 +149,7 @@ const texts = {
     confirmDeleteTitle: 'Confirm Delete',
     confirmDeleteTent: 'Are you sure you want to delete this tent? All associated menu products will also be deleted.',
     confirmDeleteProduct: 'Are you sure you want to delete this menu product?',
+    confirmDeleteAdditionalCost: 'Are you sure you want to delete this additional cost?',
     cancel: 'Cancel',
     confirm: 'Delete',
     deleteSuccess: 'Deleted successfully',
@@ -141,6 +157,9 @@ const texts = {
     guests: 'guests',
     nights: 'nights',
     voucher: 'Voucher',
+    additionalCosts: 'Additional Costs',
+    addAdditionalCost: 'Add',
+    unitPrice: 'Unit Price',
   },
 };
 
@@ -156,8 +175,10 @@ export function GlampingBookingEditTab({
   const [loading, setLoading] = useState(true);
   const [editingTent, setEditingTent] = useState<TentEditData | null>(null);
   const [editingProduct, setEditingProduct] = useState<ProductEditData | null>(null);
+  const [editingAdditionalCost, setEditingAdditionalCost] = useState<AdditionalCostItem | null>(null);
+  const [showAddCostModal, setShowAddCostModal] = useState(false);
   const [deletingItem, setDeletingItem] = useState<{
-    type: 'tent' | 'menu_product';
+    type: 'tent' | 'menu_product' | 'additional_cost';
     id: string;
     name: string;
   } | null>(null);
@@ -187,9 +208,14 @@ export function GlampingBookingEditTab({
 
     try {
       setDeleting(true);
-      const endpoint = deletingItem.type === 'tent'
-        ? `/api/admin/glamping/bookings/${booking.id}/tents/${deletingItem.id}`
-        : `/api/admin/glamping/bookings/${booking.id}/menu-products/${deletingItem.id}`;
+      let endpoint: string;
+      if (deletingItem.type === 'tent') {
+        endpoint = `/api/admin/glamping/bookings/${booking.id}/tents/${deletingItem.id}`;
+      } else if (deletingItem.type === 'menu_product') {
+        endpoint = `/api/admin/glamping/bookings/${booking.id}/menu-products/${deletingItem.id}`;
+      } else {
+        endpoint = `/api/admin/glamping/bookings/${booking.id}/additional-costs/${deletingItem.id}`;
+      }
 
       const res = await fetch(endpoint, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete');
@@ -218,6 +244,13 @@ export function GlampingBookingEditTab({
     onRefresh();
   };
 
+  const handleAdditionalCostSaved = () => {
+    setEditingAdditionalCost(null);
+    setShowAddCostModal(false);
+    fetchItems();
+    onRefresh();
+  };
+
   const openTentEdit = (tent: TentItem) => {
     setEditingTent({
       id: tent.id,
@@ -227,9 +260,6 @@ export function GlampingBookingEditTab({
       checkInDate: tent.checkInDate,
       checkOutDate: tent.checkOutDate,
       nights: tent.nights,
-      adults: tent.adults,
-      children: tent.children,
-      totalGuests: tent.totalGuests,
       subtotal: tent.subtotal,
       specialRequests: tent.specialRequests,
       voucherCode: tent.voucherCode,
@@ -316,7 +346,9 @@ export function GlampingBookingEditTab({
                       )}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <span className="text-gray-900">{tent.totalGuests} {t.guests}</span>
+                      <span className="text-gray-900">
+                        {tent.parameters.reduce((sum, p) => sum + p.quantity, 0)} {t.guests}
+                      </span>
                     </td>
                     <td className="px-3 py-3">
                       <div className="text-gray-900">
@@ -427,6 +459,86 @@ export function GlampingBookingEditTab({
         </div>
       )}
 
+      {/* Additional Costs Section */}
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="px-4 py-3 bg-amber-50 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-amber-700">{t.additionalCosts}</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddCostModal(true)}
+            disabled={isUpdating}
+            className="h-7 px-2 text-xs border-amber-300 text-amber-600 hover:bg-amber-100"
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            {t.addAdditionalCost}
+          </Button>
+        </div>
+        {data.additionalCosts && data.additionalCosts.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50/50">
+                  <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.qty}</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.unitPrice}</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.total}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.additionalCosts.map((cost) => (
+                  <tr key={cost.id} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900">{cost.name}</div>
+                      {cost.notes && (
+                        <div className="text-xs text-gray-500 mt-0.5">{cost.notes}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center text-gray-900">
+                      {cost.quantity}
+                    </td>
+                    <td className="px-3 py-3 text-right text-gray-900">
+                      {formatCurrency(cost.unitPrice)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-medium text-gray-900">
+                      {formatCurrency(cost.totalPrice)}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setEditingAdditionalCost(cost)}
+                          disabled={isUpdating}
+                        >
+                          <Pencil className="h-3 w-3 mr-1" />
+                          {t.edit}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => setDeletingItem({ type: 'additional_cost', id: cost.id, name: cost.name })}
+                          disabled={isUpdating}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-4 text-center text-sm text-gray-500">
+            {locale === 'vi' ? 'Chưa có chi phí phát sinh' : 'No additional costs'}
+          </div>
+        )}
+      </div>
+
       {/* Totals Summary */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
         <div className="space-y-2">
@@ -474,13 +586,38 @@ export function GlampingBookingEditTab({
         />
       )}
 
+      {/* Add Additional Cost Modal */}
+      <AddAdditionalCostModal
+        isOpen={showAddCostModal}
+        onClose={() => setShowAddCostModal(false)}
+        onSave={handleAdditionalCostSaved}
+        bookingId={booking.id}
+        locale={locale}
+      />
+
+      {/* Edit Additional Cost Modal */}
+      {editingAdditionalCost && (
+        <GlampingEditAdditionalCostModal
+          isOpen={!!editingAdditionalCost}
+          onClose={() => setEditingAdditionalCost(null)}
+          onSave={handleAdditionalCostSaved}
+          cost={editingAdditionalCost}
+          bookingId={booking.id}
+          locale={locale}
+        />
+      )}
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && setDeletingItem(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t.confirmDeleteTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              {deletingItem?.type === 'tent' ? t.confirmDeleteTent : t.confirmDeleteProduct}
+              {deletingItem?.type === 'tent'
+                ? t.confirmDeleteTent
+                : deletingItem?.type === 'menu_product'
+                  ? t.confirmDeleteProduct
+                  : t.confirmDeleteAdditionalCost}
               <br />
               <span className="font-medium mt-2 block">{deletingItem?.name}</span>
             </AlertDialogDescription>

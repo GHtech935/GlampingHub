@@ -62,6 +62,10 @@ interface GlampingDateRangePickerWithCalendarProps {
   loadingParameters?: boolean
   // Optional override for parameter pricing (from real-time booking API with group pricing)
   overrideParameterPricing?: Record<string, number>
+  // Optional override for nightly pricing breakdown (from real-time booking API with group pricing)
+  overrideNightlyPricing?: Array<{ date: string; parameters: Record<string, number> }>
+  // Loading state for pricing (from parent's pricing hook)
+  pricingLoading?: boolean
 }
 
 export function GlampingDateRangePickerWithCalendar({
@@ -74,7 +78,9 @@ export function GlampingDateRangePickerWithCalendar({
   parameterQuantities = {},
   onQuantitiesChange = () => {},
   loadingParameters = false,
-  overrideParameterPricing
+  overrideParameterPricing,
+  overrideNightlyPricing,
+  pricingLoading = false
 }: GlampingDateRangePickerWithCalendarProps) {
   const [calendar, setCalendar] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(false)
@@ -189,7 +195,11 @@ export function GlampingDateRangePickerWithCalendar({
   }, [calendar, dateRange])
 
   // Re-fetch pricing with group tiers when quantities change
+  // Skip if overrideParameterPricing is provided (parent is handling pricing)
   useEffect(() => {
+    // When parent provides override pricing, don't fetch internally
+    if (overrideParameterPricing !== undefined) return
+
     if (!itemId || !dateRange?.from || !dateRange?.to) return
 
     const hasQuantity = Object.values(parameterQuantities).some(q => q > 0)
@@ -236,7 +246,7 @@ export function GlampingDateRangePickerWithCalendar({
 
     const timer = setTimeout(fetchGroupPricing, 300)
     return () => clearTimeout(timer)
-  }, [itemId, dateRange, parameterQuantities])
+  }, [itemId, dateRange, parameterQuantities, overrideParameterPricing])
 
   const goToPreviousMonth = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))
@@ -541,10 +551,21 @@ export function GlampingDateRangePickerWithCalendar({
                       onQuantitiesChange={onQuantitiesChange}
                       locale={locale}
                       disabled={disabled}
-                      parameterPricing={overrideParameterPricing || parameterPricing}
+                      // When pricingLoading is true, use empty object to prevent showing wrong prices
+                      // Otherwise use override (with group pricing) or fallback to calendar-based pricing
+                      parameterPricing={pricingLoading ? {} : (overrideParameterPricing || parameterPricing)}
                       nights={nights}
                       dateRange={dateRange}
-                      nightlyParameterPricing={nightlyParameterPricing}
+                      // Use override nightly pricing (with group pricing) or fallback to calendar-based
+                      // Transform override format: { date, parameters } → { date, pricing }
+                      nightlyParameterPricing={
+                        pricingLoading
+                          ? []
+                          : overrideNightlyPricing
+                            ? overrideNightlyPricing.map(n => ({ date: n.date, pricing: n.parameters }))
+                            : nightlyParameterPricing
+                      }
+                      pricingLoading={pricingLoading}
                     />
                   )}
                 </div>

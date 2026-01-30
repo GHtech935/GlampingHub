@@ -248,6 +248,18 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               icon: BarChart2,
               roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
             },
+            {
+              name: t('reportsAdditionalCosts'),
+              href: `${zonePrefix}/reports/additional-costs`,
+              icon: Receipt,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('reportsKitchenFood'),
+              href: `${zonePrefix}/reports/kitchen-food`,
+              icon: UtensilsCrossed,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
           ],
         },
         { name: t('categoryTag'), href: `${zonePrefix}/categories`, icon: Folder, roles: ['admin', 'owner', 'glamping_owner'] },

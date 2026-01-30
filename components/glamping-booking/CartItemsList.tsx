@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { X, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
+import Link from 'next/link';
+import { X, Edit2, ChevronDown, ChevronUp, Tent, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,11 +12,16 @@ import { useGlampingCart, GlampingCartItem, isPerNightMenuProducts } from '@/com
 import { CartItemInlineEditForm } from './CartItemInlineEditForm';
 import { format, addDays } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { useTranslations } from 'next-intl';
 
 export function CartItemsList() {
   const { cart, removeFromCart, clearCart } = useGlampingCart();
   const [expandedMenuItems, setExpandedMenuItems] = useState<Set<string>>(new Set());
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const t = useTranslations('booking');
+
+  // Get zoneId from first item in cart
+  const zoneId = cart?.items?.[0]?.zoneId;
 
   if (!cart || cart.items.length === 0) {
     return null;
@@ -34,14 +40,8 @@ export function CartItemsList() {
   };
 
   const handleEditItem = (itemId: string) => {
-    if (editingItemId && editingItemId !== itemId) {
-      // Another item is being edited
-      if (confirm('Bạn đang chỉnh sửa lều khác. Bỏ các thay đổi và chỉnh sửa lều này?')) {
-        setEditingItemId(itemId);
-      }
-    } else {
-      setEditingItemId(editingItemId === itemId ? null : itemId);
-    }
+    // Auto-save is enabled, so we can switch items without confirmation
+    setEditingItemId(editingItemId === itemId ? null : itemId);
   };
 
   const formatDate = (dateString: string) => {
@@ -65,15 +65,30 @@ export function CartItemsList() {
         <h2 className="text-xl font-semibold">
           Giỏ hàng của bạn ({cart.items.length} {cart.items.length === 1 ? 'lều' : 'lều'})
         </h2>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={clearCart}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-        >
-          Xóa tất cả
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Add More Tents button */}
+          {zoneId && (
+            <Link
+              href={`/glamping/zones/${zoneId}`}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-green-700 text-white px-3 py-1.5 text-sm rounded-full shadow-sm transition-all hover:scale-105"
+            >
+              <div className="relative">
+                <Tent className="h-4 w-4" />
+                <Plus className="h-2.5 w-2.5 absolute -top-0.5 -right-0.5 bg-white text-primary rounded-full" />
+              </div>
+              <span className="font-medium">{t('addMoreTents')}</span>
+            </Link>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={clearCart}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            Xóa tất cả
+          </Button>
+        </div>
       </div>
 
       {/* Zone Info */}
@@ -91,6 +106,41 @@ export function CartItemsList() {
           const isMenuExpanded = expandedMenuItems.has(item.id);
           const hasMenuProducts = item.menuProducts && Object.keys(item.menuProducts).length > 0;
           const isEditing = editingItemId === item.id;
+
+          // Calculate prices real-time from item data instead of using cached pricingBreakdown
+          const accommodationCost = item.pricingBreakdown?.accommodationCost || item.totalPrice || item.basePrice || 0;
+          const accommodationDiscount = item.accommodationVoucher?.discountAmount || 0;
+
+          // Calculate menu products total and discount from menuProducts
+          let menuProductsCost = 0;
+          let menuDiscount = 0;
+          if (item.menuProducts) {
+            if (isPerNightMenuProducts(item.menuProducts)) {
+              // Per-night format
+              Object.values(item.menuProducts).forEach((nightSelections) => {
+                if (nightSelections) {
+                  Object.values(nightSelections).forEach((selection) => {
+                    if (selection && selection.quantity > 0) {
+                      menuProductsCost += (selection.price || 0) * selection.quantity;
+                      menuDiscount += selection.voucher?.discountAmount || 0;
+                    }
+                  });
+                }
+              });
+            } else {
+              // Flat format
+              Object.values(item.menuProducts).forEach((selection: any) => {
+                if (selection && selection.quantity > 0) {
+                  menuProductsCost += (selection.price || 0) * selection.quantity;
+                  menuDiscount += selection.voucher?.discountAmount || 0;
+                }
+              });
+            }
+          }
+
+          // Calculate real subtotal
+          const realSubtotal = accommodationCost - accommodationDiscount + menuProductsCost - menuDiscount;
+          const realGrossTotal = accommodationCost + menuProductsCost; // Total before any discounts
 
           return (
             <Card key={item.id} className="overflow-hidden">
@@ -150,14 +200,11 @@ export function CartItemsList() {
                           size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
+                            // Auto-save handles saving, so we can delete directly
                             if (isEditing) {
-                              if (confirm('Bỏ các thay đổi và xóa lều này?')) {
-                                setEditingItemId(null);
-                                removeFromCart(item.id);
-                              }
-                            } else {
-                              removeFromCart(item.id);
+                              setEditingItemId(null);
                             }
+                            removeFromCart(item.id);
                           }}
                           className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
@@ -241,7 +288,6 @@ export function CartItemsList() {
                                       {Object.entries(nightSelections).map(([productId, selection]) => {
                                         const itemTotal = selection.price * selection.quantity;
                                         const discount = selection.voucher?.discountAmount || 0;
-                                        const finalPrice = itemTotal - discount;
 
                                         return (
                                           <div key={productId} className="space-y-1">
@@ -249,7 +295,8 @@ export function CartItemsList() {
                                               <span>
                                                 {selection.name} x {selection.quantity}
                                               </span>
-                                              <span>{formatPrice(finalPrice)}</span>
+                                              {/* Show original price (before discount) */}
+                                              <span>{formatPrice(itemTotal)}</span>
                                             </div>
                                             {selection.voucher && (
                                               <div className="flex justify-between text-xs text-green-600 pl-4">
@@ -269,7 +316,6 @@ export function CartItemsList() {
                               Object.entries(item.menuProducts).map(([productId, selection]) => {
                                 const itemTotal = selection.price * selection.quantity;
                                 const discount = selection.voucher?.discountAmount || 0;
-                                const finalPrice = itemTotal - discount;
 
                                 return (
                                   <div key={productId} className="space-y-1">
@@ -277,7 +323,8 @@ export function CartItemsList() {
                                       <span>
                                         {selection.name} x {selection.quantity}
                                       </span>
-                                      <span>{formatPrice(finalPrice)}</span>
+                                      {/* Show original price (before discount) */}
+                                      <span>{formatPrice(itemTotal)}</span>
                                     </div>
                                     {selection.voucher && (
                                       <div className="flex justify-between text-xs text-green-600 pl-4">
@@ -313,16 +360,15 @@ export function CartItemsList() {
                       <div className="flex justify-between items-center pt-3 border-t mt-3">
                         <span className="text-sm text-muted-foreground">Giá lều này:</span>
                         <div className="text-right">
-                          {(item.accommodationVoucher || Object.values(item.menuProducts).some(s => s.voucher)) && (
+                          {/* Show strikethrough price if there are any discounts */}
+                          {(accommodationDiscount > 0 || menuDiscount > 0) && realGrossTotal > realSubtotal && (
                             <div className="text-sm text-gray-400 line-through">
-                              {formatPrice(
-                                (item.pricingBreakdown?.accommodationCost || 0) +
-                                (item.pricingBreakdown?.menuProductsCost || 0)
-                              )}
+                              {formatPrice(realGrossTotal)}
                             </div>
                           )}
+                          {/* Show real-time calculated subtotal */}
                           <span className="text-lg font-semibold text-blue-600">
-                            {formatPrice(item.pricingBreakdown?.subtotal || item.totalPrice || item.basePrice)}
+                            {formatPrice(realSubtotal)}
                           </span>
                         </div>
                       </div>
@@ -335,8 +381,6 @@ export function CartItemsList() {
                   <CollapsibleContent>
                     <CartItemInlineEditForm
                       item={item}
-                      onSave={() => setEditingItemId(null)}
-                      onCancel={() => setEditingItemId(null)}
                       isOpen={isEditing}
                     />
                   </CollapsibleContent>

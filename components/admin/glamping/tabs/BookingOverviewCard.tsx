@@ -100,11 +100,14 @@ export function BookingOverviewCard({
                       · {period.totalNights} {locale === 'vi' ? 'đêm' : 'nights'}
                     </span>
                   )}
-                  {period.totalGuests > 0 && (
-                    <span className="text-gray-500 text-xs">
-                      · {period.totalGuests} {locale === 'vi' ? 'khách' : 'guests'}
-                    </span>
-                  )}
+                  {period.parameterGroups && period.parameterGroups.length > 0 && (() => {
+                    const periodGuests = period.parameterGroups.reduce((sum, pg) => sum + (pg.quantity || 0), 0);
+                    return periodGuests > 0 && (
+                      <span className="text-gray-500 text-xs">
+                        · {periodGuests} {locale === 'vi' ? 'khách' : 'guests'}
+                      </span>
+                    );
+                  })()}
                 </div>
               );
             })}

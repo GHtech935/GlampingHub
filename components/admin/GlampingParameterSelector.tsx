@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, Users, Info } from 'lucide-react'
+import { AlertCircle, Users, Info, Loader2 } from 'lucide-react'
 import { type MultilingualText, getLocalizedText } from '@/lib/i18n-utils'
 import { formatCurrency } from '@/lib/utils'
 import type { DateRange } from 'react-day-picker'
@@ -38,6 +38,7 @@ interface GlampingParameterSelectorProps {
   nights?: number  // Number of nights selected
   dateRange?: DateRange  // To check if dates are selected
   nightlyParameterPricing?: NightlyPricing[]  // Per-night pricing breakdown
+  pricingLoading?: boolean  // Whether pricing is being loaded
 }
 
 export function GlampingParameterSelector({
@@ -50,6 +51,7 @@ export function GlampingParameterSelector({
   nights,
   dateRange,
   nightlyParameterPricing = [],
+  pricingLoading = false,
 }: GlampingParameterSelectorProps) {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
@@ -139,7 +141,15 @@ export function GlampingParameterSelector({
                   </Label>
 
                   {/* Price display - event-based pricing */}
-                  {hasPricing && quantity > 0 && (
+                  {/* Show loading indicator while pricing is being fetched */}
+                  {pricingLoading && quantity > 0 && dateRange?.from && dateRange?.to && (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>{locale === 'vi' ? 'Đang tải giá...' : 'Loading price...'}</span>
+                    </div>
+                  )}
+                  {/* Show price only when not loading */}
+                  {!pricingLoading && hasPricing && quantity > 0 && (
                     <div className="space-y-0.5">
                       {allSamePrice && nightPrices.length > 0 ? (
                         // All nights same price - compact display
@@ -205,7 +215,12 @@ export function GlampingParameterSelector({
                   />
 
                   {/* Total for this parameter based on quantity */}
-                  {hasPricing && quantity > 0 && (
+                  {pricingLoading && quantity > 0 && dateRange?.from && dateRange?.to && (
+                    <div className="text-xs text-gray-400">
+                      <Loader2 className="h-3 w-3 animate-spin inline" />
+                    </div>
+                  )}
+                  {!pricingLoading && hasPricing && quantity > 0 && (
                     <div className="text-xs font-semibold text-blue-600">
                       = {formatCurrency(totalPrice * quantity, locale)}
                     </div>

@@ -175,9 +175,6 @@ export interface BookingTent {
   checkInDate: string;
   checkOutDate: string;
   nights: number;
-  adults: number;
-  children: number;
-  totalGuests: number;
   subtotal: number;
   specialRequests?: string;
   displayOrder: number;
@@ -186,6 +183,12 @@ export interface BookingTent {
   discountType?: string | null;
   discountValue?: number;
   discountAmount?: number;
+  /** Parameters for this tent (replaces adults/children columns) */
+  parameters?: Array<{
+    parameterId: string;
+    label: string;
+    bookedQuantity: number;
+  }>;
 }
 
 /**
@@ -326,9 +329,6 @@ export interface TentEditData {
   checkInDate: string;
   checkOutDate: string;
   nights: number;
-  adults: number;
-  children: number;
-  totalGuests: number;
   subtotal: number;
   specialRequests?: string;
   voucherCode?: string | null;
@@ -371,6 +371,23 @@ export interface ProductEditData {
  * Example: If Tent A1 is booked Jan 1-3 and again Jan 6-8, there will be 2 BookingPeriod
  * objects, but only 1 unique physical tent (itemId).
  */
+/**
+ * Additional cost item for a booking (damages, extra services, custom charges)
+ */
+export interface BookingAdditionalCost {
+  id: string;
+  bookingId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  taxRate: number;
+  taxAmount: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface BookingPeriod {
   /** Unique identifier for the physical tent (glamping_items.id) */
   itemId: string;
@@ -392,15 +409,6 @@ export interface BookingPeriod {
 
   /** All parameters for this booking period (adults, children, pets, etc.) */
   parameterGroups: ParameterGroup[];
-
-  /** Total number of guests for THIS period (sum of guest-type parameters) */
-  totalGuests: number;
-
-  /** Number of adults for THIS period */
-  adultsCount: number;
-
-  /** Number of children for THIS period */
-  childrenCount: number;
 
   /** Number of nights for THIS specific period */
   totalNights: number;

@@ -241,6 +241,18 @@ export async function recalculateGlampingBookingTotals(
   );
   const menuTotal = parseFloat(menuResult.rows[0].menu_total);
 
+  // Sum additional costs (from glamping_booking_additional_costs)
+  const additionalCostsResult = await client.query(
+    `SELECT
+       COALESCE(SUM(total_price), 0) as additional_total,
+       COALESCE(SUM(tax_amount), 0) as additional_tax
+     FROM glamping_booking_additional_costs
+     WHERE booking_id = $1`,
+    [bookingId]
+  );
+  const additionalTotal = parseFloat(additionalCostsResult.rows[0].additional_total);
+  const additionalTax = parseFloat(additionalCostsResult.rows[0].additional_tax);
+
   // Sum discount amounts from tents
   const tentDiscountResult = await client.query(
     `SELECT COALESCE(SUM(discount_amount), 0) as tent_discount
@@ -259,15 +271,15 @@ export async function recalculateGlampingBookingTotals(
   );
   const menuDiscount = parseFloat(menuDiscountResult.rows[0].menu_discount);
 
-  const subtotal = accommodationTotal + menuTotal;
+  const subtotal = accommodationTotal + menuTotal + additionalTotal;
   const totalDiscount = tentDiscount + menuDiscount;
   const afterDiscount = subtotal - totalDiscount;
 
-  // Apply tax if required (per-item tax rates)
+  // Apply tax if required (per-item tax rates + additional costs tax)
   let taxAmount = 0;
   if (tax_invoice_required) {
     const { totalTaxAmount } = await calculatePerItemTax(client, bookingId);
-    taxAmount = totalTaxAmount;
+    taxAmount = totalTaxAmount + additionalTax;
   }
 
   // total_amount is a GENERATED column (subtotal_amount + tax_amount - discount_amount)
@@ -288,6 +300,51 @@ export async function recalculateGlampingBookingTotals(
      WHERE id = $1`,
     [bookingId, subtotal, taxAmount, totalDiscount, depositDue, balanceDue]
   );
+
+  // ─── Auto-adjust payment_status based on total paid vs total amount ─────────
+  // 1. Get total paid from successful payments
+  const paymentsResult = await client.query(
+    `SELECT COALESCE(SUM(amount), 0) as total_paid
+     FROM glamping_booking_payments
+     WHERE booking_id = $1 AND status IN ('successful', 'completed', 'paid')`,
+    [bookingId]
+  );
+  const totalPaid = parseFloat(paymentsResult.rows[0].total_paid);
+
+  // 2. Get current payment_status
+  const currentStatusResult = await client.query(
+    `SELECT payment_status FROM glamping_bookings WHERE id = $1`,
+    [bookingId]
+  );
+  const currentPaymentStatus = currentStatusResult.rows[0].payment_status;
+
+  // 3. Determine new payment_status (only adjust if there have been payments)
+  let newPaymentStatus = currentPaymentStatus;
+  if (totalPaid > 0) {
+    if (totalPaid >= totalAmount) {
+      newPaymentStatus = 'fully_paid';
+    } else {
+      newPaymentStatus = 'deposit_paid';
+    }
+  }
+
+  // 4. Update if payment_status changed
+  if (newPaymentStatus !== currentPaymentStatus) {
+    await client.query(
+      `UPDATE glamping_bookings SET payment_status = $2 WHERE id = $1`,
+      [bookingId, newPaymentStatus]
+    );
+
+    // Log to history
+    await client.query(
+      `INSERT INTO glamping_booking_status_history
+       (booking_id, previous_payment_status, new_payment_status, action_type, description)
+       SELECT $1, $2, $3, 'payment_status_adjust',
+         'Auto-adjusted due to booking total change'
+       FROM glamping_bookings WHERE id = $1`,
+      [bookingId, currentPaymentStatus, newPaymentStatus]
+    );
+  }
 }
 
 /**

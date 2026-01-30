@@ -13,6 +13,12 @@ interface GuestDistributionCardProps {
   locale: string;
 }
 
+// Helper to calculate total guests from parameterGroups
+function getTotalGuestsFromParams(period: BookingPeriod): number {
+  if (!period.parameterGroups || period.parameterGroups.length === 0) return 0;
+  return period.parameterGroups.reduce((sum, pg) => sum + (pg.quantity || 0), 0);
+}
+
 export function GuestDistributionCard({
   bookingPeriods,
   locale,
@@ -20,7 +26,7 @@ export function GuestDistributionCard({
   const { getColorForItem } = useItemColor();
 
   // Filter periods that have guest information
-  const periodsWithGuests = bookingPeriods.filter(period => period.totalGuests > 0);
+  const periodsWithGuests = bookingPeriods.filter(period => getTotalGuestsFromParams(period) > 0);
 
   // If no periods have guest info, don't render
   if (periodsWithGuests.length === 0) {
@@ -62,9 +68,10 @@ export function GuestDistributionCard({
           const colorScheme = getColorForItem(index);
           const specialRequests = period.specialRequests;
           const periodKey = `${period.itemId}|${period.checkInDate}|${period.checkOutDate}`;
+          const periodTotalGuests = getTotalGuestsFromParams(period);
 
           // Skip periods without guest info
-          if (period.totalGuests === 0) {
+          if (periodTotalGuests === 0) {
             return null;
           }
 
@@ -97,32 +104,19 @@ export function GuestDistributionCard({
                   <div className="mt-2 flex items-center gap-4 text-sm flex-wrap">
                     <div className="flex items-center gap-1.5">
                       <Users className="h-4 w-4 text-gray-400" />
-                      <span className="font-medium">{period.totalGuests}</span>
+                      <span className="font-medium">{periodTotalGuests}</span>
                       <span className="text-gray-600">
                         {locale === 'vi' ? 'khách' : 'guests'}:
                       </span>
                     </div>
 
                     <div className="flex items-center gap-3 text-gray-700 flex-wrap">
-                      {period.parameterGroups && period.parameterGroups.length > 0 ? (
+                      {period.parameterGroups && period.parameterGroups.length > 0 && (
                         period.parameterGroups.filter(pg => pg.quantity > 0).map((pg) => (
                           <span key={pg.parameterId}>
                             {pg.parameterName}: {pg.quantity}
                           </span>
                         ))
-                      ) : (
-                        <>
-                          {period.adultsCount > 0 && (
-                            <span>
-                              {locale === 'vi' ? 'Người lớn' : 'Adults'}: {period.adultsCount}
-                            </span>
-                          )}
-                          {period.childrenCount > 0 && (
-                            <span>
-                              {locale === 'vi' ? 'Trẻ em' : 'Children'}: {period.childrenCount}
-                            </span>
-                          )}
-                        </>
                       )}
                     </div>
                   </div>
@@ -163,15 +157,31 @@ export function GuestDistributionCard({
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-gray-500" />
             <span className="font-semibold">
-              {periodsWithGuests.reduce((sum, period) => sum + period.totalGuests, 0)}{' '}
+              {periodsWithGuests.reduce((sum, period) => sum + getTotalGuestsFromParams(period), 0)}{' '}
               {locale === 'vi' ? 'khách' : 'guests'}
             </span>
             <span className="text-gray-500">
               (
-              {periodsWithGuests.reduce((sum, period) => sum + period.adultsCount, 0)}{' '}
-              {locale === 'vi' ? 'người lớn' : 'adults'},{' '}
-              {periodsWithGuests.reduce((sum, period) => sum + period.childrenCount, 0)}{' '}
-              {locale === 'vi' ? 'trẻ em' : 'children'})
+              {(() => {
+                // Aggregate parameters across all periods
+                const paramTotals: Record<string, { name: string; total: number }> = {};
+                periodsWithGuests.forEach(period => {
+                  if (period.parameterGroups) {
+                    period.parameterGroups.forEach(pg => {
+                      if (pg.quantity > 0) {
+                        if (!paramTotals[pg.parameterId]) {
+                          paramTotals[pg.parameterId] = { name: pg.parameterName, total: 0 };
+                        }
+                        paramTotals[pg.parameterId].total += pg.quantity;
+                      }
+                    });
+                  }
+                });
+                return Object.values(paramTotals)
+                  .map(p => `${p.total} ${p.name}`)
+                  .join(', ');
+              })()}
+              )
             </span>
           </div>
         </div>

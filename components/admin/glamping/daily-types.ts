@@ -27,8 +27,6 @@ export interface ManifestBooking {
   checkInDate: string;
   checkOutDate: string;
   nights: number;
-  adults: number;
-  children: number;
   totalGuests: number;
   totalAmount: number;
   depositDue: number;
@@ -43,6 +41,8 @@ export interface ManifestBooking {
   source: string | null;
   tentId: string;
   createdAt: string;
+  /** Parameters for this booking (replaces adults/children) */
+  parameters?: Array<{ label: string; quantity: number }>;
 }
 
 export interface ManifestItem {
@@ -52,11 +52,11 @@ export interface ManifestItem {
   categoryName: string;
   totalBookings: number;
   totalGuests: number;
-  totalAdults: number;
-  totalChildren: number;
   totalPaid: number;
   totalDue: number;
   bookings: ManifestBooking[];
+  /** Aggregated parameters (replaces totalAdults/totalChildren) */
+  parameterTotals?: Record<string, number>;
 }
 
 export interface ManifestFilterOptions {
@@ -84,8 +84,6 @@ export interface DailyListSummaryItem {
   inventoryPercent: number;
   totalAmount: number;
   totalGuests: number;
-  totalAdults: number;
-  totalChildren: number;
   totalQuantity: number;
   parameterBreakdown: Record<string, number>;
 }
@@ -94,8 +92,6 @@ export interface DailyListSummaryTotals {
   totalBookings: number;
   totalAmount: number;
   totalGuests: number;
-  totalAdults: number;
-  totalChildren: number;
   totalQuantity: number;
   totalInventory: number;
   totalBooked: number;
@@ -112,8 +108,6 @@ export interface DailyListBooking {
   customerPhone: string;
   source: string | null;
   totalAmount: number;
-  adults: number;
-  children: number;
   totalGuests: number;
   totalQuantity: number;
   checkInDate: string;
@@ -127,8 +121,6 @@ export interface DailyListItemGroup {
   bookings: DailyListBooking[];
   subtotals: {
     totalAmount: number;
-    adults: number;
-    children: number;
     totalGuests: number;
     totalQuantity: number;
     parameterBreakdown: Record<string, number>;

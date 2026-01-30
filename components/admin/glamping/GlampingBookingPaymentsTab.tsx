@@ -17,15 +17,24 @@ import {
   Trash2,
   AlertCircle,
   CreditCard,
+  FileText,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { formatCurrency } from '@/lib/utils';
 import { type Locale } from '@/lib/i18n-utils';
 import { toast } from 'react-hot-toast';
 import { AddPaymentDialog } from '@/components/admin/AddPaymentDialog';
 import { EditPaymentDialog } from '@/components/admin/EditPaymentDialog';
 import { DeletePaymentDialog } from '@/components/admin/DeletePaymentDialog';
-import { PaymentAllocationInfo } from './tabs/PaymentAllocationInfo';
-import type { BookingItem } from './types';
 
 interface Payment {
   id: string;
@@ -49,7 +58,6 @@ interface GlampingBookingPaymentsTabProps {
     pricing: {
       totalAmount: number;
     };
-    items?: BookingItem[];
   };
   locale?: Locale;
   onRefresh: () => void;
@@ -99,6 +107,8 @@ export function GlampingBookingPaymentsTab({
       failed: 'Thất bại',
       refunded: 'Đã hoàn',
       cancelled: 'Đã huỷ',
+      deleted: 'Đã xoá',
+      deletionReason: 'Lý do xoá',
       totalPaid: 'Tổng đã thanh toán',
       remaining: 'Còn lại',
       cannotModify: 'Không thể thay đổi thanh toán cho booking này',
@@ -131,6 +141,8 @@ export function GlampingBookingPaymentsTab({
       failed: 'Failed',
       refunded: 'Refunded',
       cancelled: 'Cancelled',
+      deleted: 'Deleted',
+      deletionReason: 'Deletion Reason',
       totalPaid: 'Total Paid',
       remaining: 'Remaining',
       cannotModify: 'Cannot modify payments for this booking',
@@ -156,7 +168,7 @@ export function GlampingBookingPaymentsTab({
 
   // Status badge variant
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
+    const variants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string; className?: string }> = {
       pending: { variant: 'secondary', label: t.pending },
       completed: { variant: 'default', label: t.completed },
       paid: { variant: 'default', label: t.completed },
@@ -164,9 +176,10 @@ export function GlampingBookingPaymentsTab({
       failed: { variant: 'destructive', label: t.failed },
       refunded: { variant: 'outline', label: t.refunded },
       cancelled: { variant: 'destructive', label: t.cancelled },
+      deleted: { variant: 'secondary', label: t.deleted, className: 'bg-blue-500 text-white hover:bg-blue-600' },
     };
     const config = variants[status] || { variant: 'secondary' as const, label: status };
-    return <Badge variant={config.variant}>{config.label}</Badge>;
+    return <Badge variant={config.variant} className={config.className}>{config.label}</Badge>;
   };
 
   // Format date
@@ -398,7 +411,30 @@ export function GlampingBookingPaymentsTab({
                   <TableCell>{getStatusBadge(payment.status)}</TableCell>
                   {canModify && (
                     <TableCell className="text-right">
-                      {payment.status !== 'cancelled' && payment.status !== 'deleted' && (
+                      {payment.status === 'deleted' && payment.notes ? (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>{t.deletionReason}</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {payment.notes}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogAction>OK</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      ) : payment.status !== 'cancelled' && payment.status !== 'deleted' ? (
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
@@ -418,7 +454,7 @@ export function GlampingBookingPaymentsTab({
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      )}
+                      ) : null}
                     </TableCell>
                   )}
                 </TableRow>
@@ -441,16 +477,6 @@ export function GlampingBookingPaymentsTab({
           </div>
         )}
       </div>
-
-      {/* Payment Allocation by Tent */}
-      {booking.items && booking.items.length > 0 && (
-        <PaymentAllocationInfo
-          items={booking.items}
-          totalPaid={totalPaid}
-          totalAmount={booking.pricing.totalAmount}
-          locale={locale}
-        />
-      )}
 
       {/* Dialogs */}
       <AddPaymentDialog

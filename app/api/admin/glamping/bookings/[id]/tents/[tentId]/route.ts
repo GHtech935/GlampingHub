@@ -38,8 +38,6 @@ export async function PUT(
       itemId,
       checkInDate,
       checkOutDate,
-      adults,
-      children,
       specialRequests,
       parameters, // Array<{ parameterId, quantity, unitPrice }>
       subtotalOverride, // number | null - admin manual override
@@ -70,8 +68,6 @@ export async function PUT(
     const checkIn = new Date(checkInDate || oldTent.check_in_date);
     const checkOut = new Date(checkOutDate || oldTent.check_out_date);
     const nights = Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
-
-    const totalGuests = (adults ?? oldTent.adults) + (children ?? oldTent.children);
 
     // Calculate subtotal from parameters if provided
     // unitPrice is already the total per unit for ALL nights, no need to multiply by nights
@@ -132,21 +128,19 @@ export async function PUT(
       }
     }
 
-    // Update tent row (nights, total_guests are generated columns — do not set them)
+    // Update tent row (nights is a generated column — do not set it)
     await client.query(
       `UPDATE glamping_booking_tents SET
          item_id = $3,
          check_in_date = $4,
          check_out_date = $5,
-         adults = $6,
-         children = $7,
-         subtotal = $8,
-         special_requests = $9,
-         voucher_code = $10,
-         voucher_id = $11,
-         discount_type = $12,
-         discount_value = $13,
-         discount_amount = $14
+         subtotal = $6,
+         special_requests = $7,
+         voucher_code = $8,
+         voucher_id = $9,
+         discount_type = $10,
+         discount_value = $11,
+         discount_amount = $12
        WHERE id = $1 AND booking_id = $2`,
       [
         tentId,
@@ -154,8 +148,6 @@ export async function PUT(
         itemId || oldTent.item_id,
         checkInDate || oldTent.check_in_date,
         checkOutDate || oldTent.check_out_date,
-        adults ?? oldTent.adults,
-        children ?? oldTent.children,
         subtotal,
         specialRequests !== undefined ? specialRequests : oldTent.special_requests,
         finalVoucherCode,
@@ -190,10 +182,6 @@ export async function PUT(
             JSON.stringify({
               checkInDate: checkInDate || oldTent.check_in_date,
               checkOutDate: checkOutDate || oldTent.check_out_date,
-              guests: {
-                adults: adults ?? oldTent.adults,
-                children: children ?? oldTent.children,
-              },
             }),
           ]
         );

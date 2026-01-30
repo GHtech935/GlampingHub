@@ -199,21 +199,43 @@ export async function GET(
       };
     });
 
+    // Fetch additional costs
+    const additionalCostsResult = await client.query(
+      `SELECT id, name, quantity, unit_price, total_price, tax_rate, tax_amount, notes
+       FROM glamping_booking_additional_costs
+       WHERE booking_id = $1
+       ORDER BY created_at DESC`,
+      [id]
+    );
+
+    const additionalCosts = additionalCostsResult.rows.map(ac => ({
+      id: ac.id,
+      name: ac.name,
+      quantity: ac.quantity,
+      unitPrice: parseFloat(ac.unit_price || '0'),
+      totalPrice: parseFloat(ac.total_price || '0'),
+      taxRate: parseFloat(ac.tax_rate || '0'),
+      taxAmount: parseFloat(ac.tax_amount || '0'),
+      notes: ac.notes || null,
+    }));
+
     // Calculate totals (including per-item discounts)
     const accommodationTotal = itemsResult.rows.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0);
     const productsTotal = productsResult.rows.reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+    const additionalCostsTotal = additionalCosts.reduce((sum, c) => sum + c.totalPrice, 0);
 
     // Sum per-tent discounts
     const totalTentDiscounts = tentsResult.rows.reduce((sum, t) => sum + (parseFloat(t.discount_amount) || 0), 0);
     // Sum per-product discounts
     const totalProductDiscounts = productsResult.rows.reduce((sum, p) => sum + (parseFloat(p.discount_amount) || 0), 0);
 
-    const subtotal = accommodationTotal + productsTotal;
+    const subtotal = accommodationTotal + productsTotal + additionalCostsTotal;
 
     // Sum tax from per-item amounts
     const accommodationTax = nightlyPricing.reduce((sum, n) => sum + n.taxAmount, 0);
     const productsTax = products.reduce((sum, p) => sum + p.taxAmount, 0);
-    const totalTax = accommodationTax + productsTax;
+    const additionalCostsTax = additionalCosts.reduce((sum, c) => sum + c.taxAmount, 0);
+    const totalTax = accommodationTax + productsTax + additionalCostsTax;
 
     return NextResponse.json({
       booking: {
@@ -232,6 +254,7 @@ export async function GET(
       },
       nightlyPricing,
       products,
+      additionalCosts,
       voucherApplied: null,
       tentDiscounts: tentsResult.rows
         .filter(t => t.voucher_code)
@@ -251,6 +274,8 @@ export async function GET(
         productsDiscounts: totalProductDiscounts,
         productsAfterDiscount: productsTotal - totalProductDiscounts,
         productsTax: productsTax,
+        additionalCostsTotal: additionalCostsTotal,
+        additionalCostsTax: additionalCostsTax,
         subtotal: subtotal,
         accommodationTax: accommodationTax,
         totalTax: totalTax,

@@ -524,6 +524,23 @@ export const STAFF_NOTIFICATION_TEMPLATES = {
     link: '/admin-camping/webhook-logs',
     sendEmail: false,
     roles: ['admin', 'operations']
+  },
+
+  // 15. Glamping Menu Updated by Customer
+  glamping_menu_updated: {
+    icon: '🍽️',
+    color: 'blue',
+    title: {
+      vi: 'Khách cập nhật món ăn',
+      en: 'Customer Updated Menu'
+    },
+    message: {
+      vi: 'Đơn #{booking_code} - {customer_name} đã cập nhật món ăn. Tổng mới: {new_total}',
+      en: 'Booking #{booking_code} - {customer_name} updated menu. New total: {new_total}'
+    },
+    link: '/admin-camping/bookings?id={booking_id}',
+    sendEmail: false,
+    roles: ['admin', 'operations', 'owner']
   }
 } as const;
 

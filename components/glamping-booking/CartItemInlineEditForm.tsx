@@ -1,11 +1,9 @@
 "use client";
 
 import React from 'react';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Check } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { format, differenceInDays } from 'date-fns';
 import { GlampingDateRangePickerWithCalendar } from '@/components/admin/GlampingDateRangePickerWithCalendar';
@@ -14,21 +12,52 @@ import VoucherInput from '@/components/booking/VoucherInput';
 import { useCartItemFormState } from '@/hooks/useCartItemFormState';
 import { useMenuProductsData } from '@/hooks/useMenuProductsData';
 import { useCartItemPricing } from '@/hooks/useCartItemPricing';
-import { useCartItemSave } from '@/hooks/useCartItemSave';
+import { useCartItemSave, type AutoSaveStatus } from '@/hooks/useCartItemSave';
 import { useGlampingParameters } from '@/hooks/useGlampingParameters';
 import type { GlampingCartItem } from '@/components/providers/GlampingCartProvider';
 
 interface CartItemInlineEditFormProps {
   item: GlampingCartItem;
-  onSave: () => void;
-  onCancel: () => void;
   isOpen: boolean;
+}
+
+// Auto-save status indicator component
+function AutoSaveIndicator({ status }: { status: AutoSaveStatus }) {
+  if (status === 'idle') {
+    return null;
+  }
+
+  if (status === 'saving') {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-blue-600">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        <span>Đang lưu...</span>
+      </div>
+    );
+  }
+
+  if (status === 'saved') {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-green-600">
+        <Check className="h-3 w-3" />
+        <span>Đã lưu</span>
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-red-600">
+        <span>Lỗi khi lưu</span>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 export function CartItemInlineEditForm({
   item,
-  onSave,
-  onCancel,
   isOpen
 }: CartItemInlineEditFormProps) {
   // Use custom hooks
@@ -42,13 +71,14 @@ export function CartItemInlineEditForm({
     parameterQuantities: formState.parameterQuantities,
     accommodationVoucher: formState.accommodationVoucher
   });
-  const { handleSave, isSaving, menuProductsTotal, menuDiscountAmount } = useCartItemSave({
+  const { isSaving, menuProductsTotal, menuDiscountAmount, autoSaveStatus } = useCartItemSave({
     cartItemId: item.id,
     item,
-    formState,
+    formState: { ...formState, isDirty: formState.isDirty },
     pricingData,
     menuProductsData: menuProducts,
-    parametersData: parameters
+    parametersData: parameters,
+    autoSave: true
   });
 
   // Calculate number of nights
@@ -70,27 +100,46 @@ export function CartItemInlineEditForm({
     }, 0);
   }, [formState.parameterQuantities, parameters]);
 
-  // Handle save with callback
-  const handleSaveClick = async () => {
-    try {
-      await handleSave();
-      onSave();
-    } catch (error) {
-      // Error already handled by hook
-    }
-  };
+  // Fix menu product prices from API data if they got corrupted in cart
+  // This handles cases where old data saved with discounted prices instead of original prices
+  React.useEffect(() => {
+    if (!menuProducts || menuProducts.length === 0) return;
+    if (Object.keys(formState.menuProducts).length === 0) return;
 
-  // Handle cancel with dirty check
-  const handleCancelClick = () => {
-    if (formState.isDirty) {
-      if (confirm('Bỏ các thay đổi chưa lưu?')) {
-        formState.reset();
-        onCancel();
-      }
-    } else {
-      onCancel();
+    let needsFix = false;
+    const fixedMenuProducts = { ...formState.menuProducts };
+
+    // Create a map of product prices from API
+    const productPriceMap: Record<string, number> = {};
+    menuProducts.forEach(product => {
+      productPriceMap[product.id] = product.price;
+    });
+
+    // Check each night's selections and fix prices if needed
+    Object.entries(fixedMenuProducts).forEach(([nightIndex, nightSelections]) => {
+      if (!nightSelections) return;
+
+      Object.entries(nightSelections).forEach(([productId, selection]) => {
+        if (!selection) return;
+
+        const correctPrice = productPriceMap[productId];
+        if (correctPrice !== undefined && selection.price !== correctPrice) {
+          // Price is wrong, fix it
+          needsFix = true;
+          (fixedMenuProducts as any)[nightIndex][productId] = {
+            ...selection,
+            price: correctPrice
+          };
+        }
+      });
+    });
+
+    // Update form state if prices were fixed
+    if (needsFix) {
+      console.log('[CartItemInlineEditForm] Fixed corrupted menu product prices');
+      formState.setMenuProducts(fixedMenuProducts);
     }
-  };
+  }, [menuProducts, formState.menuProducts, formState.setMenuProducts]);
 
   if (!isOpen) {
     return null;
@@ -100,9 +149,7 @@ export function CartItemInlineEditForm({
     <div className="space-y-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-200 mt-4">
       <div className="flex items-center justify-between mb-2">
         <h4 className="font-semibold text-blue-900">Đang chỉnh sửa</h4>
-        {formState.isDirty && (
-          <span className="text-xs text-orange-600 font-medium">Có thay đổi chưa lưu</span>
-        )}
+        <AutoSaveIndicator status={autoSaveStatus} />
       </div>
 
       {/* Date Range & Parameters (Integrated Calendar) */}
@@ -117,6 +164,11 @@ export function CartItemInlineEditForm({
           onQuantitiesChange={formState.setParameterQuantities}
           loadingParameters={parametersLoading}
           overrideParameterPricing={pricingData?.parameterPricing}
+          // Pass nightly pricing with group pricing from API
+          overrideNightlyPricing={pricingData?.nightlyPricing}
+          // Consider loading if: hook is loading OR (dateRange valid but no pricing data yet)
+          // This prevents showing wrong calendar-based prices before group pricing loads
+          pricingLoading={pricingLoading || (formState.dateRange?.from && formState.dateRange?.to && !pricingData)}
         />
       </div>
 
@@ -217,31 +269,6 @@ export function CartItemInlineEditForm({
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
-      <div className="flex justify-end gap-2 pt-2 border-t">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleCancelClick}
-          disabled={isSaving}
-        >
-          Hủy
-        </Button>
-        <Button
-          type="button"
-          onClick={handleSaveClick}
-          disabled={isSaving || pricingLoading}
-        >
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Đang lưu...
-            </>
-          ) : (
-            'Lưu thay đổi'
-          )}
-        </Button>
-      </div>
     </div>
   );
 }

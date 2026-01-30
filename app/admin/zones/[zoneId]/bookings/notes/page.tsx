@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "react-hot-toast";
 import { useTranslations } from "next-intl";
-import { useAdminLocale } from "@/components/providers/AdminI18nProvider";
 import { GlampingBookingDetailModal } from "@/components/admin/glamping/GlampingBookingDetailModal";
 
 // Types
@@ -50,10 +49,10 @@ interface NotesFilters {
 
 // Date range options
 const DATE_RANGE_OPTIONS = [
-  { value: "today", labelEn: "Today", labelVi: "Hom nay" },
-  { value: "last_7_days", labelEn: "Last 7 days", labelVi: "7 ngay qua" },
-  { value: "last_30_days", labelEn: "Last 30 days", labelVi: "30 ngay qua" },
-  { value: "custom", labelEn: "Custom", labelVi: "Tuy chinh" },
+  { value: "today", key: "today" },
+  { value: "last_7_days", key: "last7Days" },
+  { value: "last_30_days", key: "last30Days" },
+  { value: "custom", key: "custom" },
 ];
 
 // Format date and time
@@ -75,7 +74,6 @@ export default function BookingNotesPage() {
   const params = useParams();
   const zoneId = params.zoneId as string;
   const t = useTranslations("admin");
-  const { locale } = useAdminLocale();
 
   const [notes, setNotes] = useState<BookingNote[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
@@ -126,7 +124,7 @@ export default function BookingNotesPage() {
       setTotalCount(data.totalCount || 0);
     } catch (error) {
       console.error("Failed to fetch notes:", error);
-      toast.error(locale === "vi" ? "Khong the tai ghi chu" : "Failed to load notes");
+      toast.error(t("bookingNotesPage.failedToLoad"));
     } finally {
       setLoading(false);
     }
@@ -182,12 +180,10 @@ export default function BookingNotesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {locale === "vi" ? "Ghi Chu Booking" : "Booking Notes"}
+              {t("bookingNotesPage.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">
-              {locale === "vi"
-                ? `Tong cong ${totalCount} booking co ghi chu`
-                : `${totalCount} bookings with notes`}
+              {t("bookingNotesPage.subtitle", { count: totalCount })}
             </p>
           </div>
 
@@ -199,7 +195,7 @@ export default function BookingNotesPage() {
           >
             <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             <span className="text-xs sm:text-sm">
-              {locale === "vi" ? "Lam moi" : "Refresh"}
+              {t("bookingNotesPage.refresh")}
             </span>
           </Button>
         </div>
@@ -209,17 +205,13 @@ export default function BookingNotesPage() {
           {/* Search bar - full width on mobile */}
           <div className="mb-3 sm:mb-0 sm:hidden">
             <label className="text-xs text-gray-500 mb-1.5 block">
-              {locale === "vi" ? "Tim kiem" : "Search"}
+              {t("bookingNotesPage.search")}
             </label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 type="text"
-                placeholder={
-                  locale === "vi"
-                    ? "Tim ghi chu, ma booking, khach hang..."
-                    : "Search notes, booking code, customer..."
-                }
+                placeholder={t("bookingNotesPage.searchPlaceholder")}
                 value={filters.search}
                 onChange={(e) => handleFilterChange("search", e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -233,17 +225,13 @@ export default function BookingNotesPage() {
             {/* Search bar - desktop only */}
             <div className="hidden sm:block sm:flex-1">
               <label className="text-xs text-gray-500 mb-1.5 block">
-                {locale === "vi" ? "Tim kiem" : "Search"}
+                {t("bookingNotesPage.search")}
               </label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                 <Input
                   type="text"
-                  placeholder={
-                    locale === "vi"
-                      ? "Tim ghi chu, ma booking, khach hang..."
-                      : "Search notes, booking code, customer..."
-                  }
+                  placeholder={t("bookingNotesPage.searchPlaceholder")}
                   value={filters.search}
                   onChange={(e) => handleFilterChange("search", e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -255,7 +243,7 @@ export default function BookingNotesPage() {
             {/* Date Range filter */}
             <div className="sm:w-40">
               <label className="text-xs text-gray-500 mb-1.5 block">
-                {locale === "vi" ? "Khoang ngay" : "Date Range"}
+                {t("bookingNotesPage.dateRange")}
               </label>
               <Select
                 value={filters.dateRange}
@@ -267,7 +255,7 @@ export default function BookingNotesPage() {
                 <SelectContent>
                   {DATE_RANGE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
-                      {locale === "vi" ? option.labelVi : option.labelEn}
+                      {t(`bookingNotesPage.dateRangeOptions.${option.key}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -277,18 +265,18 @@ export default function BookingNotesPage() {
             {/* Staff filter */}
             <div className="sm:w-40">
               <label className="text-xs text-gray-500 mb-1.5 block">
-                {locale === "vi" ? "Nhan vien" : "Staff"}
+                {t("bookingNotesPage.staff")}
               </label>
               <Select
                 value={filters.staffId}
                 onValueChange={(value) => handleFilterChange("staffId", value)}
               >
                 <SelectTrigger className="h-9 sm:h-10 text-sm">
-                  <SelectValue placeholder={locale === "vi" ? "Tat ca" : "All"} />
+                  <SelectValue placeholder={t("bookingNotesPage.all")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">
-                    {locale === "vi" ? "Tat ca" : "All"}
+                    {t("bookingNotesPage.all")}
                   </SelectItem>
                   {staffOptions.map((staff) => (
                     <SelectItem key={staff.id} value={staff.id}>
@@ -317,7 +305,7 @@ export default function BookingNotesPage() {
                 variant="outline"
                 size="icon"
                 onClick={handleReset}
-                title={locale === "vi" ? "Dat lai bo loc" : "Reset filters"}
+                title={t("bookingNotesPage.resetFilters")}
                 className="h-9 sm:h-10 w-full sm:w-10"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -330,7 +318,7 @@ export default function BookingNotesPage() {
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">
-                  {locale === "vi" ? "Tu ngay" : "From"}
+                  {t("bookingNotesPage.fromDate")}
                 </label>
                 <Input
                   type="date"
@@ -340,7 +328,7 @@ export default function BookingNotesPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">
-                  {locale === "vi" ? "Den ngay" : "To"}
+                  {t("bookingNotesPage.toDate")}
                 </label>
                 <Input
                   type="date"
@@ -358,16 +346,14 @@ export default function BookingNotesPage() {
             <div className="flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               <span className="ml-3 text-gray-600">
-                {locale === "vi" ? "Dang tai..." : "Loading..."}
+                {t("bookingNotesPage.loading")}
               </span>
             </div>
           </div>
         ) : sortedNotes.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
             <p className="text-gray-500">
-              {locale === "vi"
-                ? "Khong tim thay ghi chu nao"
-                : "No notes found"}
+              {t("bookingNotesPage.noNotes")}
             </p>
           </div>
         ) : (
@@ -381,7 +367,7 @@ export default function BookingNotesPage() {
                         onClick={toggleSortDirection}
                         className="flex items-center gap-1 hover:text-gray-700"
                       >
-                        {locale === "vi" ? "Ngay" : "Date"}
+                        {t("bookingNotesPage.date")}
                         <ArrowUpDown className="h-3 w-3" />
                       </button>
                     </th>
@@ -389,13 +375,13 @@ export default function BookingNotesPage() {
                       Booking
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {locale === "vi" ? "Nhan vien" : "Staff"}
+                      {t("bookingNotesPage.staff")}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {locale === "vi" ? "Khach hang" : "Customer"}
+                      {t("bookingNotesPage.customer")}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {locale === "vi" ? "Ghi chu" : "Note"}
+                      {t("bookingNotesPage.note")}
                     </th>
                   </tr>
                 </thead>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Printer } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,18 +12,22 @@ import { Button } from "@/components/ui/button";
 interface ExportDropdownProps {
   onExportExcel: () => void;
   onExportCSV: () => void;
+  onExportPDF?: () => void;
   labelExport?: string;
   labelExcel?: string;
   labelCSV?: string;
+  labelPDF?: string;
   disabled?: boolean;
 }
 
 export function ExportDropdown({
   onExportExcel,
   onExportCSV,
+  onExportPDF,
   labelExport = "Export",
   labelExcel = "Export Excel",
   labelCSV = "Export CSV",
+  labelPDF = "Export PDF",
   disabled,
 }: ExportDropdownProps) {
   return (
@@ -43,6 +47,12 @@ export function ExportDropdown({
           <FileText className="h-4 w-4 mr-2" />
           {labelCSV}
         </DropdownMenuItem>
+        {onExportPDF && (
+          <DropdownMenuItem onClick={onExportPDF}>
+            <Printer className="h-4 w-4 mr-2" />
+            {labelPDF}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

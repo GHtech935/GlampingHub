@@ -677,8 +677,6 @@ export async function POST(request: NextRequest) {
             item_id,
             check_in_date,
             check_out_date,
-            adults,
-            children,
             subtotal,
             special_requests,
             display_order,
@@ -688,7 +686,7 @@ export async function POST(request: NextRequest) {
             discount_value,
             discount_amount
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           RETURNING id
         `;
 
@@ -697,8 +695,6 @@ export async function POST(request: NextRequest) {
           itemData.itemId,
           itemData.checkInDate,
           itemData.checkOutDate,
-          originalCartItem.adults || 0,
-          originalCartItem.children || 0,
           itemData.accommodationCost || 0,
           originalCartItem.specialRequirements || null,
           tentIndex,
@@ -946,6 +942,17 @@ export async function POST(request: NextRequest) {
       const zoneName = firstItem?.zone_name || 'Glamping Zone';
       const itemNames = items.map((item: any) => itemsMap.get(item.itemId)?.name || 'Item').join(', ');
 
+      // Build items array for email with detailed info
+      const emailItems = items.map((item: any) => {
+        const itemInfo = itemsMap.get(item.itemId);
+        return {
+          name: itemInfo?.name || 'Lều',
+          checkInDate: new Date(item.checkInDate).toLocaleDateString('vi-VN'),
+          checkOutDate: new Date(item.checkOutDate).toLocaleDateString('vi-VN'),
+          guests: (item.adults || 0) + (item.children || 0),
+        };
+      });
+
       // Send confirmation email
       if (resolvedEmail) {
         try {
@@ -960,6 +967,7 @@ export async function POST(request: NextRequest) {
             totalAmount: parseFloat(booking.total_amount),
             numberOfGuests: totalAdults + totalChildren,
             glampingBookingId: booking.id,
+            items: emailItems,
           });
         } catch (emailError) {
           console.error('[Multi-Item Booking] Failed to send confirmation email:', emailError);
@@ -984,6 +992,54 @@ export async function POST(request: NextRequest) {
         });
       } catch (emailError) {
         console.error('[Multi-Item Booking] Failed to send staff notification:', emailError);
+      }
+
+      // Step 17: Create in-app notifications
+      try {
+        const {
+          sendNotificationToCustomer,
+          broadcastToRole,
+          notifyGlampingOwnersOfZone,
+        } = await import('@/lib/notifications');
+
+        // 1. Notify customer
+        await sendNotificationToCustomer(
+          customerId!,
+          'booking_created',
+          {
+            booking_reference: booking.booking_code,
+            booking_id: booking.id,
+            booking_code: booking.booking_code,
+          },
+          'glamping'
+        );
+
+        // 2. Notify staff (admin, sale, operations)
+        const staffData = {
+          customer_name: customerName,
+          booking_reference: booking.booking_code,
+          booking_code: booking.booking_code,
+          booking_id: booking.id,
+          pitch_name: `${items.length} lều (${itemNames})`,
+          check_in_date: earliestCheckIn.toLocaleDateString('vi-VN'),
+          check_out_date: latestCheckOut.toLocaleDateString('vi-VN'),
+          total_amount: new Intl.NumberFormat('vi-VN').format(parseFloat(booking.total_amount)) + ' ₫',
+        };
+
+        await Promise.all([
+          broadcastToRole('admin', 'new_booking_created', staffData, 'glamping'),
+          broadcastToRole('sale', 'new_booking_created', staffData, 'glamping'),
+          broadcastToRole('operations', 'new_booking_created', staffData, 'glamping'),
+        ]);
+
+        // 3. Notify glamping zone owners
+        if (zoneId) {
+          await notifyGlampingOwnersOfZone(zoneId, 'new_booking_created', staffData);
+        }
+
+        console.log('[Multi-Item Booking] ✅ In-app notifications sent');
+      } catch (notificationError) {
+        console.error('[Multi-Item Booking] ⚠️ Failed to send notifications:', notificationError);
       }
 
       return NextResponse.json({
@@ -1510,8 +1566,6 @@ export async function POST(request: NextRequest) {
         item_id,
         check_in_date,
         check_out_date,
-        adults,
-        children,
         subtotal,
         special_requests,
         display_order,
@@ -1521,7 +1575,7 @@ export async function POST(request: NextRequest) {
         discount_value,
         discount_amount
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, $10, $11, $12, $13)
+      VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11)
       RETURNING id
     `;
 
@@ -1530,8 +1584,6 @@ export async function POST(request: NextRequest) {
       itemId,
       checkInDate,
       checkOutDate,
-      adults || 0,
-      children || 0,
       accommodationCost || 0,
       specialRequirements || null,
       singleTentVoucherCode,

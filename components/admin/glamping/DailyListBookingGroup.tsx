@@ -109,13 +109,9 @@ export function DailyListBookingGroup({
                           <td className="px-3 py-2 text-right font-medium text-gray-900">
                             {formatCurrency(booking.totalAmount)}
                           </td>
-                          {/* Adults */}
+                          {/* Total Guests */}
                           <td className="px-3 py-2 text-right text-gray-700">
-                            {booking.adults}
-                          </td>
-                          {/* Children */}
-                          <td className="px-3 py-2 text-right text-gray-700">
-                            {booking.children}
+                            {booking.totalGuests}
                           </td>
                           {/* Quantity */}
                           <td className="px-3 py-2 text-right text-gray-700">
@@ -140,10 +136,7 @@ export function DailyListBookingGroup({
                         {formatCurrency(item.subtotals.totalAmount)}
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-semibold">
-                        {item.subtotals.adults}
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs font-semibold">
-                        {item.subtotals.children}
+                        {item.subtotals.totalGuests}
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-semibold">
                         {item.subtotals.totalQuantity}

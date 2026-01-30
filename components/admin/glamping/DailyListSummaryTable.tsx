@@ -81,16 +81,10 @@ export function DailyListSummaryTable({
                   {isVi ? "Tổng tiền" : "Total"}
                 </th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
-                  {isVi ? "NL" : "Adults"}
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
-                  {isVi ? "TE" : "Children"}
+                  {isVi ? "Khách" : "Guests"}
                 </th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
                   {isVi ? "SL" : "Qty"}
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
-                  {isVi ? "Khách" : "Guests"}
                 </th>
                 {parameters.map((p) => (
                   <th key={p.id} className="px-3 py-2 text-right text-xs font-medium text-gray-500">
@@ -115,10 +109,8 @@ export function DailyListSummaryTable({
                   <td className="px-3 py-2 text-right text-xs font-medium text-gray-900">
                     {item.totalAmount > 0 ? formatCurrency(item.totalAmount) : "-"}
                   </td>
-                  <td className="px-3 py-2 text-right text-xs text-gray-700">{item.totalAdults || 0}</td>
-                  <td className="px-3 py-2 text-right text-xs text-gray-700">{item.totalChildren || 0}</td>
-                  <td className="px-3 py-2 text-right text-xs text-gray-700">{item.totalQuantity || 0}</td>
                   <td className="px-3 py-2 text-right text-xs text-gray-700">{item.totalGuests || 0}</td>
+                  <td className="px-3 py-2 text-right text-xs text-gray-700">{item.totalQuantity || 0}</td>
                   {parameters.map((p) => (
                     <td key={p.id} className="px-3 py-2 text-right text-xs text-gray-700">
                       {item.parameterBreakdown[p.id] || 0}
@@ -138,10 +130,8 @@ export function DailyListSummaryTable({
                 </td>
                 <td className="px-3 py-2 text-right text-xs">{totals.totalBookings}</td>
                 <td className="px-3 py-2 text-right text-xs">{formatCurrency(totals.totalAmount)}</td>
-                <td className="px-3 py-2 text-right text-xs">{totals.totalAdults}</td>
-                <td className="px-3 py-2 text-right text-xs">{totals.totalChildren}</td>
-                <td className="px-3 py-2 text-right text-xs">{totals.totalQuantity}</td>
                 <td className="px-3 py-2 text-right text-xs">{totals.totalGuests}</td>
+                <td className="px-3 py-2 text-right text-xs">{totals.totalQuantity}</td>
                 {parameters.map((p) => (
                   <td key={p.id} className="px-3 py-2 text-right text-xs">
                     {totals.parameterBreakdown[p.id] || 0}

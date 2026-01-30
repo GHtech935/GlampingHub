@@ -445,20 +445,19 @@ export function GlampingBookingDetailModal({
   };
 
   // Handle paid and checkout
-  const handlePaidAndCheckout = async (paymentMethod: string) => {
+  const handlePaidAndCheckout = async (amount: number, paymentMethod: string) => {
     if (!bookingId || !booking) return;
 
     try {
       setUpdating(true);
 
-      // Add payment
-      const { remaining } = calculatePaymentTotals();
-      if (remaining > 0) {
+      // Add payment using the amount passed from FinancialTab (includes additional costs + VAT)
+      if (amount > 0) {
         await fetch(`/api/admin/glamping/bookings/${bookingId}/add-payment`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amount: remaining,
+            amount,
             paymentMethod,
             paymentType: 'balance',
           }),
@@ -1198,7 +1197,6 @@ export function GlampingBookingDetailModal({
                 pricing: {
                   totalAmount: booking.pricing.totalAmount,
                 },
-                items: booking.items,
               }}
               locale={locale}
               onRefresh={fetchBookingDetails}

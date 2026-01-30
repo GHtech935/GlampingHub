@@ -27,17 +27,26 @@ export function useCartItemPricing({
   accommodationVoucher
 }: UseCartItemPricingParams): UseCartItemPricingReturn {
   const [pricingData, setPricingData] = useState<any>(null);
-  const [pricingLoading, setPricingLoading] = useState(false);
+  // Start with loading=true if we have valid params (will be fetching immediately)
+  const [pricingLoading, setPricingLoading] = useState(() => {
+    return !!(itemId && dateRange?.from && dateRange?.to);
+  });
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    // Flag to prevent stale updates after cleanup
+    let cancelled = false;
+
     if (!itemId || !dateRange?.from || !dateRange?.to) {
       setPricingData(null);
+      setPricingLoading(false);
       return;
     }
 
+    // Set loading immediately when dependencies change (before debounce)
+    setPricingLoading(true);
+
     const fetchPricing = async () => {
-      setPricingLoading(true);
       setError(null);
 
       try {
@@ -65,6 +74,9 @@ export function useCartItemPricing({
         const response = await fetch(`/api/glamping/booking/calculate-pricing?${params}`);
         const data = await response.json();
 
+        // Don't update state if this effect was cancelled
+        if (cancelled) return;
+
         if (response.ok) {
           console.log('[useCartItemPricing] API Response:', data);
           console.log('[useCartItemPricing] Parameter Pricing:', data.parameterPricing);
@@ -75,16 +87,22 @@ export function useCartItemPricing({
           throw new Error(data.error || 'Failed to fetch pricing');
         }
       } catch (err) {
+        if (cancelled) return;
         console.error('Error fetching pricing:', err);
         setError(err as Error);
       } finally {
-        setPricingLoading(false);
+        if (!cancelled) {
+          setPricingLoading(false);
+        }
       }
     };
 
     // Debounce for 500ms
     const timer = setTimeout(fetchPricing, 500);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [dateRange, parameterQuantities, accommodationVoucher, itemId]);
 
   return { pricingData, pricingLoading, error };

@@ -45,7 +45,7 @@ export function GlampingCartPopover({ children }: GlampingCartPopoverProps) {
         {children}
       </PopoverTrigger>
       <PopoverContent
-        className="w-[380px] p-0"
+        className="w-[380px] p-0 z-[1000]"
         align="end"
         sideOffset={8}
       >

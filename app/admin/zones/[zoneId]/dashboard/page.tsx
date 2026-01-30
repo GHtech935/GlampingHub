@@ -67,6 +67,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: "#f59e0b",
   confirmed: "#22c55e",
   checked_in: "#3b82f6",
+  checked_out: "#8b5cf6",
   completed: "#6366f1",
   cancelled: "#ef4444",
 };
@@ -75,6 +76,7 @@ const STATUS_BADGE_VARIANT: Record<string, string> = {
   pending: "warning",
   confirmed: "success",
   checked_in: "info",
+  checked_out: "secondary",
   completed: "default",
   cancelled: "destructive",
 };

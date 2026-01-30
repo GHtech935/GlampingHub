@@ -95,9 +95,6 @@ export async function GET(
         bt.check_in_date,
         bt.check_out_date,
         bt.nights,
-        bt.adults,
-        bt.children,
-        bt.total_guests,
         bt.subtotal,
         bt.special_requests,
         bt.display_order,
@@ -115,6 +112,30 @@ export async function GET(
     `;
 
     const tentsResult = await client.query(tentsQuery, [id]);
+
+    // Fetch parameters for each tent
+    const tentParamsQuery = `
+      SELECT
+        bp.booking_tent_id,
+        bp.parameter_id,
+        bp.label,
+        bp.booked_quantity
+      FROM glamping_booking_parameters bp
+      WHERE bp.booking_id = $1
+    `;
+    const tentParamsResult = await client.query(tentParamsQuery, [id]);
+
+    const paramsByTentId = new Map<string, Array<{ parameterId: string; label: string; bookedQuantity: number }>>();
+    for (const row of tentParamsResult.rows) {
+      if (!paramsByTentId.has(row.booking_tent_id)) {
+        paramsByTentId.set(row.booking_tent_id, []);
+      }
+      paramsByTentId.get(row.booking_tent_id)!.push({
+        parameterId: row.parameter_id,
+        label: row.label,
+        bookedQuantity: row.booked_quantity,
+      });
+    }
 
     // Fetch booking items
     const itemsQuery = `
@@ -222,9 +243,6 @@ export async function GET(
         checkInDate: tent.check_in_date,
         checkOutDate: tent.check_out_date,
         nights: tent.nights,
-        adults: tent.adults,
-        children: tent.children,
-        totalGuests: tent.total_guests,
         subtotal: parseFloat(tent.subtotal || 0),
         specialRequests: tent.special_requests,
         displayOrder: tent.display_order,
@@ -232,6 +250,7 @@ export async function GET(
         discountType: tent.discount_type || null,
         discountValue: parseFloat(tent.discount_value || 0),
         discountAmount: parseFloat(tent.discount_amount || 0),
+        parameters: paramsByTentId.get(tent.id) || [],
       })),
       items: itemsResult.rows.map((item) => ({
         id: item.id,

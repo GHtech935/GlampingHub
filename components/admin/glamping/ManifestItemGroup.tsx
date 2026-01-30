@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronRight, CheckSquare, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { type ManifestItem, type ManifestBooking } from "./daily-types";
 
 interface ManifestItemGroupProps {
@@ -36,20 +34,18 @@ function formatShortDate(dateStr: string): string {
 }
 
 export function ManifestItemGroup({ item, locale, onViewBooking }: ManifestItemGroupProps) {
-  const [expandedBookings, setExpandedBookings] = useState<Set<string>>(new Set());
   const isVi = locale === "vi";
 
-  const toggleBooking = (id: string) => {
-    setExpandedBookings((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
+  // Build parameters summary string
+  const paramsSummary = item.parameterTotals
+    ? Object.entries(item.parameterTotals)
+        .map(([label, qty]) => `${label}: ${qty}`)
+        .join(", ")
+    : "";
 
   const summaryParts = [
     `${item.totalBookings} ${isVi ? "Booking" : item.totalBookings === 1 ? "Booking" : "Bookings"}`,
-    `${item.totalGuests} ${isVi ? "Khách" : "Guests"} (${item.totalAdults} ${isVi ? "NL" : "Adults"}, ${item.totalChildren} ${isVi ? "TE" : "Children"})`,
+    `${item.totalGuests} ${isVi ? "Khách" : "Guests"}${paramsSummary ? ` (${paramsSummary})` : ""}`,
     `${formatCurrency(item.totalPaid)} ${isVi ? "Đã thanh toán" : "Paid"}`,
     item.totalDue > 0 ? `${formatCurrency(item.totalDue)} ${isVi ? "Còn nợ" : "Due"}` : null,
   ].filter(Boolean);
@@ -84,7 +80,6 @@ export function ManifestItemGroup({ item, locale, onViewBooking }: ManifestItemG
         <table className="w-full text-sm">
           <thead className="bg-gray-50/50">
             <tr className="border-b border-gray-100">
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-8"></th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
                 {isVi ? "Mã" : "Code"}
               </th>
@@ -116,7 +111,6 @@ export function ManifestItemGroup({ item, locale, onViewBooking }: ManifestItemG
           </thead>
           <tbody>
             {item.bookings.map((booking) => {
-              const isExpanded = expandedBookings.has(booking.id);
               const statusCfg = statusConfig[booking.status] || statusConfig.pending;
               const paymentCfg = paymentStatusConfig[booking.paymentStatus] || paymentStatusConfig.pending;
 
@@ -124,8 +118,6 @@ export function ManifestItemGroup({ item, locale, onViewBooking }: ManifestItemG
                 <BookingRow
                   key={booking.id}
                   booking={booking}
-                  isExpanded={isExpanded}
-                  onToggle={() => toggleBooking(booking.id)}
                   onViewBooking={onViewBooking}
                   statusLabel={isVi ? statusCfg.label.vi : statusCfg.label.en}
                   statusVariant={statusCfg.variant}
@@ -143,8 +135,6 @@ export function ManifestItemGroup({ item, locale, onViewBooking }: ManifestItemG
 
 interface BookingRowProps {
   booking: ManifestBooking;
-  isExpanded: boolean;
-  onToggle: () => void;
   onViewBooking: (bookingId: string) => void;
   statusLabel: string;
   statusVariant: "default" | "secondary" | "destructive" | "outline";
@@ -154,27 +144,15 @@ interface BookingRowProps {
 
 function BookingRow({
   booking,
-  isExpanded,
-  onToggle,
   onViewBooking,
   statusLabel,
   statusVariant,
   paymentLabel,
-  locale,
 }: BookingRowProps) {
-  const isVi = locale === "vi";
-
   return (
-    <>
-      <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
-        {/* Expand toggle */}
-        <td className="px-3 py-2">
-          <button onClick={onToggle} className="text-gray-400 hover:text-gray-600">
-            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </button>
-        </td>
-        {/* Booking Code */}
-        <td className="px-3 py-2">
+    <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+      {/* Booking Code */}
+      <td className="px-3 py-2">
           <button
             onClick={() => onViewBooking(booking.id)}
             className="text-primary hover:underline font-medium text-xs"
@@ -192,7 +170,9 @@ function BookingRow({
         </td>
         {/* Guests */}
         <td className="px-3 py-2 text-xs text-gray-700">
-          {booking.adults}/{booking.totalGuests}
+          {booking.parameters && booking.parameters.length > 0
+            ? booking.parameters.map(p => `${p.label}: ${p.quantity}`).join(", ")
+            : booking.totalGuests}
         </td>
         {/* Payment */}
         <td className="px-3 py-2 text-xs">
@@ -223,61 +203,5 @@ function BookingRow({
           {booking.internalNotes || booking.customerNotes || "-"}
         </td>
       </tr>
-
-      {/* Expanded Guest List */}
-      {isExpanded && (
-        <tr>
-          <td colSpan={10} className="px-3 py-3 bg-gray-50/50">
-            <div className="ml-8">
-              <p className="text-xs font-medium text-gray-600 mb-2">
-                {isVi ? "Danh sách khách" : "Guest List"} ({booking.totalGuests} {isVi ? "khách" : "guests"})
-              </p>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="px-2 py-1.5 text-left text-gray-500 w-8">
-                      {isVi ? "Check-in" : "Check-in"}
-                    </th>
-                    <th className="px-2 py-1.5 text-left text-gray-500">#</th>
-                    <th className="px-2 py-1.5 text-left text-gray-500">
-                      {isVi ? "Họ" : "First Name"}
-                    </th>
-                    <th className="px-2 py-1.5 text-left text-gray-500">
-                      {isVi ? "Tên" : "Last Name"}
-                    </th>
-                    <th className="px-2 py-1.5 text-left text-gray-500">Email</th>
-                    <th className="px-2 py-1.5 text-left text-gray-500">
-                      {isVi ? "Giấy tờ" : "Documents"}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.from({ length: Math.max(1, booking.totalGuests) }).map((_, idx) => (
-                    <tr key={idx} className="border-b border-gray-100">
-                      <td className="px-2 py-1.5">
-                        <Square className="h-3.5 w-3.5 text-gray-300" />
-                      </td>
-                      <td className="px-2 py-1.5 text-gray-500">#{idx + 1}</td>
-                      <td className="px-2 py-1.5">
-                        <span className="text-gray-300 italic">-</span>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <span className="text-gray-300 italic">-</span>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <span className="text-gray-300 italic">-</span>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <span className="text-gray-300 italic">-</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
   );
 }

@@ -52,9 +52,6 @@ export async function GET(
         bt.check_in_date,
         bt.check_out_date,
         bt.nights,
-        bt.adults,
-        bt.children,
-        bt.total_guests,
         bt.subtotal,
         bt.special_requests,
         bt.display_order,
@@ -117,9 +114,6 @@ export async function GET(
         checkInDate: tent.check_in_date,
         checkOutDate: tent.check_out_date,
         nights: tent.nights,
-        adults: tent.adults,
-        children: tent.children,
-        totalGuests: tent.total_guests,
         subtotal,
         taxAmount,
         specialRequests: tent.special_requests,
@@ -181,6 +175,34 @@ export async function GET(
       };
     });
 
+    // Fetch additional costs
+    const additionalCostsResult = await client.query(
+      `SELECT
+        id,
+        name,
+        quantity,
+        unit_price,
+        total_price,
+        tax_rate,
+        tax_amount,
+        notes
+      FROM glamping_booking_additional_costs
+      WHERE booking_id = $1
+      ORDER BY created_at DESC`,
+      [id]
+    );
+
+    const additionalCosts = additionalCostsResult.rows.map(ac => ({
+      id: ac.id,
+      name: ac.name,
+      quantity: ac.quantity,
+      unitPrice: parseFloat(ac.unit_price || '0'),
+      totalPrice: parseFloat(ac.total_price || '0'),
+      taxRate: parseFloat(ac.tax_rate || '0'),
+      taxAmount: parseFloat(ac.tax_amount || '0'),
+      notes: ac.notes || null,
+    }));
+
     // Calculate totals
     const tentSubtotal = tents.reduce((sum, t) => sum + t.subtotal, 0);
     const tentDiscount = tents.reduce((sum, t) => sum + t.discountAmount, 0);
@@ -190,16 +212,20 @@ export async function GET(
     const menuDiscount = menuProducts.reduce((sum, p) => sum + p.discountAmount, 0);
     const menuTax = menuProducts.reduce((sum, p) => sum + p.taxAmount, 0);
 
+    const additionalCostsSubtotal = additionalCosts.reduce((sum, c) => sum + c.totalPrice, 0);
+    const additionalCostsTax = additionalCosts.reduce((sum, c) => sum + c.taxAmount, 0);
+
     const totals = {
-      subtotal: tentSubtotal + menuSubtotal,
+      subtotal: tentSubtotal + menuSubtotal + additionalCostsSubtotal,
       discountTotal: tentDiscount + menuDiscount,
-      taxTotal: tentTax + menuTax,
-      grandTotal: (tentSubtotal + menuSubtotal) - (tentDiscount + menuDiscount) + (tentTax + menuTax),
+      taxTotal: tentTax + menuTax + additionalCostsTax,
+      grandTotal: (tentSubtotal + menuSubtotal + additionalCostsSubtotal) - (tentDiscount + menuDiscount) + (tentTax + menuTax + additionalCostsTax),
     };
 
     return NextResponse.json({
       tents,
       menuProducts,
+      additionalCosts,
       totals,
       taxEnabled,
       taxRate,

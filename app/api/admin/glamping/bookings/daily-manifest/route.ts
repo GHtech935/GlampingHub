@@ -129,9 +129,6 @@ export async function GET(request: NextRequest) {
         bt.check_in_date,
         bt.check_out_date,
         bt.nights,
-        bt.adults,
-        bt.children,
-        bt.total_guests,
         b.total_amount,
         b.deposit_due,
         b.balance_due,
@@ -159,6 +156,29 @@ export async function GET(request: NextRequest) {
 
     const result = await client.query(query, values);
 
+    // Fetch parameters for all bookings
+    const bookingIds = [...new Set(result.rows.map((r: any) => r.booking_id))];
+    let paramsByBookingTent = new Map<string, Array<{ label: string; quantity: number }>>();
+
+    if (bookingIds.length > 0) {
+      const paramsResult = await client.query(
+        `SELECT bp.booking_id, bp.booking_tent_id, bp.label, bp.booked_quantity
+         FROM glamping_booking_parameters bp
+         WHERE bp.booking_id = ANY($1::uuid[])`,
+        [bookingIds]
+      );
+      for (const row of paramsResult.rows) {
+        const key = row.booking_tent_id || row.booking_id;
+        if (!paramsByBookingTent.has(key)) {
+          paramsByBookingTent.set(key, []);
+        }
+        paramsByBookingTent.get(key)!.push({
+          label: row.label,
+          quantity: row.booked_quantity,
+        });
+      }
+    }
+
     // Group by item
     const itemMap = new Map<string, any>();
     for (const row of result.rows) {
@@ -171,21 +191,28 @@ export async function GET(request: NextRequest) {
           categoryName: getLocalizedString(row.category_name),
           totalBookings: 0,
           totalGuests: 0,
-          totalAdults: 0,
-          totalChildren: 0,
           totalPaid: 0,
           totalDue: 0,
           bookings: [],
+          parameterTotals: {} as Record<string, number>,
         });
       }
 
       const item = itemMap.get(key);
       item.totalBookings++;
-      item.totalGuests += row.total_guests || 0;
-      item.totalAdults += row.adults || 0;
-      item.totalChildren += row.children || 0;
+
+      // Get parameters for this tent
+      const tentParams = paramsByBookingTent.get(row.tent_id) || [];
+      const tentTotalGuests = tentParams.reduce((sum, p) => sum + p.quantity, 0);
+
+      item.totalGuests += tentTotalGuests;
       item.totalPaid += parseFloat(row.paid_amount || 0);
       item.totalDue += parseFloat(row.balance_due || 0);
+
+      // Aggregate parameter totals
+      for (const param of tentParams) {
+        item.parameterTotals[param.label] = (item.parameterTotals[param.label] || 0) + param.quantity;
+      }
 
       item.bookings.push({
         id: row.booking_id,
@@ -195,9 +222,7 @@ export async function GET(request: NextRequest) {
         checkInDate: row.check_in_date,
         checkOutDate: row.check_out_date,
         nights: row.nights,
-        adults: row.adults || 0,
-        children: row.children || 0,
-        totalGuests: row.total_guests || 0,
+        totalGuests: tentTotalGuests,
         totalAmount: parseFloat(row.total_amount || 0),
         depositDue: parseFloat(row.deposit_due || 0),
         balanceDue: parseFloat(row.balance_due || 0),
@@ -211,6 +236,7 @@ export async function GET(request: NextRequest) {
         source: null,
         tentId: row.tent_id,
         createdAt: row.created_at,
+        parameters: tentParams,
       });
     }
 

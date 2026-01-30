@@ -177,11 +177,15 @@ export function GlampingMenuProductsSelector({
       return currentQty; // Keep current selection, but don't allow increasing
     }
 
-    // Both fixed and variable combos: max quantity = ceil(remainingGuests / max_guests)
-    // Example 1: 3 người cần phục vụ, món "1-2 người" → max = ceil(3/2) = 2 món
-    // Example 2: 5 người cần phục vụ, món "Combo 2 người" → max = ceil(5/2) = 3 món
-    // Example 3: 1 người còn thiếu, món "1-2 người" → max = ceil(1/2) = 1 món
-    return Math.ceil(remainingGuests / max_guests);
+    // FIX: For fixed combos (min_guests = max_guests), use floor to ensure
+    // total servings don't exceed guest count
+    // For variable combos, ceil allows flexibility
+    // Example 1 (variable): 3 người cần phục vụ, món "1-2 người" → max = ceil(3/2) = 2 món
+    // Example 2 (fixed): 5 người cần phục vụ, món "Combo 2 người" → max = floor(5/2) = 2 món (4 servings ≤ 5 guests)
+    const isFixedCombo = min_guests === max_guests;
+    return isFixedCombo
+      ? Math.floor(remainingGuests / max_guests)  // Fixed: 5/2 = 2 (4 servings ≤ 5 guests)
+      : Math.ceil(remainingGuests / max_guests);  // Variable: allows flexibility
   };
 
   const handleQuantityChange = (productId: string, product: MenuProduct, delta: number) => {
