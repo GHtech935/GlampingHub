@@ -96,7 +96,6 @@ function GlampingBookingFormContent() {
   const [bookingSubmitted, setBookingSubmitted] = useState(false)
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null)
   const [pricingData, setPricingData] = useState<any>(null)
-  const [allowPayLater, setAllowPayLater] = useState<boolean>(true)
   const [invoiceNotes, setInvoiceNotes] = useState<string>("")
   const [menuProducts, setMenuProducts] = useState<MenuProduct[]>([])
   const [menuProductSelections, setMenuProductSelections] = useState<Record<string, { quantity: number; price: number; name: string; voucher?: any }>>({})
@@ -127,23 +126,6 @@ function GlampingBookingFormContent() {
       photoConsent: true,
     },
   })
-
-  // Fetch public settings (allow_pay_later)
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await fetch('/api/settings/public?keys=allow_pay_later')
-        if (response.ok) {
-          const data = await response.json()
-          const allowPayLaterValue = data.settings?.allow_pay_later
-          setAllowPayLater(allowPayLaterValue === true || allowPayLaterValue === 'true')
-        }
-      } catch (error) {
-        console.error('Error fetching settings:', error)
-      }
-    }
-    fetchSettings()
-  }, [])
 
   // Pre-fill form with customer data when logged in
   useEffect(() => {
@@ -968,7 +950,7 @@ function GlampingBookingFormContent() {
             setValue={setValue}
             isSubmitting={isSubmitting}
             locale={locale}
-            allowPayLater={allowPayLater}
+            hasDeposit={hasDeposit}
             depositType={depositType || 'percentage'}
             depositValue={depositValue}
             depositAmount={actualDepositAmount}

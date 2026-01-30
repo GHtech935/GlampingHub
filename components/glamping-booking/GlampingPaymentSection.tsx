@@ -13,7 +13,7 @@ interface PaymentSectionProps {
   setValue: UseFormSetValue<any>
   isSubmitting: boolean
   locale: string
-  allowPayLater?: boolean
+  hasDeposit?: boolean
   depositType?: 'percentage' | 'fixed_amount'
   depositValue?: number // The raw value (percentage number or fixed amount)
   depositAmount?: number // The calculated deposit amount
@@ -37,7 +37,7 @@ export function GlampingPaymentSection({
   setValue,
   isSubmitting,
   locale,
-  allowPayLater = true,
+  hasDeposit: hasDepositProp = false,
   depositType = 'percentage',
   depositValue = 0,
   depositAmount = 0,
@@ -48,8 +48,11 @@ export function GlampingPaymentSection({
   const agreeTerms = watch("agreeTerms")
   const paymentMethod = watch("paymentMethod") || "pay_now"
 
-  // Check if deposit is required (value > 0)
-  const hasDeposit = depositValue > 0
+  // Check if zone has deposit settings configured (regardless of value)
+  const hasDepositSettings = hasDepositProp
+
+  // Check if deposit value > 0 (for UI display purposes)
+  const hasDepositValue = depositValue > 0
 
   // Check if deposit covers 100% of the total (no need for Pay Later option)
   // 1. If deposit is 100% percentage
@@ -58,12 +61,15 @@ export function GlampingPaymentSection({
     (depositType === 'percentage' && depositValue >= 100) ||
     (grandTotal > 0 && depositAmount >= grandTotal)
 
-  // Only show Pay Later if allowed by settings AND deposit is NOT 100%
-  const showPayLater = allowPayLater && !isFullPaymentDeposit
+  // Show Pay Later when zone has deposit settings AND deposit is NOT 100%
+  // - Deposit 0% → Show Pay Later (pay nothing now, pay everything at checkout)
+  // - Deposit 20% → Show Pay Later (pay 20% now, pay 80% at checkout)
+  // - Deposit 100% → Only Pay Now
+  const showPayLater = hasDepositSettings && !isFullPaymentDeposit
 
   // Get deposit display text (for showing in UI labels)
   const getDepositLabel = () => {
-    if (!hasDeposit) return ''
+    if (!hasDepositValue) return ''
     if (depositType === 'percentage') {
       return locale === 'vi' ? `Đặt cọc ${depositValue}%` : `${depositValue}% deposit`
     }
@@ -77,7 +83,7 @@ export function GlampingPaymentSection({
       return t('processing')
     }
     if (paymentMethod === "pay_later") {
-      if (!hasDeposit) {
+      if (!hasDepositValue) {
         return locale === 'vi' ? 'Đặt phòng ngay' : 'Book Now'
       }
       return locale === 'vi' ? `Thanh toán đặt cọc ${formatCurrency(depositAmount, locale)}` : `Pay Deposit ${formatCurrency(depositAmount, locale)}`
@@ -147,14 +153,14 @@ export function GlampingPaymentSection({
                 <span className="font-medium text-gray-900">
                   {locale === 'vi' ? 'Thanh toán sau' : 'Pay Later'}
                 </span>
-                {hasDeposit && (
+                {hasDepositValue && (
                   <span className="text-sm text-gray-500">
                     ({getDepositLabel()})
                   </span>
                 )}
               </div>
               <p className="text-sm text-gray-500 mt-1">
-                {hasDeposit
+                {hasDepositValue
                   ? depositType === 'percentage'
                     ? locale === 'vi'
                       ? `Đặt cọc ${depositValue}% ngay, thanh toán phần còn lại khi trả phòng`
@@ -168,7 +174,7 @@ export function GlampingPaymentSection({
               </p>
               {paymentMethod === "pay_later" && (
                 <div className="mt-3 p-3 bg-white rounded-md border border-blue-200 space-y-1">
-                  {hasDeposit ? (
+                  {hasDepositValue ? (
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">

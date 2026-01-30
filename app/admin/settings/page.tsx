@@ -113,29 +113,6 @@ export default function AdminSettingsPage() {
           <CardDescription>Cấu hình các tùy chọn thanh toán cho khách hàng</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Allow Pay Later */}
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div className="space-y-1">
-              <Label htmlFor="allow_pay_later" className="text-base font-medium">
-                Cho phép trả tiền sau
-              </Label>
-              <p className="text-sm text-gray-500">
-                Khi bật, khách hàng có thể chọn chỉ thanh toán tiền cọc và trả phần còn lại khi checkout.
-                <br />
-                Khi tắt, khách hàng phải thanh toán 100% trước khi booking được xác nhận.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {updating === "allow_pay_later" && <Loader2 className="w-4 h-4 animate-spin" />}
-              <Switch
-                id="allow_pay_later"
-                checked={getSettingValue("allow_pay_later")}
-                onCheckedChange={checked => updateSetting("allow_pay_later", checked)}
-                disabled={updating === "allow_pay_later"}
-              />
-            </div>
-          </div>
-
           {/* Info Box */}
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <h4 className="font-medium text-blue-900">Lưu ý về thuế VAT</h4>

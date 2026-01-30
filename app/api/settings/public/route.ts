@@ -3,7 +3,6 @@ import pool from '@/lib/db'
 
 // List of setting keys that are safe to expose publicly
 const PUBLIC_SETTINGS = [
-  'allow_pay_later',
   'social_facebook_url',
   'social_twitter_url',
   'social_instagram_url'
@@ -54,9 +53,6 @@ export async function GET(request: NextRequest) {
       if (!(key in settings)) {
         // Default values
         switch (key) {
-          case 'allow_pay_later':
-            settings[key] = true
-            break
           case 'social_facebook_url':
           case 'social_twitter_url':
           case 'social_instagram_url':
