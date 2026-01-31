@@ -131,6 +131,7 @@ export function GlampingEditTentModal({
     });
     return initial;
   });
+  const [parameterPricingModes, setParameterPricingModes] = useState<Record<string, 'per_person' | 'per_group'>>({});
   const [loadingPricing, setLoadingPricing] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,10 +143,17 @@ export function GlampingEditTentModal({
 
   // Calculate subtotal from API-fetched parameterPricing
   // parameterPricing[paramId] = total price per unit for ALL nights
-  const calculatedSubtotal = parameters.reduce(
-    (sum, p) => sum + p.quantity * (parameterPricing[p.parameterId] || 0),
-    0
-  );
+  // per_person: price × quantity
+  // per_group: price (fixed, no multiply)
+  const calculatedSubtotal = parameters.reduce((sum, p) => {
+    const pricePerUnit = parameterPricing[p.parameterId] || 0;
+    const mode = parameterPricingModes[p.parameterId] || 'per_person';
+
+    if (mode === 'per_group') {
+      return sum + pricePerUnit; // Fixed price, don't multiply by quantity
+    }
+    return sum + p.quantity * pricePerUnit; // per_person: multiply by quantity
+  }, 0);
 
   const effectiveSubtotal = subtotalOverride !== undefined ? subtotalOverride : calculatedSubtotal;
 
@@ -179,6 +187,9 @@ export function GlampingEditTentModal({
       const data = await res.json();
       if (data.parameterPricing) {
         setParameterPricing(data.parameterPricing);
+      }
+      if (data.parameterPricingModes) {
+        setParameterPricingModes(data.parameterPricingModes);
       }
     } catch (error) {
       console.error('Fetch pricing failed:', error);
@@ -265,7 +276,8 @@ export function GlampingEditTentModal({
         parameters: parameters.map(p => ({
           parameterId: p.parameterId,
           quantity: p.quantity,
-          unitPrice: p.unitPrice,
+          unitPrice: parameterPricing[p.parameterId] || p.unitPrice,
+          pricingMode: parameterPricingModes[p.parameterId] || 'per_person',
         })),
       };
 
@@ -353,7 +365,9 @@ export function GlampingEditTentModal({
               <div className="space-y-2">
                 {parameters.map((param, idx) => {
                   const pricePerUnit = parameterPricing[param.parameterId] || 0;
-                  const rowTotal = param.quantity * pricePerUnit;
+                  const mode = parameterPricingModes[param.parameterId] || 'per_person';
+                  const rowTotal = mode === 'per_group' ? pricePerUnit : param.quantity * pricePerUnit;
+                  const isPerGroup = mode === 'per_group';
                   return (
                     <div key={param.parameterId} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
                       <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">
@@ -367,13 +381,22 @@ export function GlampingEditTentModal({
                           onChange={(e) => updateParameterQuantity(idx, parseInt(e.target.value) || 0)}
                           className="w-16 h-8 text-sm text-center"
                         />
-                        <span className="text-xs text-gray-400">×</span>
-                        <span className="text-sm text-gray-700 w-28 text-right tabular-nums">
-                          {loadingPricing ? '...' : formatCurrency(pricePerUnit)}
-                        </span>
+                        {!isPerGroup && (
+                          <>
+                            <span className="text-xs text-gray-400">×</span>
+                            <span className="text-sm text-gray-700 w-28 text-right tabular-nums">
+                              {loadingPricing ? '...' : formatCurrency(pricePerUnit)}
+                            </span>
+                          </>
+                        )}
                       </div>
                       <span className="text-xs text-gray-500 w-24 text-right">
                         = {loadingPricing ? '...' : formatCurrency(rowTotal)}
+                        {isPerGroup && (
+                          <span className="ml-1 text-blue-600">
+                            ({locale === 'vi' ? 'trọn gói' : 'flat'})
+                          </span>
+                        )}
                       </span>
                     </div>
                   );

@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/utils';
 import { useGlampingCart } from '@/components/providers/GlampingCartProvider';
 import { useToast } from '@/hooks/use-toast';
 import { ShoppingCart, Eye, Loader2 } from 'lucide-react';
+import { NumberStepper } from '@/components/ui/number-stepper';
 
 interface ItemParameter {
   id: string;
@@ -284,8 +285,8 @@ export function ItemBookingSummaryPanel({
 
         {/* Parameters List */}
         {parameters.length > 0 && (
-          <div className="space-y-4">
-            {parameters.map((param) => {
+          <div className="divide-y divide-gray-100">
+            {parameters.map((param, index) => {
               const qty = quantities[param.id] || 0;
 
               // Get price per unit from calculated pricing (already has group discount applied)
@@ -304,47 +305,49 @@ export function ItemBookingSummaryPanel({
                 : (param.name || '');
 
               return (
-                <div key={param.id} className="flex items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">{paramName}</div>
-                    {hasValidSelection && pricingLoading ? (
-                      <div className="text-xs text-gray-400 flex items-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        <span>Đang tải giá...</span>
-                      </div>
-                    ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
-                      <div className="text-xs text-gray-500">
-                        {formatCurrency(pricePerUnitAllNights)}/{isPerGroup ? 'nhóm' : 'khách'} ({nights} {t.nights})
-                      </div>
-                    ) : null}
-                  </div>
+                <div key={param.id} className={`${index > 0 ? 'pt-4' : ''} ${index < parameters.length - 1 ? 'pb-4' : ''}`}>
+                  {/* Mobile: vertical stack, Desktop (md+): horizontal row */}
+                  <div className="flex flex-col space-y-2 md:flex-row md:items-center md:justify-between md:space-y-0 md:gap-4">
+                    {/* Name + Description */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{paramName}</div>
+                      {hasValidSelection && pricingLoading ? (
+                        <div className="text-xs text-gray-400 flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span>Đang tải giá...</span>
+                        </div>
+                      ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
+                        <div className="text-xs text-gray-500 truncate">
+                          {formatCurrency(pricePerUnitAllNights)}/{isPerGroup ? 'nhóm' : 'khách'} ({nights} {t.nights})
+                        </div>
+                      ) : null}
+                    </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={param.min_quantity}
-                      max={param.max_quantity}
-                      value={qty}
-                      onChange={(e) => {
-                        const newQty = parseInt(e.target.value) || 0;
-                        setQuantities((prev) => ({
-                          ...prev,
-                          [param.id]: Math.min(Math.max(newQty, param.min_quantity), param.max_quantity),
-                        }));
-                      }}
-                      className="w-16 px-2 py-1 border rounded text-center text-sm"
-                      disabled={pricingLoading}
-                    />
+                    {/* Stepper + Total price */}
+                    <div className="flex items-center justify-between gap-3 md:justify-end">
+                      <NumberStepper
+                        value={qty}
+                        onChange={(newQty) => {
+                          setQuantities((prev) => ({
+                            ...prev,
+                            [param.id]: newQty,
+                          }));
+                        }}
+                        min={param.min_quantity}
+                        max={param.max_quantity}
+                        disabled={pricingLoading}
+                      />
 
-                    {hasValidSelection && pricingLoading ? (
-                      <div className="text-sm w-24 text-right">
-                        <Loader2 className="h-4 w-4 animate-spin text-gray-400 ml-auto" />
-                      </div>
-                    ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
-                      <div className="text-sm font-medium w-24 text-right">
-                        {formatCurrency(paramTotal)}
-                      </div>
-                    ) : null}
+                      {hasValidSelection && pricingLoading ? (
+                        <div className="text-sm w-24 text-right">
+                          <Loader2 className="h-4 w-4 animate-spin text-gray-400 ml-auto" />
+                        </div>
+                      ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
+                        <div className="text-sm font-semibold w-24 text-right">
+                          {formatCurrency(paramTotal)}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               );

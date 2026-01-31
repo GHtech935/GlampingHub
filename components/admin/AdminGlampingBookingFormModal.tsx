@@ -75,6 +75,12 @@ export function AdminGlampingBookingFormModal({
   const [paymentMethod, setPaymentMethod] = useState<'pay_now' | 'pay_later'>('pay_later')
   const [submitting, setSubmitting] = useState(false)
 
+  // ========== CUSTOMER ADDITIONAL INFO STATE ==========
+  const [dateOfBirth, setDateOfBirth] = useState('')
+  const [socialMediaUrl, setSocialMediaUrl] = useState('')
+  const [photoConsent, setPhotoConsent] = useState(true)
+  const [referralSource, setReferralSource] = useState('')
+
   // ========== PRICING STATE ==========
   const [multiPricingData, setMultiPricingData] = useState<any>(null)
   const [pricingLoading, setPricingLoading] = useState(false)
@@ -376,6 +382,11 @@ export function AdminGlampingBookingFormModal({
         internalNotes,
         paymentMethod,
         isAdminBooking: true,
+        // Customer additional info
+        dateOfBirth: dateOfBirth || undefined,
+        socialMediaUrl: socialMediaUrl || undefined,
+        photoConsent,
+        referralSource: referralSource || undefined,
       }
 
       // Customer data
@@ -444,6 +455,11 @@ export function AdminGlampingBookingFormModal({
     setInternalNotes('')
     setPaymentMethod('pay_later')
     setMultiPricingData(null)
+    // Reset customer additional info
+    setDateOfBirth('')
+    setSocialMediaUrl('')
+    setPhotoConsent(true)
+    setReferralSource('')
     onClose()
   }
 
@@ -546,6 +562,14 @@ export function AdminGlampingBookingFormModal({
               onSpecialRequirementsChange={setSpecialRequirements}
               invoiceNotes={invoiceNotes}
               onInvoiceNotesChange={setInvoiceNotes}
+              dateOfBirth={dateOfBirth}
+              onDateOfBirthChange={setDateOfBirth}
+              socialMediaUrl={socialMediaUrl}
+              onSocialMediaUrlChange={setSocialMediaUrl}
+              photoConsent={photoConsent}
+              onPhotoConsentChange={setPhotoConsent}
+              referralSource={referralSource}
+              onReferralSourceChange={setReferralSource}
               internalNotes={internalNotes}
               onInternalNotesChange={setInternalNotes}
               paymentMethod={paymentMethod}

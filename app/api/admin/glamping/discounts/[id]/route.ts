@@ -195,9 +195,10 @@ export async function PUT(
         [id]
       );
 
-      // Then, insert new associations
+      // Then, insert new associations (deduplicate to avoid unique constraint violation)
       if (item_ids && item_ids.length > 0) {
-        for (const item_id of item_ids) {
+        const uniqueItemIds = [...new Set(item_ids as string[])];
+        for (const item_id of uniqueItemIds) {
           await client.query(
             `INSERT INTO glamping_discount_items (discount_id, item_id)
              VALUES ($1, $2)`,

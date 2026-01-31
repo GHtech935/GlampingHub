@@ -78,6 +78,7 @@ export async function GET(
         bi.quantity,
         bi.unit_price,
         bi.total_price,
+        bi.metadata,
         i.name as item_name,
         p.name as parameter_name,
         z.name as zone_name
@@ -136,26 +137,33 @@ export async function GET(
     // Build nightly pricing (simplified for glamping - one entry per item)
     const nightlyPricing = itemsResult.rows.map((item) => {
       const unitPrice = parseFloat(item.unit_price) || 0;
-      const totalPrice = parseFloat(item.total_price) || 0;
+      const quantity = item.quantity || 1;
+      const metadata = item.metadata || {};
+      const pricingMode = metadata.pricingMode || 'per_person';
+
+      // For per_group pricing, the subtotal is just the unit_price (package price for whole group)
+      // For per_person pricing, the subtotal is unit_price × quantity
+      const calculatedSubtotal = pricingMode === 'per_group' ? unitPrice : unitPrice * quantity;
 
       // Look up per-item tax rate
       const itemTaxInfo = item.item_id ? itemTaxMap.get(item.item_id) : undefined;
       const itemTaxRate = booking.tax_invoice_required && itemTaxInfo ? itemTaxInfo.taxRate : 0;
-      const taxAmount = itemTaxRate > 0 ? totalPrice * (itemTaxRate / 100) : 0;
+      const taxAmount = itemTaxRate > 0 ? calculatedSubtotal * (itemTaxRate / 100) : 0;
 
       // Get tent discount info
       const tentDiscount = item.booking_tent_id ? tentsDiscountMap.get(item.booking_tent_id) : null;
 
       return {
         date: new Date(booking.check_in_date).toISOString().split('T')[0],
-        subtotalBeforeDiscounts: totalPrice,
-        subtotalAfterDiscounts: totalPrice,
+        subtotalBeforeDiscounts: calculatedSubtotal,
+        subtotalAfterDiscounts: calculatedSubtotal,
         discounts: [],
         itemName: getLocalizedString(item.item_name, 'Accommodation'),
         parameterName: getLocalizedString(item.parameter_name),
         zoneName: getLocalizedString(item.zone_name),
-        quantity: item.quantity || 1,
+        quantity: quantity,
         unitPrice: unitPrice,
+        pricingMode: pricingMode,
         taxRate: itemTaxRate,
         taxAmount: taxAmount,
         bookingTentId: item.booking_tent_id || null,
@@ -220,7 +228,8 @@ export async function GET(
     }));
 
     // Calculate totals (including per-item discounts)
-    const accommodationTotal = itemsResult.rows.reduce((sum, item) => sum + (parseFloat(item.total_price) || 0), 0);
+    // Use the calculated subtotals from nightlyPricing which already handle pricingMode
+    const accommodationTotal = nightlyPricing.reduce((sum, item) => sum + item.subtotalAfterDiscounts, 0);
     const productsTotal = productsResult.rows.reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
     const additionalCostsTotal = additionalCosts.reduce((sum, c) => sum + c.totalPrice, 0);
 

@@ -333,7 +333,7 @@ export async function POST(request: NextRequest) {
         const checkIn = new Date(checkInDate);
         const checkOut = new Date(checkOutDate);
 
-        const { parameterPricing } = await calculateGlampingPricing(
+        const { parameterPricing, nightlyPricing } = await calculateGlampingPricing(
           client,
           itemId,
           checkIn,
@@ -341,13 +341,27 @@ export async function POST(request: NextRequest) {
           parameterQuantities || {}
         );
 
+        // Calculate accommodation cost respecting pricing_mode (per_group vs per_person)
         let itemAccommodationCost = 0;
-        Object.entries(parameterQuantities || {}).forEach(([paramId, quantity]) => {
-          const paramTotalPrice = parameterPricing[paramId] || 0;
-          itemAccommodationCost += paramTotalPrice * (quantity as number);
+        nightlyPricing.forEach((night: any) => {
+          Object.entries(parameterQuantities || {}).forEach(([paramId, quantity]) => {
+            const nightPrice = night.parameters[paramId] || 0;
+            const pricingMode = night.pricingModes?.[paramId] || 'per_person';
+
+            if (pricingMode === 'per_group') {
+              // Per group: fixed price, regardless of quantity
+              itemAccommodationCost += nightPrice;
+            } else {
+              // Per person: multiply by quantity
+              itemAccommodationCost += nightPrice * (quantity as number);
+            }
+          });
         });
 
         totalAccommodationCost += itemAccommodationCost;
+
+        // Extract pricingModes for saving to metadata
+        const aggregatedPricingModes = nightlyPricing[0]?.pricingModes || {};
 
         itemPricingData.push({
           itemId,
@@ -355,6 +369,7 @@ export async function POST(request: NextRequest) {
           checkOutDate,
           parameterQuantities: parameterQuantities || {},
           parameterPricing,
+          pricingModes: aggregatedPricingModes,
           accommodationCost: itemAccommodationCost,
           menuProducts: cartItem.menuProducts || [],
         });
@@ -807,6 +822,13 @@ export async function POST(request: NextRequest) {
         for (const [paramId, quantity] of Object.entries(itemData.parameterQuantities)) {
           if ((quantity as number) > 0) {
             const unitPrice = itemData.parameterPricing[paramId] || 0;
+            const pricingMode = itemData.pricingModes?.[paramId] || 'per_person';
+
+            // Create metadata with pricingMode for Finance tab display
+            const itemMetadataWithPricing = {
+              ...itemMetadata,
+              pricingMode,
+            };
 
             const bookingItemInsertQuery = `
               INSERT INTO glamping_booking_items (
@@ -830,7 +852,7 @@ export async function POST(request: NextRequest) {
               'per_night',
               quantity,
               unitPrice,
-              JSON.stringify(itemMetadata),
+              JSON.stringify(itemMetadataWithPricing),
             ]);
           }
         }
@@ -1327,7 +1349,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate pricing using the shared utility function
-    const { parameterPricing } = await calculateGlampingPricing(
+    const { parameterPricing, nightlyPricing } = await calculateGlampingPricing(
       client,
       itemId,
       checkIn,
@@ -1335,11 +1357,21 @@ export async function POST(request: NextRequest) {
       parameterQuantities
     );
 
-    // Calculate total accommodation cost
+    // Calculate total accommodation cost respecting pricing_mode (per_group vs per_person)
     let accommodationCost = 0;
-    Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
-      const paramTotalPrice = parameterPricing[paramId] || 0;
-      accommodationCost += paramTotalPrice * (quantity as number);
+    nightlyPricing.forEach((night: any) => {
+      Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
+        const nightPrice = night.parameters[paramId] || 0;
+        const pricingMode = night.pricingModes?.[paramId] || 'per_person';
+
+        if (pricingMode === 'per_group') {
+          // Per group: fixed price, regardless of quantity
+          accommodationCost += nightPrice;
+        } else {
+          // Per person: multiply by quantity
+          accommodationCost += nightPrice * (quantity as number);
+        }
+      });
     });
 
     // Apply discount code (accommodation) + per-product vouchers
@@ -1679,10 +1711,20 @@ export async function POST(request: NextRequest) {
       specialRequests: specialRequirements || null,
     };
 
+    // Extract pricingModes for saving to metadata (single-item booking)
+    const singleItemPricingModes = nightlyPricing[0]?.pricingModes || {};
+
     // Create booking items for each parameter (linked to tent)
     for (const [paramId, quantity] of Object.entries(parameterQuantities)) {
       if ((quantity as number) > 0) {
         const unitPrice = parameterPricing[paramId] || 0;
+        const pricingMode = singleItemPricingModes[paramId] || 'per_person';
+
+        // Create metadata with pricingMode for Finance tab display
+        const itemMetadataWithPricing = {
+          ...itemMetadata,
+          pricingMode,
+        };
 
         const bookingItemInsertQuery = `
           INSERT INTO glamping_booking_items (
@@ -1706,7 +1748,7 @@ export async function POST(request: NextRequest) {
           'per_night',
           quantity,
           unitPrice,
-          JSON.stringify(itemMetadata),
+          JSON.stringify(itemMetadataWithPricing),
         ]);
       }
     }

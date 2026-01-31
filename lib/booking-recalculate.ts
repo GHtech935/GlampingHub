@@ -210,9 +210,9 @@ export async function recalculateGlampingBookingTotals(
   client: PoolClient,
   bookingId: string
 ): Promise<void> {
-  // Get booking tax settings
+  // Get booking tax settings and current deposit/total to preserve ratio
   const bookingResult = await client.query(
-    `SELECT tax_invoice_required
+    `SELECT tax_invoice_required, deposit_due, total_amount
      FROM glamping_bookings WHERE id = $1`,
     [bookingId]
   );
@@ -222,10 +222,18 @@ export async function recalculateGlampingBookingTotals(
   }
 
   const { tax_invoice_required } = bookingResult.rows[0];
+  const oldDepositDue = parseFloat(bookingResult.rows[0].deposit_due || '0');
+  const oldTotalAmount = parseFloat(bookingResult.rows[0].total_amount || '0');
 
   // Sum accommodation items (from glamping_booking_items)
+  // Note: per_group pricing means the price is for the whole group, not per person
   const accomResult = await client.query(
-    `SELECT COALESCE(SUM(unit_price * quantity), 0) as accommodation_total
+    `SELECT COALESCE(SUM(
+       CASE
+         WHEN metadata->>'pricingMode' = 'per_group' THEN unit_price
+         ELSE unit_price * quantity
+       END
+     ), 0) as accommodation_total
      FROM glamping_booking_items
      WHERE booking_id = $1`,
     [bookingId]
@@ -285,7 +293,15 @@ export async function recalculateGlampingBookingTotals(
   // total_amount is a GENERATED column (subtotal_amount + tax_amount - discount_amount)
   // so we only update the source columns; deposit/balance derived from the result
   const totalAmount = afterDiscount + taxAmount;
-  const depositDue = Math.round(totalAmount * 0.5);
+
+  // Preserve the original deposit ratio instead of hardcoding 50%
+  // Default to 100% (deposit = total, no balance) for admin pay_later bookings
+  let depositRatio = 1;
+  if (oldTotalAmount > 0 && oldDepositDue > 0) {
+    depositRatio = oldDepositDue / oldTotalAmount;
+  }
+
+  const depositDue = Math.round(totalAmount * depositRatio);
   const balanceDue = totalAmount - depositDue;
 
   // Update booking totals (total_amount is generated — do not set it)
@@ -357,6 +373,13 @@ export async function logGlampingBookingEditAction(
   actionType: 'item_edit' | 'item_delete',
   description: string
 ): Promise<void> {
+  // Verify user exists in users table to avoid FK constraint violation
+  const userCheck = await client.query(
+    `SELECT id FROM users WHERE id = $1`,
+    [userId]
+  );
+  const validUserId = userCheck.rows.length > 0 ? userId : null;
+
   await client.query(
     `INSERT INTO glamping_booking_status_history
      (booking_id, previous_status, new_status, previous_payment_status, new_payment_status,
@@ -367,6 +390,6 @@ export async function logGlampingBookingEditAction(
        payment_status, payment_status,
        $2, $3, $4
      FROM glamping_bookings WHERE id = $1`,
-    [bookingId, userId, actionType, description]
+    [bookingId, validUserId, actionType, description]
   );
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -54,6 +55,15 @@ interface AdminBookingSummaryTabProps {
   onSpecialRequirementsChange: (v: string) => void
   invoiceNotes: string
   onInvoiceNotesChange: (v: string) => void
+  // Customer additional info
+  dateOfBirth: string
+  onDateOfBirthChange: (v: string) => void
+  socialMediaUrl: string
+  onSocialMediaUrlChange: (v: string) => void
+  photoConsent: boolean
+  onPhotoConsentChange: (v: boolean) => void
+  referralSource: string
+  onReferralSourceChange: (v: string) => void
   // Notes & payment
   internalNotes: string
   onInternalNotesChange: (v: string) => void
@@ -83,6 +93,14 @@ export function AdminBookingSummaryTab({
   onSpecialRequirementsChange,
   invoiceNotes,
   onInvoiceNotesChange,
+  dateOfBirth,
+  onDateOfBirthChange,
+  socialMediaUrl,
+  onSocialMediaUrlChange,
+  photoConsent,
+  onPhotoConsentChange,
+  referralSource,
+  onReferralSourceChange,
   internalNotes,
   onInternalNotesChange,
   paymentMethod,
@@ -164,10 +182,111 @@ export function AdminBookingSummaryTab({
         </div>
       </div>
 
-      {/* Section 4: Internal Notes & Payment */}
+      {/* Section 3: Customer Additional Info */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-sm">3</span>
+          {locale === 'vi' ? 'Thông Tin Bổ Sung Của Khách' : 'Customer Additional Info'}
+        </h3>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Date of Birth */}
+          <div className="space-y-2">
+            <Label htmlFor="date-of-birth">
+              {locale === 'vi' ? 'Ngày sinh/tháng sinh' : 'Date of Birth'}
+            </Label>
+            <Input
+              id="date-of-birth"
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => onDateOfBirthChange(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {locale === 'vi'
+                ? 'Để có thể nhận các ưu đãi vào ngày sinh nhật cùng Trại trong tương lai'
+                : 'To receive birthday offers in the future'
+              }
+            </p>
+          </div>
+
+          {/* Social Media URL */}
+          <div className="space-y-2">
+            <Label htmlFor="social-media-url">
+              {locale === 'vi' ? 'Đường dẫn Facebook/Instagram' : 'Facebook/Instagram URL'}
+            </Label>
+            <Input
+              id="social-media-url"
+              type="text"
+              placeholder="https://facebook.com/yourprofile"
+              value={socialMediaUrl}
+              onChange={(e) => onSocialMediaUrlChange(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {locale === 'vi'
+                ? 'Trại sẽ gửi thông báo xác nhận đến khách qua MXH trước ngày check in'
+                : 'We will send confirmation via social media before check-in'
+              }
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Photo Consent */}
+          <div className="space-y-2">
+            <Label htmlFor="photo-consent">
+              {locale === 'vi' ? 'Lưu trữ lại kỷ niệm cùng Trại (chụp ngẫu nhiên)' : 'Photo Consent (random photos)'}
+            </Label>
+            <Select
+              value={photoConsent ? 'true' : 'false'}
+              onValueChange={(v) => onPhotoConsentChange(v === 'true')}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="true">{locale === 'vi' ? 'Đồng ý' : 'Agree'}</SelectItem>
+                <SelectItem value="false">{locale === 'vi' ? 'Không đồng ý' : 'Disagree'}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {locale === 'vi'
+                ? 'Trại sẽ chụp tặng những tấm ảnh kỷ niệm, các hình ảnh sẽ được chia sẻ lên fanpage'
+                : 'We will take memorable photos, images will be shared on fanpage'
+              }
+            </p>
+          </div>
+
+          {/* Referral Source */}
+          <div className="space-y-2">
+            <Label>
+              {locale === 'vi' ? 'Bạn biết đến Trại qua đâu?' : 'How did you hear about us?'}
+            </Label>
+            <Select
+              value={referralSource}
+              onValueChange={(v) => onReferralSourceChange(v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={locale === 'vi' ? 'Chọn nguồn' : 'Select source'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="facebook">Facebook</SelectItem>
+                <SelectItem value="instagram">Instagram</SelectItem>
+                <SelectItem value="tiktok">Tiktok</SelectItem>
+                <SelectItem value="referral">{locale === 'vi' ? 'Người quen giới thiệu' : 'Referral'}</SelectItem>
+                <SelectItem value="returning">{locale === 'vi' ? 'Khách cũ quay lại' : 'Returning customer'}</SelectItem>
+                <SelectItem value="panorama">{locale === 'vi' ? 'Từ Panorama Glamping' : 'From Panorama Glamping'}</SelectItem>
+                <SelectItem value="google">Google</SelectItem>
+                <SelectItem value="other">{locale === 'vi' ? 'Khác' : 'Other'}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 4: Internal Notes & Payment */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-sm">4</span>
           {locale === 'vi' ? 'Ghi Chú Nội Bộ & Thanh Toán' : 'Internal Notes & Payment'}
         </h3>
 
@@ -208,7 +327,7 @@ export function AdminBookingSummaryTab({
       {/* Section 5: Pricing Summary */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-sm">4</span>
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-sm">5</span>
           {locale === 'vi' ? 'Tổng Kết Giá' : 'Pricing Summary'}
         </h3>
 

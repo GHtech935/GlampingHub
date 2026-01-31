@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
+import { NumberStepper } from '@/components/ui/number-stepper'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, Users, Info, Loader2 } from 'lucide-react'
@@ -229,14 +229,11 @@ export function GlampingParameterSelector({
 
                 {/* Quantity input */}
                 <div className="flex flex-col items-end gap-1">
-                  <Input
-                    id={`param-${paramId}`}
-                    type="number"
+                  <NumberStepper
+                    value={quantity}
+                    onChange={(newValue) => handleQuantityChange(paramId, newValue.toString(), param)}
                     min={param.min_quantity || 0}
                     max={param.max_quantity || 999}
-                    value={quantity}
-                    onChange={(e) => handleQuantityChange(paramId, e.target.value, param)}
-                    className={`w-20 text-center ${hasError ? 'border-red-500' : ''}`}
                     disabled={disabled}
                   />
 

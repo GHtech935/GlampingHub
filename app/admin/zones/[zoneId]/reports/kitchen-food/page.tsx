@@ -30,7 +30,9 @@ interface MenuProduct {
   menuItemId: string;
   menuItemName: string;
   menuItemUnit: string;
+  minGuests: number | null;
   quantity: number;
+  adjustedQuantity: number;
   notes: string | null;
 }
 
@@ -51,6 +53,7 @@ interface BookingData {
   bookingId: string;
   bookingCode: string;
   bookerName: string;
+  photoConsent: boolean | null;
   tentCount: number;
   notes: BookingNote[];
   tents: TentData[];
@@ -59,6 +62,7 @@ interface BookingData {
 interface AggregatedMenuItem {
   menuItemName: string;
   menuItemUnit: string;
+  minGuests: number | null;
   totalQuantity: number;
 }
 
@@ -80,11 +84,14 @@ interface FlatRow {
   bookingId: string;
   bookingCode: string;
   bookerName: string;
+  photoConsent: boolean | null;
   tentCount: number;
   itemName: string;
   menuItemName: string;
   menuItemUnit: string;
+  minGuests: number | null;
   quantity: number;
+  adjustedQuantity: number;
   parameters: TentParameter[];
   notes: string | null;
   bookingNotes: BookingNote[];
@@ -180,11 +187,14 @@ export default function KitchenFoodReportPage() {
             bookingId: booking.bookingId,
             bookingCode: booking.bookingCode,
             bookerName: booking.bookerName,
+            photoConsent: booking.photoConsent,
             tentCount: booking.tentCount,
             itemName: tent.itemName,
             menuItemName: product.menuItemName,
             menuItemUnit: product.menuItemUnit || "",
+            minGuests: product.minGuests,
             quantity: product.quantity,
+            adjustedQuantity: product.adjustedQuantity,
             parameters: tent.parameters || [],
             notes: product.notes,
             bookingNotes: booking.notes || [],
@@ -270,7 +280,8 @@ export default function KitchenFoodReportPage() {
 
     // Menu items data rows
     summary.aggregatedMenuItems.forEach((item) => {
-      const row = worksheet.addRow([item.menuItemName, item.totalQuantity, item.menuItemUnit || ""]);
+      const displayUnit = item.minGuests && item.minGuests > 0 ? "combo 1 khách" : (item.menuItemUnit || "");
+      const row = worksheet.addRow([item.menuItemName, item.totalQuantity, displayUnit]);
       row.getCell(1).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       row.getCell(2).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       row.getCell(2).alignment = { horizontal: 'center' };
@@ -314,7 +325,8 @@ export default function KitchenFoodReportPage() {
       tCols("quantity"),
       tCols("unit"),
       ...paramLabels,
-      tCols("notes")
+      tCols("notes"),
+      locale === "vi" ? "Chụp ảnh" : "Photo"
     ];
     const detailHeaderRow = worksheet.addRow(detailHeaders);
     detailHeaderRow.eachCell((cell) => {
@@ -370,16 +382,24 @@ export default function KitchenFoodReportPage() {
         if (note) noteParts.push(`${note.authorName}: ${note.content}`);
         const combinedNotes = noteParts.join(" | ");
 
+        // Display adjusted quantity and "combo 1 khách" unit if minGuests > 0
+        const displayQuantity = menuRow?.product.adjustedQuantity || "";
+        const displayUnit = menuRow?.product.minGuests && menuRow.product.minGuests > 0
+          ? "combo 1 khách"
+          : (menuRow?.product.menuItemUnit || "");
+
+        const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
         const dataRow = worksheet.addRow([
           i === 0 ? booking.tentCount : "",
           i === 0 ? booking.bookingCode : "",
           i === 0 ? booking.bookerName : "",
           menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
           menuRow?.product.menuItemName || "",
-          menuRow?.product.quantity || "",
-          menuRow?.product.menuItemUnit || "",
+          displayQuantity,
+          displayUnit,
           ...paramValues,
-          combinedNotes
+          combinedNotes,
+          i === 0 ? photoConsentText : ""
         ]);
 
         dataRow.eachCell((cell) => {
@@ -426,6 +446,7 @@ export default function KitchenFoodReportPage() {
       { header: tCols("unit"), key: "menuItemUnit" },
       ...paramLabels.map(label => ({ header: label, key: label })),
       { header: tCols("notes"), key: "notes" },
+      { header: locale === "vi" ? "Chụp ảnh" : "Photo", key: "photoConsent" },
     ];
 
     // Build export data with expanded rows for booking notes
@@ -451,15 +472,23 @@ export default function KitchenFoodReportPage() {
         if (note) noteParts.push(`${note.authorName}: ${note.content}`);
         const combinedNotes = noteParts.join(" | ");
 
+        // Display adjusted quantity and "combo 1 khách" unit if minGuests > 0
+        const displayQuantity = menuRow?.product.adjustedQuantity || "";
+        const displayUnit = menuRow?.product.minGuests && menuRow.product.minGuests > 0
+          ? "combo 1 khách"
+          : (menuRow?.product.menuItemUnit || "");
+
+        const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
         const rowData: Record<string, any> = {
           tentCount: i === 0 ? booking.tentCount : "",
           bookingCode: i === 0 ? booking.bookingCode : "",
           bookerName: i === 0 ? booking.bookerName : "",
           itemName: menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
           menuItemName: menuRow?.product.menuItemName || "",
-          quantity: menuRow?.product.quantity || "",
-          menuItemUnit: menuRow?.product.menuItemUnit || "",
+          quantity: displayQuantity,
+          menuItemUnit: displayUnit,
           notes: combinedNotes,
+          photoConsent: i === 0 ? photoConsentText : "",
         };
         // Add parameter values
         paramLabels.forEach(label => {
@@ -553,13 +582,15 @@ export default function KitchenFoodReportPage() {
             </tr>
           </thead>
           <tbody>
-            ${summary.aggregatedMenuItems.map(item => `
+            ${summary.aggregatedMenuItems.map(item => {
+              const displayUnit = item.minGuests && item.minGuests > 0 ? "combo 1 khách" : (item.menuItemUnit || '');
+              return `
               <tr>
                 <td>${item.menuItemName}</td>
                 <td class="text-center font-bold">${item.totalQuantity}</td>
-                <td class="text-center">${item.menuItemUnit || ''}</td>
+                <td class="text-center">${displayUnit}</td>
               </tr>
-            `).join('')}
+            `;}).join('')}
             <tr class="bg-orange-light">
               <td class="font-bold">${locale === "vi" ? "Tổng cộng" : "Total"}</td>
               <td class="text-center font-bold">${summary.aggregatedMenuItems.reduce((sum, item) => sum + item.totalQuantity, 0)}</td>
@@ -581,6 +612,7 @@ export default function KitchenFoodReportPage() {
               <th class="text-center" style="width: 6%;">${tCols("unit")}</th>
               ${paramLabels.map(label => `<th class="text-center" style="width: 6%;">${label}</th>`).join('')}
               <th>${tCols("notes")}</th>
+              <th class="text-center" style="width: 6%;">${locale === "vi" ? "Chụp ảnh" : "Photo"}</th>
             </tr>
           </thead>
           <tbody>
@@ -608,6 +640,13 @@ export default function KitchenFoodReportPage() {
                   if (note) noteParts.push(`${note.authorName}: ${note.content}`);
                   const combinedNotes = noteParts.join(' | ');
 
+                  // Display adjusted quantity and "combo 1 khách" unit if minGuests > 0
+                  const displayQuantity = menuRow?.product.adjustedQuantity || '';
+                  const displayUnit = menuRow?.product.minGuests && menuRow.product.minGuests > 0
+                    ? "combo 1 khách"
+                    : (menuRow?.product.menuItemUnit || '');
+
+                  const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
                   pdfRows.push(`
                     <tr>
                       <td class="text-center">${i === 0 ? booking.tentCount : ''}</td>
@@ -615,14 +654,15 @@ export default function KitchenFoodReportPage() {
                       <td>${i === 0 ? booking.bookerName : ''}</td>
                       <td class="${menuRow?.isFirstOfTent ? 'bg-yellow font-bold' : ''}">${menuRow?.isFirstOfTent ? menuRow.tent.itemName : ''}</td>
                       <td>${menuRow?.product.menuItemName || ''}</td>
-                      <td class="text-center font-bold">${menuRow?.product.quantity || ''}</td>
-                      <td class="text-center">${menuRow?.product.menuItemUnit || ''}</td>
+                      <td class="text-center font-bold">${displayQuantity}</td>
+                      <td class="text-center">${displayUnit}</td>
                       ${paramLabels.map(label => {
                         if (!menuRow?.isFirstOfTent) return '<td class="text-center"></td>';
                         const param = menuRow.tent.parameters.find(p => p.label === label);
                         return `<td class="text-center">${param ? param.quantity : ''}</td>`;
                       }).join('')}
                       <td>${combinedNotes}</td>
+                      <td class="text-center">${i === 0 ? photoConsentText : ''}</td>
                     </tr>
                   `);
                 }
@@ -751,7 +791,7 @@ export default function KitchenFoodReportPage() {
                         {item.totalQuantity}
                       </td>
                       <td className="px-4 py-2 text-sm text-center text-gray-600">
-                        {item.menuItemUnit}
+                        {item.minGuests && item.minGuests > 0 ? "combo 1 khách" : item.menuItemUnit}
                       </td>
                     </tr>
                   ))}
@@ -824,6 +864,9 @@ export default function KitchenFoodReportPage() {
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {/* Actions */}
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {locale === "vi" ? "Chụp ảnh" : "Photo"}
                   </th>
                 </tr>
               </thead>
@@ -911,14 +954,14 @@ export default function KitchenFoodReportPage() {
                       {/* Menu Item */}
                       <td className="px-4 py-3 text-sm text-gray-900">{row.menuItemName}</td>
 
-                      {/* Quantity */}
+                      {/* Quantity - display adjusted quantity */}
                       <td className="px-4 py-3 text-sm text-gray-900 text-center font-semibold">
-                        {row.quantity}
+                        {row.adjustedQuantity}
                       </td>
 
-                      {/* Unit */}
+                      {/* Unit - display "combo 1 khách" if minGuests > 0 */}
                       <td className="px-4 py-3 text-sm text-gray-600 text-center">
-                        {row.menuItemUnit}
+                        {row.minGuests && row.minGuests > 0 ? "combo 1 khách" : row.menuItemUnit}
                       </td>
 
                       {/* Notes - combined menu product notes and booking notes icon */}
@@ -960,6 +1003,18 @@ export default function KitchenFoodReportPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                        </td>
+                      )}
+
+                      {/* Photo Consent - only show for first row of booking */}
+                      {row.isFirstRowOfBooking && (
+                        <td
+                          rowSpan={bookingRowSpan}
+                          className={`px-4 py-3 text-center align-top text-sm ${
+                            row.photoConsent ? "text-green-600 font-medium" : "text-gray-500"
+                          }`}
+                        >
+                          {row.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No")}
                         </td>
                       )}
                     </tr>

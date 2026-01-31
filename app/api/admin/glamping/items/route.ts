@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     // Get filters from query params
     const searchParams = request.nextUrl.searchParams;
     const zoneId = searchParams.get('zone_id');
+    const categoryId = searchParams.get('category_id');
     const sku = searchParams.get('sku');
 
     let query = `
@@ -72,6 +73,12 @@ export async function GET(request: NextRequest) {
       }
       conditions.push(`i.zone_id = $${params.length + 1}`);
       params.push(zoneId);
+    }
+
+    // Filter by category_id if provided
+    if (categoryId) {
+      conditions.push(`i.category_id = $${params.length + 1}`);
+      params.push(categoryId);
     }
 
     // Filter by SKU if provided (for uniqueness check)

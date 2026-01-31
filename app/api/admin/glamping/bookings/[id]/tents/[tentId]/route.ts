@@ -71,9 +71,16 @@ export async function PUT(
 
     // Calculate subtotal from parameters if provided
     // unitPrice is already the total per unit for ALL nights, no need to multiply by nights
+    // For per_group pricing mode, don't multiply by quantity (it's a fixed package price)
     let subtotal = 0;
     if (parameters && Array.isArray(parameters) && parameters.length > 0) {
-      subtotal = parameters.reduce((sum: number, p: any) => sum + (p.quantity * p.unitPrice), 0);
+      subtotal = parameters.reduce((sum: number, p: any) => {
+        const pricingMode = p.pricingMode || 'per_person';
+        if (pricingMode === 'per_group') {
+          return sum + p.unitPrice; // Fixed price, don't multiply by quantity
+        }
+        return sum + (p.quantity * p.unitPrice);
+      }, 0);
     } else {
       subtotal = parseFloat(oldTent.subtotal || '0');
     }
@@ -182,6 +189,7 @@ export async function PUT(
             JSON.stringify({
               checkInDate: checkInDate || oldTent.check_in_date,
               checkOutDate: checkOutDate || oldTent.check_out_date,
+              pricingMode: param.pricingMode || 'per_person',
             }),
           ]
         );

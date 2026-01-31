@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
       SELECT
         b.id as booking_id,
         b.booking_code,
+        b.photo_consent,
         c.first_name,
         c.last_name,
         bt.id as tent_id,
@@ -83,7 +84,9 @@ export async function GET(request: NextRequest) {
         mi.id as menu_item_id,
         mi.name as menu_item_name,
         mi.unit as menu_item_unit,
+        mi.min_guests,
         bmp.quantity,
+        bmp.quantity * COALESCE(mi.min_guests, 1) as adjusted_quantity,
         bmp.notes
       FROM glamping_booking_menu_products bmp
       JOIN glamping_booking_tents bt ON bmp.booking_tent_id = bt.id
@@ -154,14 +157,15 @@ export async function GET(request: NextRequest) {
       SELECT
         mi.name as menu_item_name,
         mi.unit as menu_item_unit,
-        SUM(bmp.quantity) as total_quantity
+        mi.min_guests,
+        SUM(bmp.quantity * COALESCE(mi.min_guests, 1)) as total_quantity
       FROM glamping_booking_menu_products bmp
       JOIN glamping_booking_tents bt ON bmp.booking_tent_id = bt.id
       JOIN glamping_bookings b ON bmp.booking_id = b.id
       JOIN glamping_items gi ON bt.item_id = gi.id
       JOIN glamping_menu_items mi ON bmp.menu_item_id = mi.id
       ${whereClause}
-      GROUP BY mi.id, mi.name, mi.unit
+      GROUP BY mi.id, mi.name, mi.unit, mi.min_guests
       ORDER BY mi.name
     `;
 
@@ -182,6 +186,7 @@ export async function GET(request: NextRequest) {
       bookingId: string;
       bookingCode: string;
       bookerName: string;
+      photoConsent: boolean | null;
       notes: Array<{ id: string; authorName: string; content: string; createdAt: string }>;
       tents: Map<string, {
         tentId: string;
@@ -193,7 +198,9 @@ export async function GET(request: NextRequest) {
           menuItemId: string;
           menuItemName: string;
           menuItemUnit: string;
+          minGuests: number | null;
           quantity: number;
+          adjustedQuantity: number;
           notes: string | null;
         }[];
       }>;
@@ -214,6 +221,7 @@ export async function GET(request: NextRequest) {
           bookingId,
           bookingCode: row.booking_code,
           bookerName: `${firstName} ${lastName}`.trim() || "Unknown",
+          photoConsent: row.photo_consent,
           notes: notesByBookingId.get(bookingId) || [],
           tents: new Map(),
         });
@@ -246,7 +254,9 @@ export async function GET(request: NextRequest) {
         menuItemId: row.menu_item_id,
         menuItemName: getLocalizedString(row.menu_item_name),
         menuItemUnit: getLocalizedString(row.menu_item_unit),
+        minGuests: row.min_guests ? parseInt(row.min_guests) : null,
         quantity: row.quantity,
+        adjustedQuantity: parseInt(row.adjusted_quantity) || row.quantity,
         notes: row.notes || null,
       });
     }
@@ -256,6 +266,7 @@ export async function GET(request: NextRequest) {
       bookingId: booking.bookingId,
       bookingCode: booking.bookingCode,
       bookerName: booking.bookerName,
+      photoConsent: booking.photoConsent,
       notes: booking.notes,
       tentCount: booking.tents.size,
       tents: Array.from(booking.tents.values())
@@ -273,6 +284,7 @@ export async function GET(request: NextRequest) {
     const aggregatedMenuItems = summaryResult.rows.map((row) => ({
       menuItemName: getLocalizedString(row.menu_item_name),
       menuItemUnit: getLocalizedString(row.menu_item_unit),
+      minGuests: row.min_guests ? parseInt(row.min_guests) : null,
       totalQuantity: parseInt(row.total_quantity) || 0,
     }));
 
