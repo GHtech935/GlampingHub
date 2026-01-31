@@ -10,12 +10,37 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
-import { X, Plus } from 'lucide-react'
+import { X, Plus, Info } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminTentTabContent, createEmptyTent, type AdminTentItem } from './AdminTentTabContent'
 import { AdminBookingSummaryTab } from './AdminBookingSummaryTab'
 import { getLocalizedText } from '@/lib/i18n-utils'
 import { addDays, parseISO, format } from 'date-fns'
+
+// ========== LOCALSTORAGE CONSTANTS ==========
+const ADMIN_BOOKING_DRAFT_KEY = 'admin_booking_draft'
+const DRAFT_EXPIRATION_HOURS = 24
+const DRAFT_VERSION = '1.0'
+
+interface AdminBookingDraft {
+  version: string
+  zoneId: string
+  tents: AdminTentItem[]
+  activeTabId: string
+  selectedCustomerId: string
+  newCustomerData: NewCustomerData | null
+  partyNames: string
+  specialRequirements: string
+  invoiceNotes: string
+  internalNotes: string
+  paymentMethod: 'pay_now' | 'pay_later'
+  dateOfBirth: string
+  socialMediaUrl: string
+  photoConsent: boolean
+  referralSource: string
+  lastUpdated: number
+  expiresAt: number
+}
 
 interface AdminGlampingBookingFormModalProps {
   open: boolean
@@ -57,13 +82,6 @@ export function AdminGlampingBookingFormModal({
   const [tents, setTents] = useState<AdminTentItem[]>(() => [createEmptyTent()])
   const [activeTabId, setActiveTabId] = useState<string>('')
 
-  // Initialize activeTabId when tents are first created
-  useEffect(() => {
-    if (tents.length > 0 && !activeTabId) {
-      setActiveTabId(tents[0].id)
-    }
-  }, [tents, activeTabId])
-
   // ========== SHARED STATE ==========
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [newCustomerData, setNewCustomerData] = useState<NewCustomerData | null>(null)
@@ -85,12 +103,173 @@ export function AdminGlampingBookingFormModal({
   const [multiPricingData, setMultiPricingData] = useState<any>(null)
   const [pricingLoading, setPricingLoading] = useState(false)
 
+  // ========== LOCALSTORAGE PERSISTENCE STATE ==========
+  const [isInitialized, setIsInitialized] = useState(false)
+  const [hasDraftRestored, setHasDraftRestored] = useState(false)
+
+  // Initialize activeTabId when tents are first created
+  useEffect(() => {
+    if (tents.length > 0 && !activeTabId) {
+      setActiveTabId(tents[0].id)
+    }
+  }, [tents, activeTabId])
+
+  // ========== LOAD DRAFT FROM LOCALSTORAGE ==========
+  useEffect(() => {
+    if (!open) return // Only load when modal opens
+
+    try {
+      const storedDraft = localStorage.getItem(ADMIN_BOOKING_DRAFT_KEY)
+      if (storedDraft) {
+        const draft: AdminBookingDraft = JSON.parse(storedDraft)
+
+        // Check expiration
+        if (draft.expiresAt && Date.now() > draft.expiresAt) {
+          localStorage.removeItem(ADMIN_BOOKING_DRAFT_KEY)
+          setIsInitialized(true)
+          return
+        }
+
+        // Check zoneId match - only restore if same zone
+        if (draft.zoneId !== zoneId) {
+          setIsInitialized(true)
+          return
+        }
+
+        // Check version compatibility
+        if (draft.version !== DRAFT_VERSION) {
+          localStorage.removeItem(ADMIN_BOOKING_DRAFT_KEY)
+          setIsInitialized(true)
+          return
+        }
+
+        // Restore all state from draft
+        if (draft.tents && draft.tents.length > 0) {
+          // Hydrate Date objects from serialized strings
+          const hydratedTents = draft.tents.map(tent => ({
+            ...tent,
+            dateRange: tent.dateRange ? {
+              from: tent.dateRange.from ? new Date(tent.dateRange.from) : undefined,
+              to: tent.dateRange.to ? new Date(tent.dateRange.to) : undefined,
+            } : undefined,
+          }))
+          setTents(hydratedTents)
+        }
+        if (draft.activeTabId) {
+          setActiveTabId(draft.activeTabId)
+        }
+        if (draft.selectedCustomerId) {
+          setSelectedCustomerId(draft.selectedCustomerId)
+        }
+        if (draft.newCustomerData) {
+          setNewCustomerData(draft.newCustomerData)
+        }
+        setPartyNames(draft.partyNames || '')
+        setSpecialRequirements(draft.specialRequirements || '')
+        setInvoiceNotes(draft.invoiceNotes || '')
+        setInternalNotes(draft.internalNotes || '')
+        setPaymentMethod(draft.paymentMethod || 'pay_later')
+        setDateOfBirth(draft.dateOfBirth || '')
+        setSocialMediaUrl(draft.socialMediaUrl || '')
+        setPhotoConsent(draft.photoConsent ?? true)
+        setReferralSource(draft.referralSource || '')
+
+        setHasDraftRestored(true)
+      }
+    } catch (error) {
+      console.error('Error loading draft from localStorage:', error)
+      localStorage.removeItem(ADMIN_BOOKING_DRAFT_KEY)
+    }
+    setIsInitialized(true)
+  }, [open, zoneId])
+
+  // ========== SAVE DRAFT TO LOCALSTORAGE ==========
+  useEffect(() => {
+    if (!isInitialized || !open) return
+
+    try {
+      const draft: AdminBookingDraft = {
+        version: DRAFT_VERSION,
+        zoneId,
+        tents,
+        activeTabId,
+        selectedCustomerId,
+        newCustomerData,
+        partyNames,
+        specialRequirements,
+        invoiceNotes,
+        internalNotes,
+        paymentMethod,
+        dateOfBirth,
+        socialMediaUrl,
+        photoConsent,
+        referralSource,
+        lastUpdated: Date.now(),
+        expiresAt: Date.now() + DRAFT_EXPIRATION_HOURS * 60 * 60 * 1000,
+      }
+
+      localStorage.setItem(ADMIN_BOOKING_DRAFT_KEY, JSON.stringify(draft))
+    } catch (error) {
+      console.error('Error saving draft to localStorage:', error)
+    }
+  }, [
+    isInitialized,
+    open,
+    zoneId,
+    tents,
+    activeTabId,
+    selectedCustomerId,
+    newCustomerData,
+    partyNames,
+    specialRequirements,
+    invoiceNotes,
+    internalNotes,
+    paymentMethod,
+    dateOfBirth,
+    socialMediaUrl,
+    photoConsent,
+    referralSource,
+  ])
+
+  // ========== CLEAR DRAFT FUNCTION ==========
+  const clearDraft = useCallback(() => {
+    localStorage.removeItem(ADMIN_BOOKING_DRAFT_KEY)
+    setHasDraftRestored(false)
+    // Reset form to initial state
+    const newTent = createEmptyTent()
+    setTents([newTent])
+    setActiveTabId(newTent.id)
+    setSelectedCustomerId('')
+    setNewCustomerData(null)
+    setPreselectedCustomer(null)
+    setPartyNames('')
+    setSpecialRequirements('')
+    setInvoiceNotes('')
+    setInternalNotes('')
+    setPaymentMethod('pay_later')
+    setDateOfBirth('')
+    setSocialMediaUrl('')
+    setPhotoConsent(true)
+    setReferralSource('')
+    setMultiPricingData(null)
+  }, [])
+
   // ========== TENT MANAGEMENT ==========
   const addTent = useCallback(() => {
     const newTent = createEmptyTent()
+
+    // Copy dates from first tent if available
+    const firstTent = tents[0]
+    if (firstTent && firstTent.dateRange?.from && firstTent.dateRange?.to) {
+      newTent.dateRange = { ...firstTent.dateRange }
+      newTent.checkIn = firstTent.checkIn
+      newTent.checkOut = firstTent.checkOut
+      newTent.nights = firstTent.nights
+    }
+
     setTents(prev => [...prev, newTent])
     setActiveTabId(newTent.id)
-  }, [])
+  }, [tents])
 
   const removeTent = useCallback((index: number) => {
     if (tents.length <= 1) return
@@ -409,6 +588,10 @@ export function AdminGlampingBookingFormModal({
       const result = await response.json()
 
       if (response.ok && result.success) {
+        // Clear draft on successful submission
+        localStorage.removeItem(ADMIN_BOOKING_DRAFT_KEY)
+        setHasDraftRestored(false)
+
         toast({
           title: locale === 'vi' ? 'Thành công' : 'Success',
           description: locale === 'vi'
@@ -459,6 +642,9 @@ export function AdminGlampingBookingFormModal({
     setSocialMediaUrl('')
     setPhotoConsent(true)
     setReferralSource('')
+    // Reset localStorage persistence state
+    setIsInitialized(false)
+    setHasDraftRestored(false)
     onClose()
   }
 
@@ -476,6 +662,29 @@ export function AdminGlampingBookingFormModal({
             }
           </DialogDescription>
         </DialogHeader>
+
+        {/* Draft Restored Notification */}
+        {hasDraftRestored && (
+          <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-md px-4 py-2 text-sm text-blue-800">
+            <div className="flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              <span>
+                {locale === 'vi'
+                  ? 'Đã khôi phục dữ liệu từ phiên làm việc trước'
+                  : 'Restored data from previous session'}
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={clearDraft}
+              className="h-7 px-2 text-blue-800 hover:text-blue-900 hover:bg-blue-100"
+            >
+              {locale === 'vi' ? 'Xóa' : 'Clear'}
+            </Button>
+          </div>
+        )}
 
         <Tabs value={activeTabId} onValueChange={setActiveTabId} className="w-full">
           <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/50 p-1">

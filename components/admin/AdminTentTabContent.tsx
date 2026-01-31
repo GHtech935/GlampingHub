@@ -213,13 +213,10 @@ export function AdminTentTabContent({
         : getLocalizedText(itemData.name, locale as 'vi' | 'en'),
       itemSku: itemData.sku,
       itemData,
-      // Reset dependent fields
+      // Reset dependent fields but keep dates
       itemParameters: [],
       parameterQuantities: {},
-      dateRange: undefined,
-      checkIn: '',
-      checkOut: '',
-      nights: 0,
+      // Preserve dateRange, checkIn, checkOut, nights for better UX when switching items
       adults: 0,
       children: 0,
       menuProducts: {},

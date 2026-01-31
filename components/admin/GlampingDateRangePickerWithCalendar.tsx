@@ -155,6 +155,45 @@ export function GlampingDateRangePickerWithCalendar({
     fetchAvailability()
   }, [itemId, currentMonth])
 
+  // Validate dateRange against calendar availability when calendar data loads
+  // This clears invalid pre-filled dates (e.g., from copying dates between tents)
+  useEffect(() => {
+    if (!dateRange?.from || !dateRange?.to || calendar.length === 0) return
+
+    // Check if any date in the range is unavailable
+    const start = dateRange.from
+    const end = dateRange.to
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    let hasInvalidDate = false
+    for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+      const dateStr = formatDateToYMD(d)
+      const dayData = calendar.find(day => day.date === dateStr)
+      const checkDate = new Date(dateStr)
+      checkDate.setHours(0, 0, 0, 0)
+
+      // Invalid if: past date OR no data OR not available
+      if (checkDate < today || !dayData || !dayData.isAvailable) {
+        hasInvalidDate = true
+        break
+      }
+    }
+
+    if (hasInvalidDate) {
+      // Clear the invalid dateRange
+      onDateRangeChange(undefined)
+      toast({
+        title: locale === 'vi' ? 'Ngày không khả dụng' : 'Dates not available',
+        description: locale === 'vi'
+          ? 'Ngày đã chọn không khả dụng cho item này. Vui lòng chọn lại.'
+          : 'Selected dates are not available for this item. Please select again.',
+        variant: 'destructive'
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendar, itemId])
+
   // Calculate nights when date range changes
   useEffect(() => {
     if (dateRange?.from && dateRange?.to) {
