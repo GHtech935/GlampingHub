@@ -638,6 +638,7 @@
                 "guests": "Khách",
                 "menuItem": "Món ăn",
                 "quantity": "SL",
+                "unit": "Đơn vị",
                 "notes": "Ghi chú",
                 "bookingNotes": "Ghi chú Booking"
             },

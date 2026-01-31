@@ -93,6 +93,28 @@ export function CartItemInlineEditForm({
     return differenceInDays(formState.dateRange.to, formState.dateRange.from);
   }, [formState.dateRange]);
 
+  // Calculate accommodation cost locally (not from API totals which may have qty=0 bug)
+  // This ensures qty=0 parameters contribute 0 to the total
+  const calculatedAccommodationCost = React.useMemo(() => {
+    if (!pricingData?.parameterPricing || !parameters || parameters.length === 0) {
+      return pricingData?.totals?.accommodationCost || 0;
+    }
+
+    let total = 0;
+    parameters.forEach((param) => {
+      const paramId = param.id || param.parameter_id;
+      const qty = formState.parameterQuantities[paramId] || 0;
+      const pricePerUnitAllNights = pricingData.parameterPricing?.[paramId] || 0;
+      const pricingMode = pricingData.parameterPricingModes?.[paramId] || 'per_person';
+      const isPerGroup = pricingMode === 'per_group';
+
+      // per_group: fixed price, per_person: price × quantity
+      total += isPerGroup ? pricePerUnitAllNights : pricePerUnitAllNights * qty;
+    });
+
+    return total;
+  }, [pricingData, parameters, formState.parameterQuantities]);
+
   // Calculate total counted guests from parameters
   const totalCountedGuests = React.useMemo(() => {
     if (!parameters || parameters.length === 0) return 0;
@@ -222,11 +244,11 @@ export function CartItemInlineEditForm({
               )}
 
               {/* Accommodation Price */}
-              {pricingData?.totals?.accommodationCost && (
+              {calculatedAccommodationCost > 0 && (
                 <div className="mt-2 text-sm">
                   <span className="text-gray-600">Tiền lều: </span>
                   <span className="font-semibold text-blue-600">
-                    {formatCurrency(pricingData.totals.accommodationCost)}
+                    {formatCurrency(calculatedAccommodationCost)}
                   </span>
                 </div>
               )}
@@ -297,7 +319,7 @@ export function CartItemInlineEditForm({
           itemId={item.itemId}
           checkIn={formState.dateRange?.from ? format(formState.dateRange.from, 'yyyy-MM-dd') : undefined}
           checkOut={formState.dateRange?.to ? format(formState.dateRange.to, 'yyyy-MM-dd') : undefined}
-          totalAmount={pricingData?.totals?.accommodationCost || 0}
+          totalAmount={calculatedAccommodationCost}
           applicationType="accommodation"
           appliedVoucher={formState.accommodationVoucher}
           onVoucherApplied={formState.setAccommodationVoucher}
@@ -320,7 +342,7 @@ export function CartItemInlineEditForm({
               <div className="flex justify-between text-sm">
                 <span>Tiền lều</span>
                 <span className="font-semibold">
-                  {formatCurrency(pricingData.totals?.accommodationCost || 0)}
+                  {formatCurrency(calculatedAccommodationCost)}
                 </span>
               </div>
 
@@ -352,7 +374,7 @@ export function CartItemInlineEditForm({
                 <span>Tổng cộng</span>
                 <span className="text-blue-600">
                   {formatCurrency(
-                    (pricingData.totals?.accommodationCost || 0) -
+                    calculatedAccommodationCost -
                     (formState.accommodationVoucher?.discountAmount || 0) +
                     menuProductsTotal -
                     menuDiscountAmount

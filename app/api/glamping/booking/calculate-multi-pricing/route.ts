@@ -58,29 +58,50 @@ export async function GET(request: NextRequest) {
             item.parameterQuantities
           )
 
-          // Calculate total accommodation cost
+          // Calculate total accommodation cost - CHECK pricing_mode
           let accommodationCost = 0
           const missingPricing: string[] = []
 
+          // Use nightly pricing with pricing_mode check (like calculate-pricing does)
+          nightlyPricing.forEach(night => {
+            Object.entries(item.parameterQuantities).forEach(([paramId, quantity]) => {
+              const nightPrice = night.parameters[paramId] || 0
+              const pricingMode = night.pricingModes?.[paramId] || 'per_person'
+
+              let priceToAdd: number
+              if (pricingMode === 'per_group') {
+                // Per group: fixed price, regardless of quantity
+                priceToAdd = nightPrice
+              } else {
+                // Per person: multiply by quantity
+                priceToAdd = nightPrice * quantity
+              }
+
+              accommodationCost += priceToAdd
+            })
+          })
+
+          // Check for missing pricing
           Object.entries(item.parameterQuantities).forEach(([paramId, quantity]) => {
             const paramTotalPrice = parameterPricing[paramId]
-
-            // Check if pricing is missing or zero
             if (paramTotalPrice === undefined || paramTotalPrice === null) {
               console.warn(`[Multi-Pricing] Missing pricing for parameter ${paramId} in item ${item.itemId}`)
               missingPricing.push(paramId)
             }
-
-            const priceToAdd = (paramTotalPrice || 0) * quantity
-            accommodationCost += priceToAdd
           })
 
-          // Validation: Cross-check with nightly breakdown
+          // Validation: Cross-check with nightly breakdown (with pricing_mode check)
           let validationTotal = 0
           nightlyPricing.forEach(night => {
             Object.entries(item.parameterQuantities).forEach(([paramId, quantity]) => {
               const nightPrice = night.parameters[paramId] || 0
-              validationTotal += nightPrice * quantity
+              const pricingMode = night.pricingModes?.[paramId] || 'per_person'
+
+              if (pricingMode === 'per_group') {
+                validationTotal += nightPrice
+              } else {
+                validationTotal += nightPrice * quantity
+              }
             })
           })
 
@@ -94,6 +115,14 @@ export async function GET(request: NextRequest) {
             console.error(`[Multi-Pricing] Item ${item.itemId} has parameters missing pricing:`, missingPricing)
           }
 
+          // Extract pricing modes from first night
+          const parameterPricingModes: Record<string, string> = {}
+          if (nightlyPricing.length > 0) {
+            Object.keys(item.parameterQuantities).forEach(paramId => {
+              parameterPricingModes[paramId] = nightlyPricing[0].pricingModes?.[paramId] || 'per_person'
+            })
+          }
+
           return {
             itemId: item.itemId,
             nights: nights,
@@ -103,6 +132,7 @@ export async function GET(request: NextRequest) {
             parameterQuantities: item.parameterQuantities,
             nightlyPricing: nightlyPricing, // Include per-night breakdown
             parameterPricing: parameterPricing, // Include per-parameter pricing
+            parameterPricingModes: parameterPricingModes, // Include pricing modes for each parameter
           }
         } catch (error) {
           console.error(`Error calculating pricing for item ${item.itemId}:`, error)

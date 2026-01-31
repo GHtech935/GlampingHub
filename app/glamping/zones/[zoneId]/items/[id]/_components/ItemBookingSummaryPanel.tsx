@@ -146,13 +146,23 @@ export function ItemBookingSummaryPanel({
     }
   };
 
-  // Calculate total using API response (with group/tiered pricing and pricing_mode)
+  // Calculate total from line items (not from API totals which uses Math.max(qty, 1))
+  // This ensures qty=0 parameters contribute 0 to the total
   const calculateTotal = () => {
     if (!calculatedPricing) return 0;
 
-    // Use totals.accommodationCost from API - it's already calculated correctly with pricing_mode
-    // This ensures per_group prices are NOT multiplied by quantity
-    return calculatedPricing.totals?.accommodationCost || 0;
+    let total = 0;
+    parameters.forEach((param) => {
+      const qty = quantities[param.id] || 0;
+      const pricePerUnitAllNights = calculatedPricing?.parameterPricing?.[param.id] || 0;
+      const pricingMode = calculatedPricing?.parameterPricingModes?.[param.id] || 'per_person';
+      const isPerGroup = pricingMode === 'per_group';
+
+      // per_group: fixed price, per_person: price × quantity
+      total += isPerGroup ? pricePerUnitAllNights : pricePerUnitAllNights * qty;
+    });
+
+    return total;
   };
 
   const total = calculateTotal();

@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
         gi.name as item_name,
         mi.id as menu_item_id,
         mi.name as menu_item_name,
+        mi.unit as menu_item_unit,
         bmp.quantity,
         bmp.notes
       FROM glamping_booking_menu_products bmp
@@ -152,6 +153,7 @@ export async function GET(request: NextRequest) {
     const summaryQuery = `
       SELECT
         mi.name as menu_item_name,
+        mi.unit as menu_item_unit,
         SUM(bmp.quantity) as total_quantity
       FROM glamping_booking_menu_products bmp
       JOIN glamping_booking_tents bt ON bmp.booking_tent_id = bt.id
@@ -159,7 +161,7 @@ export async function GET(request: NextRequest) {
       JOIN glamping_items gi ON bt.item_id = gi.id
       JOIN glamping_menu_items mi ON bmp.menu_item_id = mi.id
       ${whereClause}
-      GROUP BY mi.id, mi.name
+      GROUP BY mi.id, mi.name, mi.unit
       ORDER BY mi.name
     `;
 
@@ -190,6 +192,7 @@ export async function GET(request: NextRequest) {
         menuProducts: {
           menuItemId: string;
           menuItemName: string;
+          menuItemUnit: string;
           quantity: number;
           notes: string | null;
         }[];
@@ -242,6 +245,7 @@ export async function GET(request: NextRequest) {
       tent.menuProducts.push({
         menuItemId: row.menu_item_id,
         menuItemName: getLocalizedString(row.menu_item_name),
+        menuItemUnit: getLocalizedString(row.menu_item_unit),
         quantity: row.quantity,
         notes: row.notes || null,
       });
@@ -268,6 +272,7 @@ export async function GET(request: NextRequest) {
     // Build aggregated menu items summary
     const aggregatedMenuItems = summaryResult.rows.map((row) => ({
       menuItemName: getLocalizedString(row.menu_item_name),
+      menuItemUnit: getLocalizedString(row.menu_item_unit),
       totalQuantity: parseInt(row.total_quantity) || 0,
     }));
 

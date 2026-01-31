@@ -29,6 +29,7 @@ interface BookingNote {
 interface MenuProduct {
   menuItemId: string;
   menuItemName: string;
+  menuItemUnit: string;
   quantity: number;
   notes: string | null;
 }
@@ -57,6 +58,7 @@ interface BookingData {
 
 interface AggregatedMenuItem {
   menuItemName: string;
+  menuItemUnit: string;
   totalQuantity: number;
 }
 
@@ -81,6 +83,7 @@ interface FlatRow {
   tentCount: number;
   itemName: string;
   menuItemName: string;
+  menuItemUnit: string;
   quantity: number;
   parameters: TentParameter[];
   notes: string | null;
@@ -180,6 +183,7 @@ export default function KitchenFoodReportPage() {
             tentCount: booking.tentCount,
             itemName: tent.itemName,
             menuItemName: product.menuItemName,
+            menuItemUnit: product.menuItemUnit || "",
             quantity: product.quantity,
             parameters: tent.parameters || [],
             notes: product.notes,
@@ -252,9 +256,9 @@ export default function KitchenFoodReportPage() {
     worksheet.getCell('A5').font = { bold: true, size: 12 };
 
     // Row 6: Menu items table header
-    const menuHeaderRow = worksheet.addRow([locale === "vi" ? "MÓN ĂN" : "MENU ITEM", locale === "vi" ? "SL" : "QTY"]);
+    const menuHeaderRow = worksheet.addRow([locale === "vi" ? "MÓN ĂN" : "MENU ITEM", locale === "vi" ? "SL" : "QTY", locale === "vi" ? "ĐƠN VỊ" : "UNIT"]);
     menuHeaderRow.eachCell((cell, colNumber) => {
-      if (colNumber <= 2) {
+      if (colNumber <= 3) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEA580C' } };
         cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
         cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
@@ -262,20 +266,23 @@ export default function KitchenFoodReportPage() {
     });
     worksheet.getColumn(1).width = 35;
     worksheet.getColumn(2).width = 10;
+    worksheet.getColumn(3).width = 15;
 
     // Menu items data rows
     summary.aggregatedMenuItems.forEach((item) => {
-      const row = worksheet.addRow([item.menuItemName, item.totalQuantity]);
+      const row = worksheet.addRow([item.menuItemName, item.totalQuantity, item.menuItemUnit || ""]);
       row.getCell(1).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       row.getCell(2).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       row.getCell(2).alignment = { horizontal: 'center' };
+      row.getCell(3).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      row.getCell(3).alignment = { horizontal: 'center' };
     });
 
     // Total row
     const totalQty = summary.aggregatedMenuItems.reduce((sum, item) => sum + item.totalQuantity, 0);
-    const totalRow = worksheet.addRow([locale === "vi" ? "Tổng cộng" : "Total", totalQty]);
+    const totalRow = worksheet.addRow([locale === "vi" ? "Tổng cộng" : "Total", totalQty, ""]);
     totalRow.eachCell((cell, colNumber) => {
-      if (colNumber <= 2) {
+      if (colNumber <= 3) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFED7AA' } };
         cell.font = { bold: true };
         cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
@@ -305,6 +312,7 @@ export default function KitchenFoodReportPage() {
       tCols("item"),
       tCols("menuItem"),
       tCols("quantity"),
+      tCols("unit"),
       ...paramLabels,
       tCols("notes")
     ];
@@ -323,10 +331,11 @@ export default function KitchenFoodReportPage() {
     worksheet.getColumn(4).width = 25;
     worksheet.getColumn(5).width = 25;
     worksheet.getColumn(6).width = 8;
+    worksheet.getColumn(7).width = 12;
     paramLabels.forEach((_, idx) => {
-      worksheet.getColumn(7 + idx).width = 15;
+      worksheet.getColumn(8 + idx).width = 15;
     });
-    worksheet.getColumn(7 + paramLabels.length).width = 50;
+    worksheet.getColumn(8 + paramLabels.length).width = 50;
 
     // Data rows - expand each booking with notes
     data.forEach((booking) => {
@@ -368,6 +377,7 @@ export default function KitchenFoodReportPage() {
           menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
           menuRow?.product.menuItemName || "",
           menuRow?.product.quantity || "",
+          menuRow?.product.menuItemUnit || "",
           ...paramValues,
           combinedNotes
         ]);
@@ -413,6 +423,7 @@ export default function KitchenFoodReportPage() {
       { header: tCols("item"), key: "itemName" },
       { header: tCols("menuItem"), key: "menuItemName" },
       { header: tCols("quantity"), key: "quantity" },
+      { header: tCols("unit"), key: "menuItemUnit" },
       ...paramLabels.map(label => ({ header: label, key: label })),
       { header: tCols("notes"), key: "notes" },
     ];
@@ -447,6 +458,7 @@ export default function KitchenFoodReportPage() {
           itemName: menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
           menuItemName: menuRow?.product.menuItemName || "",
           quantity: menuRow?.product.quantity || "",
+          menuItemUnit: menuRow?.product.menuItemUnit || "",
           notes: combinedNotes,
         };
         // Add parameter values
@@ -537,6 +549,7 @@ export default function KitchenFoodReportPage() {
             <tr>
               <th>${tCols("menuItem")}</th>
               <th class="text-center" style="width: 80px;">${tCols("quantity")}</th>
+              <th class="text-center" style="width: 80px;">${tCols("unit")}</th>
             </tr>
           </thead>
           <tbody>
@@ -544,11 +557,13 @@ export default function KitchenFoodReportPage() {
               <tr>
                 <td>${item.menuItemName}</td>
                 <td class="text-center font-bold">${item.totalQuantity}</td>
+                <td class="text-center">${item.menuItemUnit || ''}</td>
               </tr>
             `).join('')}
             <tr class="bg-orange-light">
               <td class="font-bold">${locale === "vi" ? "Tổng cộng" : "Total"}</td>
               <td class="text-center font-bold">${summary.aggregatedMenuItems.reduce((sum, item) => sum + item.totalQuantity, 0)}</td>
+              <td></td>
             </tr>
           </tbody>
         </table>
@@ -560,9 +575,10 @@ export default function KitchenFoodReportPage() {
               <th style="width: 5%;">${tCols("tentCount")}</th>
               <th style="width: 10%;">${tCols("bookingCode")}</th>
               <th style="width: 10%;">${tCols("booker")}</th>
-              <th style="width: 14%;">${tCols("item")}</th>
-              <th style="width: 14%;">${tCols("menuItem")}</th>
+              <th style="width: 12%;">${tCols("item")}</th>
+              <th style="width: 12%;">${tCols("menuItem")}</th>
               <th class="text-center" style="width: 5%;">${tCols("quantity")}</th>
+              <th class="text-center" style="width: 6%;">${tCols("unit")}</th>
               ${paramLabels.map(label => `<th class="text-center" style="width: 6%;">${label}</th>`).join('')}
               <th>${tCols("notes")}</th>
             </tr>
@@ -600,6 +616,7 @@ export default function KitchenFoodReportPage() {
                       <td class="${menuRow?.isFirstOfTent ? 'bg-yellow font-bold' : ''}">${menuRow?.isFirstOfTent ? menuRow.tent.itemName : ''}</td>
                       <td>${menuRow?.product.menuItemName || ''}</td>
                       <td class="text-center font-bold">${menuRow?.product.quantity || ''}</td>
+                      <td class="text-center">${menuRow?.product.menuItemUnit || ''}</td>
                       ${paramLabels.map(label => {
                         if (!menuRow?.isFirstOfTent) return '<td class="text-center"></td>';
                         const param = menuRow.tent.parameters.find(p => p.label === label);
@@ -719,6 +736,9 @@ export default function KitchenFoodReportPage() {
                     <th className="px-4 py-2 text-center text-xs font-medium text-orange-800 uppercase tracking-wider w-24">
                       {tCols("quantity")}
                     </th>
+                    <th className="px-4 py-2 text-center text-xs font-medium text-orange-800 uppercase tracking-wider w-24">
+                      {tCols("unit")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
@@ -729,6 +749,9 @@ export default function KitchenFoodReportPage() {
                       </td>
                       <td className="px-4 py-2 text-sm text-center font-semibold text-orange-700">
                         {item.totalQuantity}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-center text-gray-600">
+                        {item.menuItemUnit}
                       </td>
                     </tr>
                   ))}
@@ -741,6 +764,7 @@ export default function KitchenFoodReportPage() {
                     <td className="px-4 py-2 text-sm text-center font-bold text-orange-800">
                       {summary.aggregatedMenuItems.reduce((sum, item) => sum + item.totalQuantity, 0)}
                     </td>
+                    <td className="px-4 py-2"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -791,6 +815,9 @@ export default function KitchenFoodReportPage() {
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {tCols("quantity")}
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {tCols("unit")}
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {tCols("notes")}
@@ -887,6 +914,11 @@ export default function KitchenFoodReportPage() {
                       {/* Quantity */}
                       <td className="px-4 py-3 text-sm text-gray-900 text-center font-semibold">
                         {row.quantity}
+                      </td>
+
+                      {/* Unit */}
+                      <td className="px-4 py-3 text-sm text-gray-600 text-center">
+                        {row.menuItemUnit}
                       </td>
 
                       {/* Notes - combined menu product notes and booking notes icon */}

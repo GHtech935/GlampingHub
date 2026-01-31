@@ -153,12 +153,31 @@ export function AdminGlampingBookingFormModal({
                   .reduce((s, p) => s + p.price * p.quantity, 0)
               }, 0)
 
+              // Calculate accommodation cost locally (not from API totals which may have qty=0 bug)
+              // This ensures qty=0 parameters contribute 0 to the total
+              let calculatedAccommodationCost = 0
+              if (itemPricing.parameterPricing && tent.itemParameters.length > 0) {
+                tent.itemParameters.forEach((param) => {
+                  const paramId = param.parameter_id || param.id
+                  const qty = tent.parameterQuantities[paramId] || 0
+                  const pricePerUnitAllNights = itemPricing.parameterPricing?.[paramId] || 0
+                  const pricingMode = itemPricing.parameterPricingModes?.[paramId] || 'per_person'
+                  const isPerGroup = pricingMode === 'per_group'
+
+                  // per_group: fixed price, per_person: price × quantity
+                  calculatedAccommodationCost += isPerGroup ? pricePerUnitAllNights : pricePerUnitAllNights * qty
+                })
+              } else {
+                // Fallback to API value if no parameter pricing available
+                calculatedAccommodationCost = itemPricing.accommodationCost || 0
+              }
+
               return {
                 ...tent,
                 pricingBreakdown: {
-                  accommodationCost: itemPricing.accommodationCost || 0,
+                  accommodationCost: calculatedAccommodationCost,
                   menuProductsCost: menuCost,
-                  subtotal: (itemPricing.accommodationCost || 0) + menuCost,
+                  subtotal: calculatedAccommodationCost + menuCost,
                 },
               }
             }

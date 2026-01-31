@@ -638,6 +638,7 @@
                 "guests": "Guests",
                 "menuItem": "Menu Item",
                 "quantity": "Qty",
+                "unit": "Unit",
                 "notes": "Notes",
                 "bookingNotes": "Booking Notes"
             },
