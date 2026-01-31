@@ -82,12 +82,21 @@ function findMatchedEvent(events: ItemEvent[], dateStr: string): ItemEvent | nul
   const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
 
   for (const event of events) {
-    // Check date range
-    if (event.start_date && event.end_date) {
+    // Event must have start_date, but end_date is optional (null = indefinite)
+    if (event.start_date) {
       const startDate = new Date(event.start_date + 'T00:00:00');
-      const endDate = new Date(event.end_date + 'T00:00:00');
 
-      if (date >= startDate && date <= endDate) {
+      // Check if date is on or after start_date
+      if (date >= startDate) {
+        // If end_date exists, also check date is before/on end_date
+        if (event.end_date) {
+          const endDate = new Date(event.end_date + 'T00:00:00');
+          if (date > endDate) {
+            continue; // Date is after event end
+          }
+        }
+        // end_date is null means event runs indefinitely
+
         // Check day of week
         if (!event.days_of_week || event.days_of_week.length === 0 || event.days_of_week.includes(dayOfWeek)) {
           return event;

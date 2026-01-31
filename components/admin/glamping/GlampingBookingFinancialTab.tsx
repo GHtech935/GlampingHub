@@ -11,12 +11,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { SimpleRichTextEditor } from '@/components/ui/SimpleRichTextEditor';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { type Locale } from '@/lib/i18n-utils';
-import { DollarSign, Receipt, User, Clock, FileDown, FileText, CalendarDays, Plus } from 'lucide-react';
+import { DollarSign, Receipt, User, Clock, FileDown, FileText, CalendarDays, Plus, QrCode } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { downloadInvoicePDF } from '@/lib/invoice-generator';
 import { ItemFinancialBreakdown } from './tabs/ItemFinancialBreakdown';
 import { useItemColor } from './shared';
 import { AddAdditionalCostModal } from './AddAdditionalCostModal';
+import { BalanceQRModal } from './BalanceQRModal';
 import type { BookingItem, BookingPeriod, BookingAdditionalCost } from './types';
 
 interface GlampingBookingFinancialTabProps {
@@ -148,6 +149,7 @@ export function GlampingBookingFinancialTab({
       export: 'Xuất',
       additionalCosts: 'Chi phí phát sinh',
       addAdditionalCost: 'Thêm chi phí phát sinh',
+      createBalanceQR: 'Tạo QR thanh toán Balance',
     },
     en: {
       itemDetails: 'Item Details',
@@ -185,6 +187,7 @@ export function GlampingBookingFinancialTab({
       export: 'Export',
       additionalCosts: 'Additional Costs',
       addAdditionalCost: 'Add Additional Cost',
+      createBalanceQR: 'Create Balance QR',
     },
   };
 
@@ -209,6 +212,7 @@ export function GlampingBookingFinancialTab({
   const [editableInvoiceNotes, setEditableInvoiceNotes] = useState<string>(booking.invoiceNotes || '');
   const [showAddCostModal, setShowAddCostModal] = useState(false);
   const [additionalCosts, setAdditionalCosts] = useState<BookingAdditionalCost[]>([]);
+  const [showBalanceQRModal, setShowBalanceQRModal] = useState(false);
 
   // Fetch pricing details
   useEffect(() => {
@@ -1073,6 +1077,20 @@ export function GlampingBookingFinancialTab({
               )}
             </div>
 
+            {/* Balance QR Button - Only show when deposit_paid and balance > 0 */}
+            {actualRemaining > 0 && paymentStatus === 'deposit_paid' && (
+              <div>
+                <Button
+                  onClick={() => setShowBalanceQRModal(true)}
+                  className="w-full bg-amber-500 hover:bg-amber-600"
+                  disabled={isUpdating}
+                >
+                  <QrCode className="h-4 w-4 mr-2" />
+                  {t.createBalanceQR}
+                </Button>
+              </div>
+            )}
+
             {/* Paid and Checkout Button */}
             {actualRemaining > 0 && canCheckout && onPaidAndCheckout && paymentStatus !== 'fully_paid' && (
               <div>
@@ -1240,6 +1258,15 @@ export function GlampingBookingFinancialTab({
         onClose={() => setShowAddCostModal(false)}
         onSave={handleAdditionalCostSaved}
         bookingId={booking.id}
+        locale={locale}
+      />
+
+      {/* Balance QR Modal */}
+      <BalanceQRModal
+        isOpen={showBalanceQRModal}
+        onClose={() => setShowBalanceQRModal(false)}
+        bookingId={booking.id}
+        onPaymentReceived={onRefresh}
         locale={locale}
       />
     </div>

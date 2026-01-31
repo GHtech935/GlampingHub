@@ -193,3 +193,63 @@ export function getBookingPaymentInfo(
     qrCodeUrl,
   };
 }
+
+/**
+ * Generate VietQR for balance payment (remaining amount after deposit)
+ * @param bookingReference - Booking reference code (e.g., GH25000001)
+ * @param amount - Balance amount in VND
+ * @param bankAccount - Optional bank account (from database)
+ */
+export function generateBalanceQRCode(
+  bookingReference: string,
+  amount: number,
+  bankAccount?: BankAccount
+): string {
+  // Priority: Database bank account > ENV variables (fallback)
+  const bankId = bankAccount?.bank_id || process.env.SEPAY_BANK_ID || 'VCB';
+  const accountNumber = bankAccount?.account_number || process.env.SEPAY_BANK_ACCOUNT || '';
+  const accountName = bankAccount?.account_holder || process.env.SEPAY_ACCOUNT_HOLDER || 'GlampingHub';
+
+  // Nội dung chuyển khoản: booking_reference + _balance suffix
+  const description = `${bookingReference}_balance`;
+
+  return generateVietQRUrl({
+    bankId,
+    accountNumber,
+    accountName,
+    amount,
+    description,
+    template: 'compact',
+  });
+}
+
+/**
+ * Get balance payment info for display
+ * @param bookingReference - Booking reference code
+ * @param amount - Balance amount
+ * @param bankAccount - Optional bank account (from database)
+ */
+export function getBalancePaymentInfo(
+  bookingReference: string,
+  amount: number,
+  bankAccount?: BankAccount
+): PaymentInfo {
+  // Priority: Database bank account > ENV variables (fallback)
+  const bankName = bankAccount?.bank_name || process.env.SEPAY_BANK_NAME || 'Vietcombank';
+  const bankId = bankAccount?.bank_id || process.env.SEPAY_BANK_ID || 'VCB';
+  const accountNumber = bankAccount?.account_number || process.env.SEPAY_BANK_ACCOUNT || '';
+  const accountName = bankAccount?.account_holder || process.env.SEPAY_ACCOUNT_HOLDER || 'GlampingHub';
+
+  const description = `${bookingReference}_balance`;
+  const qrCodeUrl = generateBalanceQRCode(bookingReference, amount, bankAccount);
+
+  return {
+    bankName,
+    bankId,
+    accountNumber,
+    accountName,
+    amount,
+    description,
+    qrCodeUrl,
+  };
+}

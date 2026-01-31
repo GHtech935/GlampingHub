@@ -408,9 +408,8 @@ export function PricingTable({
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-gray-500">
                         {event.type === 'seasonal' && t("eventTypes.seasonal")}
-                        {event.type === 'special_pricing' && t("eventTypes.specialPricing")}
-                        {event.type === 'closure_dates' && t("eventTypes.closureDates")}
-                        {event.type === 'exclusive_date_span' && t("eventTypes.exclusiveDateSpan")}
+                        {event.type === 'special' && t("eventTypes.specialPricing")}
+                        {event.type === 'closure' && t("eventTypes.closureDates")}
                       </span>
                       <span className={`text-xs px-2 py-0.5 rounded ${pricingTypeBadge.color}`}>
                         {pricingTypeBadge.label}

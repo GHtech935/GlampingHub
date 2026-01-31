@@ -252,18 +252,27 @@ export async function calculateGlampingPricing(
 
     // Find matching events for this date (already sorted by created_at DESC)
     const matchingEvents = eventsResult.rows.filter((event: any) => {
-      if (!event.start_date || !event.end_date) {
+      // Must have start_date, but end_date is optional (null = indefinite)
+      if (!event.start_date) {
         return false;
       }
 
-      // Convert all dates to YYYY-MM-DD strings for consistent comparison
+      // Convert start_date to YYYY-MM-DD string for consistent comparison
       const startDateStr = parseDateToString(event.start_date);
-      const endDateStr = parseDateToString(event.end_date);
 
-      // Check date range (inclusive) using string comparison
-      if (dateStr < startDateStr || dateStr > endDateStr) {
+      // Check date is on or after start_date
+      if (dateStr < startDateStr) {
         return false;
       }
+
+      // If end_date exists, check date is not after it
+      if (event.end_date) {
+        const endDateStr = parseDateToString(event.end_date);
+        if (dateStr > endDateStr) {
+          return false;
+        }
+      }
+      // end_date is null means event runs indefinitely
 
       // Check day of week if specified
       if (event.days_of_week && event.days_of_week.length > 0) {

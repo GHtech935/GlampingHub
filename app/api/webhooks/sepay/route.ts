@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { sendNotificationToCustomer, broadcastToRole, notifyOwnersOfBooking } from "@/lib/notifications";
 import { logBookingHistory, historyDescriptions } from "@/lib/booking-history";
 import { recalculateBookingCommission } from "@/lib/commission";
-import { sendTemplateEmail } from "@/lib/email";
+import { sendTemplateEmail, sendGlampingPaymentConfirmationEmail } from "@/lib/email";
 import {
   startWebhookLog,
   completeWebhookLog,
@@ -279,49 +279,192 @@ export async function POST(request: NextRequest) {
     let foundBooking = null;
     let isExpiredBooking = false;
     let bookingType: 'camping' | 'glamping' | null = null;
+    let isBalancePayment = false; // Flag for balance payment (GH{8}_balance)
 
     if (description) {
-      // Extract booking reference từ description (tìm pattern CH/GH + 8 chữ số)
-      const match = description.match(/(CH|GH)\d{8}/i);
-      if (match) {
-        const matchedRef = match[0].toUpperCase();
-        bookingReference = matchedRef;
-        const prefix = matchedRef.substring(0, 2);
+      // First check: Balance payment pattern (GH\d{8}_balance)
+      const balanceMatch = description.match(/(GH\d{8})_balance/i);
 
-        if (prefix === 'CH') {
-          // CampingHub booking - lookup in bookings table
-          bookingType = 'camping';
-          const bookingResult = await client.query(
-            `SELECT * FROM bookings WHERE booking_reference = $1`,
-            [bookingReference]
-          );
+      if (balanceMatch) {
+        // Balance payment for glamping booking
+        isBalancePayment = true;
+        bookingReference = balanceMatch[1].toUpperCase();
+        bookingType = 'glamping';
 
-          if (bookingResult.rows.length > 0) {
-            foundBooking = bookingResult.rows[0];
+        console.log('💰 Balance payment detected:', bookingReference);
 
-            // Kiểm tra nếu booking đã expired/cancelled
-            if (foundBooking.status === 'cancelled' && foundBooking.payment_status === 'expired') {
-              isExpiredBooking = true;
-            }
+        const bookingResult = await client.query(
+          `SELECT * FROM glamping_bookings WHERE booking_code = $1`,
+          [bookingReference]
+        );
+
+        if (bookingResult.rows.length > 0) {
+          foundBooking = bookingResult.rows[0];
+
+          // Kiểm tra nếu booking đã expired/cancelled
+          if (foundBooking.status === 'cancelled' && foundBooking.payment_status === 'expired') {
+            isExpiredBooking = true;
           }
-        } else if (prefix === 'GH') {
-          // GlampingHub booking - lookup in glamping_bookings table
-          bookingType = 'glamping';
-          const bookingResult = await client.query(
-            `SELECT * FROM glamping_bookings WHERE booking_code = $1`,
-            [bookingReference]
-          );
+        }
+      } else {
+        // Fallback: Regular payment pattern (CH/GH + 8 digits)
+        const match = description.match(/(CH|GH)\d{8}/i);
+        if (match) {
+          const matchedRef = match[0].toUpperCase();
+          bookingReference = matchedRef;
+          const prefix = matchedRef.substring(0, 2);
 
-          if (bookingResult.rows.length > 0) {
-            foundBooking = bookingResult.rows[0];
+          if (prefix === 'CH') {
+            // CampingHub booking - lookup in bookings table
+            bookingType = 'camping';
+            const bookingResult = await client.query(
+              `SELECT * FROM bookings WHERE booking_reference = $1`,
+              [bookingReference]
+            );
 
-            // Kiểm tra nếu booking đã expired/cancelled
-            if (foundBooking.status === 'cancelled' && foundBooking.payment_status === 'expired') {
-              isExpiredBooking = true;
+            if (bookingResult.rows.length > 0) {
+              foundBooking = bookingResult.rows[0];
+
+              // Kiểm tra nếu booking đã expired/cancelled
+              if (foundBooking.status === 'cancelled' && foundBooking.payment_status === 'expired') {
+                isExpiredBooking = true;
+              }
+            }
+          } else if (prefix === 'GH') {
+            // GlampingHub booking - lookup in glamping_bookings table
+            bookingType = 'glamping';
+            const bookingResult = await client.query(
+              `SELECT * FROM glamping_bookings WHERE booking_code = $1`,
+              [bookingReference]
+            );
+
+            if (bookingResult.rows.length > 0) {
+              foundBooking = bookingResult.rows[0];
+
+              // Kiểm tra nếu booking đã expired/cancelled
+              if (foundBooking.status === 'cancelled' && foundBooking.payment_status === 'expired') {
+                isExpiredBooking = true;
+              }
             }
           }
         }
       }
+    }
+
+    // Case 0: Balance Payment (GH{8}_balance) - Only for glamping bookings with deposit_paid status
+    if (isBalancePayment && foundBooking && foundBooking.payment_status === 'deposit_paid' && bookingType === 'glamping') {
+      console.log(`✅ Processing balance payment for glamping booking:`, bookingReference);
+
+      const paidAmount = parseFloat(amount);
+
+      // Calculate actual balance: total_amount + additional_costs - total_paid
+      const additionalCostsResult = await client.query(
+        `SELECT COALESCE(SUM(total_price + tax_amount), 0) as additional_total
+         FROM glamping_booking_additional_costs
+         WHERE booking_id = $1`,
+        [foundBooking.id]
+      );
+      const additionalCostsTotal = parseFloat(additionalCostsResult.rows[0].additional_total || 0);
+
+      const paymentsResult = await client.query(
+        `SELECT COALESCE(SUM(amount), 0) as total_paid
+         FROM glamping_booking_payments
+         WHERE booking_id = $1 AND status IN ('successful', 'completed', 'paid')`,
+        [foundBooking.id]
+      );
+      const totalPaid = parseFloat(paymentsResult.rows[0].total_paid || 0);
+
+      const totalAmount = parseFloat(foundBooking.total_amount) + additionalCostsTotal;
+      const expectedBalance = totalAmount - totalPaid;
+      const tolerance = 0.01; // 1% tolerance
+
+      // Validate payment amount matches expected balance (with 1% tolerance)
+      const isValidBalanceAmount = expectedBalance > 0 &&
+        Math.abs(paidAmount - expectedBalance) / expectedBalance < tolerance;
+
+      if (!isValidBalanceAmount) {
+        console.log(`⚠️ Balance payment amount mismatch. Expected: ${expectedBalance}, Received: ${paidAmount}`);
+        // Still process but log the discrepancy
+      }
+
+      // Update transaction status
+      await client.query(
+        `UPDATE sepay_transactions
+         SET glamping_booking_id = $1,
+             status = 'matched',
+             matched_at = NOW(),
+             matched_by = 'auto'
+         WHERE id = $2`,
+        [foundBooking.id, transactionId]
+      );
+
+      // Update glamping_bookings to fully_paid
+      await client.query(
+        `UPDATE glamping_bookings
+         SET payment_status = 'fully_paid',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [foundBooking.id]
+      );
+
+      // Create payment record with note indicating balance payment
+      try {
+        await client.query(
+          `INSERT INTO glamping_booking_payments
+            (booking_id, payment_method, amount, status, transaction_reference, notes, paid_at, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+          [
+            foundBooking.id,
+            'bank_transfer',
+            paidAmount,
+            'paid',
+            transaction_code,
+            'balance_payment', // Note to identify this as balance payment
+          ]
+        );
+        console.log(`✅ Created balance payment record for glamping booking: ${bookingReference}, amount: ${paidAmount}`);
+      } catch (paymentError) {
+        console.error('⚠️ Failed to create balance payment record:', paymentError);
+      }
+
+      await client.query('COMMIT');
+
+      console.log('✅ Glamping balance payment processed:', {
+        booking_code: bookingReference,
+        payment_status: 'fully_paid',
+        amount: paidAmount,
+        expectedBalance,
+      });
+
+      // Log successful balance payment
+      if (webhookLog) {
+        await completeWebhookLog(webhookLog, {
+          status: "success",
+          httpStatusCode: 200,
+          responseBody: {
+            success: true,
+            message: "Balance payment matched and booking updated to fully_paid",
+            booking_reference: bookingReference,
+            matched: true,
+            booking_type: 'glamping',
+            payment_type: 'balance',
+          },
+          transactionCode: transaction_code,
+          bookingReference: bookingReference || undefined,
+          matched: true,
+          matchType: "auto",
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Balance payment matched and booking updated to fully_paid',
+        booking_reference: bookingReference,
+        transaction_code,
+        matched: true,
+        booking_type: 'glamping',
+        payment_type: 'balance',
+      });
     }
 
     // Case 1: Booking có thể thanh toán (chỉ check payment_status, không check status)
@@ -474,6 +617,17 @@ export async function POST(request: NextRequest) {
             });
 
             console.log('✅ Confirmation email sent to customer:', booking.customer_email);
+
+            // Gửi email xác nhận thanh toán (đã nhận cọc/thanh toán đầy đủ)
+            await sendGlampingPaymentConfirmationEmail({
+              customerEmail: booking.customer_email,
+              customerName: `${booking.customer_first_name} ${booking.customer_last_name}`.trim(),
+              bookingCode: bookingReference || '',
+              amount: paidAmount,
+              glampingBookingId: matchedBooking.id,
+            });
+
+            console.log('✅ Payment confirmation email sent to customer:', booking.customer_email);
 
             // 2. Send notification email to admin/sale/operations/glamping_owner
             // Get zone_id from booking
