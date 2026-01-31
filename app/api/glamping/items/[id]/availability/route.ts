@@ -131,14 +131,17 @@ export async function GET(
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + months);
 
-    // 1. Fetch item attributes
+    // 1. Fetch item attributes (only active items)
     const itemResult = await pool.query(`
       SELECT
         COALESCE(a.inventory_quantity, 1) as inventory_quantity,
         COALESCE(a.unlimited_inventory, false) as unlimited_inventory
       FROM glamping_items i
       LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+      LEFT JOIN glamping_zones z ON i.zone_id = z.id
       WHERE i.id = $1
+        AND COALESCE(z.is_active, true) = true
+        AND COALESCE(a.is_active, true) = true
     `, [itemId]);
 
     if (itemResult.rows.length === 0) {

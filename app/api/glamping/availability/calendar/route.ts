@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get item inventory attributes
+    // Get item inventory attributes (only active items)
     const itemQuery = await pool.query(`
       SELECT
         i.id,
@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
         COALESCE(a.allocation_type, 'per_night') as allocation_type
       FROM glamping_items i
       LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+      LEFT JOIN glamping_zones z ON i.zone_id = z.id
       WHERE i.id = $1
+        AND COALESCE(z.is_active, true) = true
+        AND COALESCE(a.is_active, true) = true
     `, [itemId]);
 
     if (itemQuery.rows.length === 0) {

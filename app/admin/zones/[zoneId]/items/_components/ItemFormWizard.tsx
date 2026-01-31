@@ -28,6 +28,7 @@ import {
 import { ArrowLeft, ArrowRight, Save, Eye, Upload, X, Image as ImageIcon, ChevronDown, HelpCircle, Sun, Moon, Clock, Calendar, Check, Paperclip, Loader2, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -104,6 +105,9 @@ const formSchema = z.object({
   fixed_length_unit: z.enum(['days', 'nights', 'hours']).nullable().optional(),
   fixed_start_time: z.string().nullable().optional(),
   default_length_hours: z.number().nullable().optional(),
+
+  // Active status
+  is_active: z.boolean().default(true),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -126,7 +130,7 @@ export interface ItemFormWizardProps {
     youtube_url?: string;
     video_start_time?: number;
     pricing_rate?: string;
-    group_pricing?: Record<string, Array<{min: number; max: number; price: number}>>;
+    group_pricing?: Record<string, Array<{min: number; max: number; price: number; pricing_mode?: 'per_person' | 'per_group'}>>;
     parameter_base_prices?: Record<string, number>;
     deposit_type?: string;
     deposit_value?: number;
@@ -160,6 +164,7 @@ export interface ItemFormWizardProps {
     events?: Array<any>;
     event_pricing?: Record<string, number>;
     menu_products?: Array<any>;
+    is_active?: boolean;
   };
   onSuccess?: (itemId: string) => void;
 }
@@ -362,7 +367,7 @@ export function ItemFormWizard({
   };
 
   // Group pricing state
-  const [groupPricing, setGroupPricing] = useState<Record<string, Array<{min: number; max: number; price: number}>>>({});
+  const [groupPricing, setGroupPricing] = useState<Record<string, Array<{min: number; max: number; price: number; pricing_mode?: 'per_person' | 'per_group'}>>>({});
   // Parameter base pricing state (for individual parameter prices without groups)
   const [parameterBasePrices, setParameterBasePrices] = useState<Record<string, number>>({});
   // Event pricing state
@@ -479,6 +484,7 @@ export function ItemFormWizard({
       allocation_type: "per_night",
       visibility: "everyone",
       default_calendar_status: "available",
+      is_active: true,
     },
   });
 
@@ -2078,7 +2084,7 @@ export function ItemFormWizard({
           console.log('Error fields:', errorFields);
 
           // Map fields to steps
-          const step1Fields = ['name', 'sku', 'category_id', 'summary'];
+          const step1Fields = ['name', 'sku', 'category_id', 'summary', 'is_active'];
           const step2Fields = []; // media handled separately
           const step3Fields = ['inventory_quantity', 'unlimited_inventory', 'allocation_type', 'visibility', 'default_calendar_status', 'fixed_length_value', 'fixed_length_unit', 'fixed_start_time', 'default_length_hours'];
 
@@ -2462,6 +2468,26 @@ export function ItemFormWizard({
                             />
                           </FormControl>
                           <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Active Status Toggle */}
+                    <FormField
+                      control={form.control}
+                      name="is_active"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-base font-medium">{t('isActive')}</FormLabel>
+                            <p className="text-sm text-gray-500">{t('isActiveDescription')}</p>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
                         </FormItem>
                       )}
                     />
@@ -3589,7 +3615,7 @@ export function ItemFormWizard({
 
                                         setGroupPricing({
                                           ...groupPricing,
-                                          [param.id]: [...existingGroups, { min: newMin, max: newMax, price: 0 }]
+                                          [param.id]: [...existingGroups, { min: newMin, max: newMax, price: 0, pricing_mode: 'per_person' }]
                                         });
                                       }}
                                     >
@@ -3643,8 +3669,27 @@ export function ItemFormWizard({
                                         className="w-32 text-sm"
                                       />
                                     </td>
-                                    <td className="px-4 py-2 text-xs text-gray-600">
-                                      {t('pricing.perGroup', { rate: pricingRate })}
+                                    <td className="px-4 py-2">
+                                      <Select
+                                        value={group.pricing_mode || 'per_person'}
+                                        onValueChange={(value: 'per_person' | 'per_group') => {
+                                          const newGroups = [...(groupPricing[param.id] || [])];
+                                          newGroups[index].pricing_mode = value;
+                                          setGroupPricing({ ...groupPricing, [param.id]: newGroups });
+                                        }}
+                                      >
+                                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="per_person">
+                                            {t('pricing.perPerson', { name: param.name })}
+                                          </SelectItem>
+                                          <SelectItem value="per_group">
+                                            {t('pricing.perGroupFixed')}
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
                                     </td>
                                     <td className="px-4 py-2">
                                       <Button

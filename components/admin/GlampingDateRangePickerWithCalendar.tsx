@@ -62,6 +62,8 @@ interface GlampingDateRangePickerWithCalendarProps {
   loadingParameters?: boolean
   // Optional override for parameter pricing (from real-time booking API with group pricing)
   overrideParameterPricing?: Record<string, number>
+  // Optional override for parameter pricing modes (per_person or per_group)
+  overrideParameterPricingModes?: Record<string, 'per_person' | 'per_group'>
   // Optional override for nightly pricing breakdown (from real-time booking API with group pricing)
   overrideNightlyPricing?: Array<{ date: string; parameters: Record<string, number> }>
   // Loading state for pricing (from parent's pricing hook)
@@ -79,6 +81,7 @@ export function GlampingDateRangePickerWithCalendar({
   onQuantitiesChange = () => {},
   loadingParameters = false,
   overrideParameterPricing,
+  overrideParameterPricingModes,
   overrideNightlyPricing,
   pricingLoading = false
 }: GlampingDateRangePickerWithCalendarProps) {
@@ -87,6 +90,7 @@ export function GlampingDateRangePickerWithCalendar({
   const [nights, setNights] = useState(0)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [parameterPricing, setParameterPricing] = useState<Record<string, number>>({})
+  const [parameterPricingModes, setParameterPricingModes] = useState<Record<string, 'per_person' | 'per_group'>>({})
   const [nightlyParameterPricing, setNightlyParameterPricing] = useState<Array<{ date: string; pricing: Record<string, number> }>>([])
   const { toast } = useToast()
   const prevItemIdRef = useRef<string | undefined>(itemId)
@@ -228,6 +232,10 @@ export function GlampingDateRangePickerWithCalendar({
           // Override parameter pricing with group-tier-aware pricing
           if (data.parameterPricing) {
             setParameterPricing(data.parameterPricing)
+          }
+          // Set pricing modes for per_person vs per_group calculation
+          if (data.parameterPricingModes) {
+            setParameterPricingModes(data.parameterPricingModes)
           }
           // Override nightly breakdown with group-tier-aware data
           if (data.nightlyPricing) {
@@ -554,6 +562,9 @@ export function GlampingDateRangePickerWithCalendar({
                       // When pricingLoading is true, use empty object to prevent showing wrong prices
                       // Otherwise use override (with group pricing) or fallback to calendar-based pricing
                       parameterPricing={pricingLoading ? {} : (overrideParameterPricing || parameterPricing)}
+                      // Pass pricing modes for per_person vs per_group calculation
+                      // Use override if provided, otherwise use internally fetched state
+                      parameterPricingModes={pricingLoading ? undefined : (overrideParameterPricingModes || parameterPricingModes)}
                       nights={nights}
                       dateRange={dateRange}
                       // Use override nightly pricing (with group pricing) or fallback to calendar-based

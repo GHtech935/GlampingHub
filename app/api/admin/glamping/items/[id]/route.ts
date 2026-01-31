@@ -56,7 +56,8 @@ export async function GET(
         a.fixed_start_time,
         a.default_length_hours,
         a.visibility,
-        a.default_calendar_status
+        a.default_calendar_status,
+        COALESCE(a.is_active, true) as is_active
       FROM glamping_items i
       LEFT JOIN glamping_categories c ON i.category_id = c.id
       LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
@@ -128,7 +129,8 @@ export async function GET(
         event_id,
         group_min,
         group_max,
-        amount
+        amount,
+        COALESCE(pricing_mode, 'per_person') as pricing_mode
       FROM glamping_pricing
       WHERE item_id = $1
       ORDER BY event_id NULLS FIRST, parameter_id, group_min
@@ -233,7 +235,7 @@ export async function GET(
 
     // Transform pricing rows into group pricing structure
     const transformGroupPricing = (pricingRows: any[]) => {
-      const grouped: Record<string, Array<{min: number; max: number; price: number}>> = {};
+      const grouped: Record<string, Array<{min: number; max: number; price: number; pricing_mode: string}>> = {};
 
       pricingRows.forEach(row => {
         // Explicit null check - allow 0 as valid value
@@ -244,7 +246,8 @@ export async function GET(
           grouped[key].push({
             min: row.group_min,
             max: row.group_max,
-            price: parseFloat(row.amount)
+            price: parseFloat(row.amount),
+            pricing_mode: row.pricing_mode || 'per_person'
           });
         }
       });
@@ -461,6 +464,8 @@ export async function PUT(
       timeslots,
       // Tax fields
       taxes,
+      // Active status
+      is_active,
     } = body;
 
     if (!name) {
@@ -491,9 +496,10 @@ export async function PUT(
           fixed_start_time,
           default_length_hours,
           visibility,
-          default_calendar_status
+          default_calendar_status,
+          is_active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (item_id)
         DO UPDATE SET
           inventory_quantity = $2,
@@ -505,6 +511,7 @@ export async function PUT(
           default_length_hours = $8,
           visibility = $9,
           default_calendar_status = $10,
+          is_active = $11,
           updated_at = NOW()`,
         [
           id,
@@ -516,7 +523,8 @@ export async function PUT(
           fixed_start_time || null,
           default_length_hours || null,
           visibility || 'everyone',
-          default_calendar_status || 'available'
+          default_calendar_status || 'available',
+          is_active !== undefined ? is_active : true
         ]
       );
 
@@ -615,15 +623,16 @@ export async function PUT(
               for (const group of groups) {
                 await client.query(
                   `INSERT INTO glamping_pricing (
-                    item_id, parameter_id, rate_type, group_min, group_max, amount
-                  ) VALUES ($1, $2, $3, $4, $5, $6)`,
+                    item_id, parameter_id, rate_type, group_min, group_max, amount, pricing_mode
+                  ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                   [
                     id,
                     paramId,
                     pricing_rate || 'per_night',
                     group.min,
                     group.max,
-                    group.price
+                    group.price,
+                    group.pricing_mode || 'per_person'
                   ]
                 );
               }
@@ -707,8 +716,8 @@ export async function PUT(
                     if (group && group.price !== undefined && group.price !== null) {
                       await client.query(
                         `INSERT INTO glamping_pricing (
-                          item_id, parameter_id, event_id, rate_type, group_min, group_max, amount
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                          item_id, parameter_id, event_id, rate_type, group_min, group_max, amount, pricing_mode
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
                         [
                           id,
                           paramId,
@@ -716,7 +725,8 @@ export async function PUT(
                           pricing_rate || 'per_night',
                           group.min,
                           group.max,
-                          group.price
+                          group.price,
+                          group.pricing_mode || 'per_person'
                         ]
                       );
                     }
@@ -732,8 +742,8 @@ export async function PUT(
                 if (group && group.price !== undefined && group.price !== null) {
                   await client.query(
                     `INSERT INTO glamping_pricing (
-                      item_id, parameter_id, event_id, rate_type, group_min, group_max, amount
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                      item_id, parameter_id, event_id, rate_type, group_min, group_max, amount, pricing_mode
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
                     [
                       id,
                       null,  // Inventory has null parameter_id
@@ -741,7 +751,8 @@ export async function PUT(
                       pricing_rate || 'per_night',
                       group.min,
                       group.max,
-                      group.price
+                      group.price,
+                      group.pricing_mode || 'per_person'
                     ]
                   );
                 }

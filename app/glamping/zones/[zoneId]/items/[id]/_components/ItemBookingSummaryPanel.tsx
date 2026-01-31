@@ -146,18 +146,13 @@ export function ItemBookingSummaryPanel({
     }
   };
 
-  // Calculate total using API response (with group/tiered pricing)
+  // Calculate total using API response (with group/tiered pricing and pricing_mode)
   const calculateTotal = () => {
     if (!calculatedPricing) return 0;
 
-    // Use parameterPricing from API (already has group discount applied)
-    let total = 0;
-    Object.entries(calculatedPricing.parameterPricing || {}).forEach(([paramId, pricePerUnit]) => {
-      const quantity = quantities[paramId] || 0;
-      total += quantity * (pricePerUnit as number);
-    });
-
-    return total;
+    // Use totals.accommodationCost from API - it's already calculated correctly with pricing_mode
+    // This ensures per_group prices are NOT multiplied by quantity
+    return calculatedPricing.totals?.accommodationCost || 0;
   };
 
   const total = calculateTotal();
@@ -285,7 +280,13 @@ export function ItemBookingSummaryPanel({
 
               // Get price per unit from calculated pricing (already has group discount applied)
               const pricePerUnitAllNights = calculatedPricing?.parameterPricing?.[param.id] || 0;
-              const paramTotal = pricePerUnitAllNights; // Already is total for all nights
+              const pricingMode = calculatedPricing?.parameterPricingModes?.[param.id] || 'per_person';
+              const isPerGroup = pricingMode === 'per_group';
+
+              // Calculate param total based on pricing_mode
+              // per_group: fixed price (not multiplied by quantity)
+              // per_person: price × quantity
+              const paramTotal = isPerGroup ? pricePerUnitAllNights : pricePerUnitAllNights * qty;
 
               // Extract name from multilingual object
               const paramName = typeof param.name === 'object' && param.name !== null
@@ -303,7 +304,7 @@ export function ItemBookingSummaryPanel({
                       </div>
                     ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
                       <div className="text-xs text-gray-500">
-                        {formatCurrency(pricePerUnitAllNights)}/khách ({nights} {t.nights})
+                        {formatCurrency(pricePerUnitAllNights)}/{isPerGroup ? 'nhóm' : 'khách'} ({nights} {t.nights})
                       </div>
                     ) : null}
                   </div>
@@ -331,7 +332,7 @@ export function ItemBookingSummaryPanel({
                       </div>
                     ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
                       <div className="text-sm font-medium w-24 text-right">
-                        {formatCurrency(paramTotal * qty)}
+                        {formatCurrency(paramTotal)}
                       </div>
                     ) : null}
                   </div>

@@ -122,7 +122,7 @@ export interface ItemFormWizardProps {
     images?: Array<{url?: string; file?: File; preview: string; caption: string}>;
     youtube_url?: string;
     pricing_rate?: string;
-    group_pricing?: Record<string, Array<{min: number; max: number; price: number}>>;
+    group_pricing?: Record<string, Array<{min: number; max: number; price: number; pricing_mode?: 'per_person' | 'per_group'}>>;
     parameter_base_prices?: Record<string, number>;
     deposit_type?: string;
     deposit_value?: number;
@@ -345,7 +345,7 @@ export function ItemFormWizard({
   };
 
   // Group pricing state
-  const [groupPricing, setGroupPricing] = useState<Record<string, Array<{min: number; max: number; price: number}>>>({});
+  const [groupPricing, setGroupPricing] = useState<Record<string, Array<{min: number; max: number; price: number; pricing_mode?: 'per_person' | 'per_group'}>>>({});
   // Parameter base pricing state (for individual parameter prices without groups)
   const [parameterBasePrices, setParameterBasePrices] = useState<Record<string, number>>({});
   // Event pricing state
@@ -2896,7 +2896,7 @@ export function ItemFormWizard({
 
                                         setGroupPricing({
                                           ...groupPricing,
-                                          [param.id]: [...existingGroups, { min: newMin, max: newMax, price: 0 }]
+                                          [param.id]: [...existingGroups, { min: newMin, max: newMax, price: 0, pricing_mode: 'per_person' }]
                                         });
                                       }}
                                     >
@@ -2950,8 +2950,27 @@ export function ItemFormWizard({
                                         className="w-32 text-sm"
                                       />
                                     </td>
-                                    <td className="px-4 py-2 text-xs text-gray-600">
-                                      {t('pricing.perGroup', { rate: pricingRate })}
+                                    <td className="px-4 py-2">
+                                      <Select
+                                        value={group.pricing_mode || 'per_person'}
+                                        onValueChange={(value: 'per_person' | 'per_group') => {
+                                          const newGroups = [...(groupPricing[param.id] || [])];
+                                          newGroups[index].pricing_mode = value;
+                                          setGroupPricing({ ...groupPricing, [param.id]: newGroups });
+                                        }}
+                                      >
+                                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="per_person">
+                                            {t('pricing.perPerson', { name: param.name })}
+                                          </SelectItem>
+                                          <SelectItem value="per_group">
+                                            {t('pricing.perGroupFixed')}
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
                                     </td>
                                     <td className="px-4 py-2">
                                       <Button

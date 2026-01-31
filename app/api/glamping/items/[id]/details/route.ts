@@ -24,7 +24,10 @@ export async function GET(
       FROM glamping_items i
       LEFT JOIN glamping_zones z ON i.zone_id = z.id
       LEFT JOIN glamping_categories c ON i.category_id = c.id
+      LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
       WHERE i.id = $1
+        AND COALESCE(z.is_active, true) = true
+        AND COALESCE(a.is_active, true) = true
     `;
 
     const itemResult = await pool.query(itemQuery, [itemId]);

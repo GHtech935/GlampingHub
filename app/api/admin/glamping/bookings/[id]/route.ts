@@ -453,7 +453,7 @@ export async function PUT(
 
           // 1. Send email to customer if status changed to confirmed
           if (finalStatus === 'confirmed' && current.status !== 'confirmed') {
-            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/glamping/booking/confirmation/${booking.booking_code}`;
+            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/glamping/booking/confirmation/${booking.id}`;
 
             await sendTemplateEmail({
               templateSlug: 'glamping-booking-confirmed',

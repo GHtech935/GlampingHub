@@ -35,6 +35,7 @@ interface GlampingParameterSelectorProps {
 
   // Pricing props
   parameterPricing?: Record<string, number>  // Total price per parameter for all nights
+  parameterPricingModes?: Record<string, 'per_person' | 'per_group'>  // Pricing mode for each parameter
   nights?: number  // Number of nights selected
   dateRange?: DateRange  // To check if dates are selected
   nightlyParameterPricing?: NightlyPricing[]  // Per-night pricing breakdown
@@ -48,6 +49,7 @@ export function GlampingParameterSelector({
   locale = 'vi',
   disabled = false,
   parameterPricing,
+  parameterPricingModes,
   nights,
   dateRange,
   nightlyParameterPricing = [],
@@ -81,8 +83,14 @@ export function GlampingParameterSelector({
     setValidationErrors(errors)
   }, [parameterQuantities, parameters, locale])
 
-  const handleQuantityChange = (paramId: string, value: string) => {
-    const quantity = parseInt(value) || 0
+  const handleQuantityChange = (paramId: string, value: string, param: GlampingParameter) => {
+    let quantity = parseInt(value) || 0
+
+    // Clamp value to min/max
+    const minQty = param.min_quantity ?? 0
+    const maxQty = param.max_quantity ?? 999
+    quantity = Math.min(Math.max(quantity, minQty), maxQty)
+
     const newQuantities = {
       ...parameterQuantities,
       [paramId]: quantity
@@ -119,13 +127,25 @@ export function GlampingParameterSelector({
 
           // Pricing data
           const totalPrice = parameterPricing?.[paramId] || 0
+          const pricingMode = parameterPricingModes?.[paramId] || 'per_person'
+          const isPerGroup = pricingMode === 'per_group'
           const hasPricing = dateRange?.from && dateRange?.to && totalPrice > 0
+
+          // Calculate final price based on pricing_mode
+          // per_group: fixed price (not multiplied by quantity)
+          // per_person: price × quantity
+          const finalPrice = isPerGroup ? totalPrice : totalPrice * quantity
 
           // Per-night prices for this parameter
           const nightPrices = nightlyParameterPricing
             .map(n => n.pricing[paramId] || 0)
             .filter((_, i) => i < (nights || 0))
           const allSamePrice = nightPrices.length > 0 && nightPrices.every(p => p === nightPrices[0])
+
+          // Labels based on pricing mode
+          const unitLabel = isPerGroup
+            ? (locale === 'vi' ? 'nhóm' : 'group')
+            : (locale === 'vi' ? 'khách' : quantity === 1 ? 'guest' : 'guests')
 
           return (
             <div
@@ -154,7 +174,9 @@ export function GlampingParameterSelector({
                       {allSamePrice && nightPrices.length > 0 ? (
                         // All nights same price - compact display
                         <div className="text-sm text-green-600 font-semibold">
-                          {formatCurrency(nightPrices[0], locale)}/{locale === 'vi' ? 'đêm' : 'night'} × {nights} {locale === 'vi' ? 'đêm' : nights === 1 ? 'night' : 'nights'} × {quantity} {locale === 'vi' ? 'khách' : quantity === 1 ? 'guest' : 'guests'}
+                          {formatCurrency(nightPrices[0], locale)}/{locale === 'vi' ? 'đêm' : 'night'} × {nights} {locale === 'vi' ? 'đêm' : nights === 1 ? 'night' : 'nights'}
+                          {!isPerGroup && ` × ${quantity} ${unitLabel}`}
+                          {isPerGroup && ` (${locale === 'vi' ? 'mỗi nhóm' : 'per group'})`}
                         </div>
                       ) : nightPrices.length > 0 ? (
                         // Different prices per night - show breakdown
@@ -173,13 +195,17 @@ export function GlampingParameterSelector({
                             })}
                           </div>
                           <div className="text-sm text-green-600 font-semibold">
-                            {formatCurrency(totalPrice, locale)}/{locale === 'vi' ? 'khách' : 'guest'} × {quantity} {locale === 'vi' ? 'khách' : quantity === 1 ? 'guest' : 'guests'}
+                            {formatCurrency(totalPrice, locale)}/{unitLabel}
+                            {!isPerGroup && ` × ${quantity} ${unitLabel}`}
+                            {isPerGroup && ` (${locale === 'vi' ? 'mỗi nhóm' : 'per group'})`}
                           </div>
                         </div>
                       ) : (
-                        // Fallback - just show total per guest
+                        // Fallback - just show total
                         <div className="text-sm text-green-600 font-semibold">
-                          {formatCurrency(totalPrice, locale)} ({nights} {locale === 'vi' ? 'đêm' : 'nights'}) × {quantity} {locale === 'vi' ? 'khách' : quantity === 1 ? 'guest' : 'guests'}
+                          {formatCurrency(totalPrice, locale)} ({nights} {locale === 'vi' ? 'đêm' : 'nights'})
+                          {!isPerGroup && ` × ${quantity} ${unitLabel}`}
+                          {isPerGroup && ` (${locale === 'vi' ? 'mỗi nhóm' : 'per group'})`}
                         </div>
                       )}
                     </div>
@@ -209,12 +235,12 @@ export function GlampingParameterSelector({
                     min={param.min_quantity || 0}
                     max={param.max_quantity || 999}
                     value={quantity}
-                    onChange={(e) => handleQuantityChange(paramId, e.target.value)}
+                    onChange={(e) => handleQuantityChange(paramId, e.target.value, param)}
                     className={`w-20 text-center ${hasError ? 'border-red-500' : ''}`}
                     disabled={disabled}
                   />
 
-                  {/* Total for this parameter based on quantity */}
+                  {/* Total for this parameter based on quantity and pricing_mode */}
                   {pricingLoading && quantity > 0 && dateRange?.from && dateRange?.to && (
                     <div className="text-xs text-gray-400">
                       <Loader2 className="h-3 w-3 animate-spin inline" />
@@ -222,7 +248,7 @@ export function GlampingParameterSelector({
                   )}
                   {!pricingLoading && hasPricing && quantity > 0 && (
                     <div className="text-xs font-semibold text-blue-600">
-                      = {formatCurrency(totalPrice * quantity, locale)}
+                      = {formatCurrency(finalPrice, locale)}
                     </div>
                   )}
                 </div>

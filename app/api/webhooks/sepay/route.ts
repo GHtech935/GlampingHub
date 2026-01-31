@@ -597,7 +597,7 @@ export async function POST(request: NextRequest) {
             const zoneName = booking.zone_name || '';
 
             // 1. Send email to customer
-            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/glamping/booking/confirmation/${bookingReference}`;
+            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/glamping/booking/confirmation/${matchedBooking.id}`;
 
             await sendTemplateEmail({
               templateSlug: 'glamping-booking-confirmed',

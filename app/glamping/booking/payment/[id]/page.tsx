@@ -85,7 +85,7 @@ export default function GlampingPaymentPage() {
           clearInterval(intervalId);
           // Delay 2 seconds to show "Payment received" message
           setTimeout(() => {
-            router.push(`/glamping/booking/confirmation/${data.booking_code}`);
+            router.push(`/glamping/booking/confirmation/${bookingId}`);
           }, 2000);
         }
 

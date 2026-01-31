@@ -112,23 +112,7 @@ function ZoneDetailContent() {
     }
   }, [searchParams]);
 
-  // Auto-select first category when categories are loaded
-  useEffect(() => {
-    if (categories.length > 0 && !selectedCategory && !searchParams.get('category')) {
-      const firstCategory = categories
-        .filter(cat => cat.status === 'active')
-        .sort((a, b) => a.weight - b.weight)[0];
-
-      if (firstCategory) {
-        setSelectedCategory(firstCategory.id);
-
-        // Update URL with first category
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('category', firstCategory.id);
-        router.push(`/glamping/zones/${zoneId}?${params.toString()}`, { scroll: false });
-      }
-    }
-  }, [categories, selectedCategory, searchParams, zoneId, router]);
+  // No auto-select - default to "All" (empty string) to show all items
 
   // Fetch initial data
   useEffect(() => {
@@ -237,8 +221,8 @@ function ZoneDetailContent() {
   // Filter items
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      // Category filter
-      if (selectedCategory && item.category_id !== selectedCategory) {
+      // Category filter - skip if "All" is selected (empty string)
+      if (selectedCategory !== '' && item.category_id !== selectedCategory) {
         return false;
       }
 
@@ -281,9 +265,15 @@ function ZoneDetailContent() {
     setSelectedCategory(categoryId);
 
     const params = new URLSearchParams(searchParams.toString());
-    params.set('category', categoryId);
+    if (categoryId === '') {
+      // "All" selected - remove category from URL
+      params.delete('category');
+    } else {
+      params.set('category', categoryId);
+    }
 
-    router.push(`/glamping/zones/${zoneId}?${params.toString()}`);
+    const queryString = params.toString();
+    router.push(`/glamping/zones/${zoneId}${queryString ? `?${queryString}` : ''}`);
   }
 
   // Handle book click - navigate to item detail page

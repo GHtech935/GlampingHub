@@ -3114,9 +3114,11 @@
                     "packages_only": "Packages Only"
                 },
                 "status": {
+                    "active": "Active",
                     "available": "Active",
                     "unavailable": "Inactive",
-                    "disabled": "Disabled"
+                    "disabled": "Disabled",
+                    "inactive": "Inactive"
                 },
                 "inventory": {
                     "unlimited": "Unlimited",
@@ -3216,6 +3218,8 @@
                     "sunday": "Sunday",
                     "visibilityLabel": "Visibility",
                     "defaultCalendarStatus": "Default Calendar Status",
+                    "isActive": "Active Status",
+                    "isActiveDescription": "Inactive items are hidden from public search and bookings",
                     "parameters": "Parameters",
                     "uploadImages": "Upload Images",
                     "youtubeVideo": "YouTube Video",
@@ -3340,7 +3344,9 @@
                         "inventoryItem": "Tent/Accommodation Inventory",
                         "groupLabel": "Group {min} to {max}",
                         "perGroup": "/ {rate} / per Group",
-                        "perParameter": "/ {rate} / per {param}"
+                        "perParameter": "/ {rate} / per {param}",
+                        "perPerson": "per {name}",
+                        "perGroupFixed": "per group"
                     },
                     "calendarStatus": {
                         "title": "Default Calendar Status",

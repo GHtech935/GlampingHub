@@ -8,6 +8,7 @@ interface PricingRecord {
   group_max: number | null;
   amount: number;
   rate_type: string;
+  pricing_mode: 'per_person' | 'per_group';
 }
 
 interface PricingMap {
@@ -15,17 +16,20 @@ interface PricingMap {
     group_min: number | null;
     group_max: number | null;
     amount: number;
+    pricing_mode: 'per_person' | 'per_group';
   }>>;
   events: Record<string, Record<string, Array<{
     group_min: number | null;
     group_max: number | null;
     amount: number;
+    pricing_mode: 'per_person' | 'per_group';
   }>>>;
 }
 
 interface NightlyPricing {
   date: string;
   parameters: Record<string, number>;
+  pricingModes: Record<string, 'per_person' | 'per_group'>;
 }
 
 interface PricingResult {
@@ -62,15 +66,17 @@ function parseDateToString(dateValue: string | Date): string {
 
 /**
  * Find price for a parameter based on quantity and available price tiers
+ * Returns both the price amount and the pricing_mode
  */
 function findPrice(
   prices: Array<{
     group_min: number | null;
     group_max: number | null;
     amount: number;
+    pricing_mode: 'per_person' | 'per_group';
   }>,
   quantity: number
-): number | null {
+): { amount: number; pricing_mode: 'per_person' | 'per_group' } | null {
   // Find group pricing that matches the quantity
   const groupPrice = prices.find(
     (p) =>
@@ -81,7 +87,7 @@ function findPrice(
   );
 
   if (groupPrice) {
-    return groupPrice.amount;
+    return { amount: groupPrice.amount, pricing_mode: groupPrice.pricing_mode };
   }
 
   // Find base price (no group limits)
@@ -89,7 +95,7 @@ function findPrice(
     (p) => p.group_min === null && p.group_max === null
   );
 
-  return basePrice ? basePrice.amount : null;
+  return basePrice ? { amount: basePrice.amount, pricing_mode: basePrice.pricing_mode } : null;
 }
 
 /**
@@ -151,7 +157,8 @@ export async function calculateGlampingPricing(
       group_min,
       group_max,
       amount,
-      rate_type
+      rate_type,
+      COALESCE(pricing_mode, 'per_person') as pricing_mode
     FROM glamping_pricing
     WHERE item_id = $1
     ORDER BY parameter_id, event_id NULLS FIRST, group_min NULLS FIRST
@@ -210,6 +217,7 @@ export async function calculateGlampingPricing(
       group_max: row.group_max,
       amount: parseFloat(row.amount),
       rate_type: row.rate_type,
+      pricing_mode: row.pricing_mode || 'per_person',
     };
 
     if (record.event_id === null) {
@@ -221,6 +229,7 @@ export async function calculateGlampingPricing(
         group_min: record.group_min,
         group_max: record.group_max,
         amount: record.amount,
+        pricing_mode: record.pricing_mode,
       });
     } else {
       // Event pricing
@@ -234,6 +243,7 @@ export async function calculateGlampingPricing(
         group_min: record.group_min,
         group_max: record.group_max,
         amount: record.amount,
+        pricing_mode: record.pricing_mode,
       });
     }
   });
@@ -285,13 +295,20 @@ export async function calculateGlampingPricing(
     });
 
     const dayPricing: Record<string, number> = {};
+    const dayPricingModes: Record<string, 'per_person' | 'per_group'> = {};
 
     // Calculate price for each parameter
     Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
       // Use qty=1 for price tier lookup when qty=0 (to get unit price for display)
       const lookupQty = Math.max(quantity, 1);
-      let price: number | null = null;
+      let priceResult: { amount: number; pricing_mode: 'per_person' | 'per_group' } | null = null;
       let matchedEvent: any = null;
+
+      // Get base price FIRST (needed for dynamic/yield pricing AND for pricing_mode inheritance)
+      const basePrices = pricingMap.base[paramId] || [];
+      const basePriceResult = findPrice(basePrices, lookupQty);
+      // Default pricing_mode from base, fallback to 'per_person' if no base pricing exists
+      const basePricingMode = basePriceResult?.pricing_mode || 'per_person';
 
       // Check events (newest first - already sorted by created_at DESC)
       for (const event of matchingEvents) {
@@ -299,8 +316,13 @@ export async function calculateGlampingPricing(
         if (event.pricing_type === 'new_price') {
           const eventPrices = pricingMap.events[event.id]?.[paramId];
           if (eventPrices) {
-            price = findPrice(eventPrices, lookupQty);
-            if (price !== null) {
+            const eventPriceResult = findPrice(eventPrices, lookupQty);
+            if (eventPriceResult !== null) {
+              // Use amount from event, but INHERIT pricing_mode from base pricing
+              priceResult = {
+                amount: eventPriceResult.amount,
+                pricing_mode: basePricingMode,
+              };
               matchedEvent = event;
               break;
             }
@@ -313,30 +335,27 @@ export async function calculateGlampingPricing(
         }
       }
 
-      // Get base price for calculation (needed for dynamic and yield pricing)
-      const basePrices = pricingMap.base[paramId] || [];
-      const basePrice = findPrice(basePrices, lookupQty);
-
       // Apply pricing calculation based on event type
       if (matchedEvent) {
         const pricingType = matchedEvent.pricing_type || 'base_price';
 
         if (pricingType === 'new_price') {
           // Price already found from glamping_pricing table
-          // (price variable is already set above)
+          // (priceResult variable is already set above)
         } else if (pricingType === 'dynamic') {
           // Calculate dynamic pricing
-          if (basePrice !== null) {
+          if (basePriceResult !== null) {
             const eventConfig: EventPricingConfig = {
               pricing_type: 'dynamic',
               dynamic_pricing_value: matchedEvent.dynamic_pricing_value,
               dynamic_pricing_mode: matchedEvent.dynamic_pricing_mode,
             };
-            price = calculateEventPrice(basePrice, eventConfig);
+            const dynamicPrice = calculateEventPrice(basePriceResult.amount, eventConfig);
+            priceResult = { amount: dynamicPrice, pricing_mode: basePriceResult.pricing_mode };
           }
         } else if (pricingType === 'yield') {
           // Calculate yield pricing based on current inventory
-          if (basePrice !== null) {
+          if (basePriceResult !== null) {
             const eventConfig: EventPricingConfig = {
               pricing_type: 'yield',
               yield_thresholds: matchedEvent.yield_thresholds,
@@ -345,20 +364,23 @@ export async function calculateGlampingPricing(
             // Use item inventory for yield pricing
             // If unlimited inventory (null), use high number to avoid yield pricing adjustments
             const remainingStock = itemInventory !== null ? itemInventory : 999;
-            price = calculateEventPrice(basePrice, eventConfig, { remainingStock });
+            const yieldPrice = calculateEventPrice(basePriceResult.amount, eventConfig, { remainingStock });
+            priceResult = { amount: yieldPrice, pricing_mode: basePriceResult.pricing_mode };
           }
         } else {
           // base_price - use base price as-is
-          price = basePrice;
+          priceResult = basePriceResult;
         }
       } else {
         // No event matched, use base price
-        price = basePrice;
+        priceResult = basePriceResult;
       }
 
-      // Use 0 if no price found
-      const finalPrice = price !== null ? price : 0;
+      // Use 0 if no price found, default to per_person mode
+      const finalPrice = priceResult !== null ? priceResult.amount : 0;
+      const finalPricingMode = priceResult !== null ? priceResult.pricing_mode : 'per_person';
       dayPricing[paramId] = finalPrice;
+      dayPricingModes[paramId] = finalPricingMode;
 
       // Accumulate total for this parameter
       if (!parameterTotalPricing[paramId]) {
@@ -370,6 +392,7 @@ export async function calculateGlampingPricing(
     nightlyPricing.push({
       date: dateStr,
       parameters: dayPricing,
+      pricingModes: dayPricingModes,
     });
   }
 

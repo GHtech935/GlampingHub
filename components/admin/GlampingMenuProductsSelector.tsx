@@ -7,7 +7,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { AlertCircle, UtensilsCrossed, Plus, Minus, Ticket, X, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, UtensilsCrossed, Plus, Minus, Ticket, X, CheckCircle2, ImageOff } from 'lucide-react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
 import { type MultilingualText, getLocalizedText } from '@/lib/i18n-utils'
@@ -27,6 +28,7 @@ interface MenuItem {
   advance_hours?: number
   min_guests?: number | null
   max_guests?: number | null
+  image_url?: string | null
 }
 
 export interface SelectedMenuProduct {
@@ -373,6 +375,24 @@ export function GlampingMenuProductsSelector({
                 <Card key={item.id} className={disabled ? 'opacity-50' : ''}>
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between gap-3">
+                      {/* Product Image */}
+                      <div className="flex-shrink-0">
+                        {item.image_url ? (
+                          <div className="relative w-16 h-16 rounded-lg overflow-hidden">
+                            <Image
+                              src={item.image_url}
+                              alt={typeof item.name === 'string' ? item.name : getLocalizedText(item.name, locale as 'vi' | 'en')}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center">
+                            <ImageOff className="h-6 w-6 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">

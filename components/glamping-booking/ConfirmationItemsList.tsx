@@ -58,7 +58,7 @@ export interface TentData {
 
 interface ConfirmationItemsListProps {
   tents: TentData[];
-  bookingCode: string;
+  bookingId: string;
   canEditMenu: boolean;
   onMenuUpdated: () => void;
   locale?: string;
@@ -76,7 +76,7 @@ function getLocalizedString(value: any, locale: string = 'vi', fallback: string 
 
 export function ConfirmationItemsList({
   tents,
-  bookingCode,
+  bookingId,
   canEditMenu,
   onMenuUpdated,
   locale = 'vi',
@@ -116,7 +116,7 @@ export function ConfirmationItemsList({
     setLoading(true);
     try {
       // Fetch available menu items for this specific tent
-      const response = await fetch(`/api/glamping/bookings/code/${bookingCode}/tents/${tent.id}/available-menu-items`);
+      const response = await fetch(`/api/glamping/bookings/${bookingId}/tents/${tent.id}/available-menu-items`);
       const data = await response.json();
 
       if (!data.success) {
@@ -217,7 +217,7 @@ export function ConfirmationItemsList({
         });
       });
 
-      const response = await fetch(`/api/glamping/bookings/code/${bookingCode}/tents/${tent.id}/menu-products`, {
+      const response = await fetch(`/api/glamping/bookings/${bookingId}/tents/${tent.id}/menu-products`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ menuProducts }),

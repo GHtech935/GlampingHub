@@ -693,7 +693,7 @@ export async function sendGlampingBookingConfirmation({
   items?: TentItemForEmail[];
 }) {
   const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
-  const confirmationUrl = `${appUrl}/glamping/booking/confirmation/${bookingCode}`;
+  const confirmationUrl = `${appUrl}/glamping/booking/confirmation/${glampingBookingId}`;
 
   // Generate tents section HTML
   let tentsSection: string;
@@ -805,7 +805,7 @@ export async function sendGlampingBookingConfirmedEmail({
   glampingBookingId: string;
 }) {
   const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
-  const notificationLink = `${appUrl}/glamping/booking/confirmation/${bookingCode}`;
+  const notificationLink = `${appUrl}/glamping/booking/confirmation/${glampingBookingId}`;
 
   return sendGlampingTemplateEmail({
     templateSlug: 'glamping-booking-confirmed',
@@ -839,7 +839,7 @@ export async function sendGlampingPaymentConfirmationEmail({
   glampingBookingId: string;
 }) {
   const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
-  const notificationLink = `${appUrl}/glamping/booking/confirmation/${bookingCode}`;
+  const notificationLink = `${appUrl}/glamping/booking/confirmation/${glampingBookingId}`;
 
   return sendGlampingTemplateEmail({
     templateSlug: 'glamping-payment-confirmation',
@@ -996,7 +996,7 @@ export async function sendGlampingMenuUpdateConfirmation({
   priceDifference: number;
   glampingBookingId: string;
 }) {
-  const confirmationUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/glamping/booking/confirmation/${bookingCode}`;
+  const confirmationUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/glamping/booking/confirmation/${glampingBookingId}`;
 
   // Build conditional sections
   let priceIncreasedSection = '';
@@ -1151,6 +1151,7 @@ export async function sendGlampingPreArrivalReminder({
   propertyName,
   checkInDate,
   checkInTime,
+  glampingBookingId,
 }: {
   customerEmail: string;
   customerName: string;
@@ -1158,8 +1159,9 @@ export async function sendGlampingPreArrivalReminder({
   propertyName: string;
   checkInDate: string;
   checkInTime: string;
+  glampingBookingId: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const managementUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${bookingCode}`;
+  const managementUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${glampingBookingId}`;
 
   return sendGlampingTemplateEmail({
     templateSlug: 'glamping-pre-arrival-reminder',
@@ -1172,6 +1174,7 @@ export async function sendGlampingPreArrivalReminder({
       check_in_time: checkInTime,
       management_url: managementUrl,
     },
+    glampingBookingId,
   });
 }
 
@@ -1183,13 +1186,15 @@ export async function sendGlampingPostStayThankYou({
   customerName,
   bookingCode,
   propertyName,
+  glampingBookingId,
 }: {
   customerEmail: string;
   customerName: string;
   bookingCode: string;
   propertyName: string;
+  glampingBookingId: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const reviewUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${bookingCode}`;
+  const reviewUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${glampingBookingId}`;
 
   return sendGlampingTemplateEmail({
     templateSlug: 'glamping-post-stay-thank-you',
@@ -1200,6 +1205,7 @@ export async function sendGlampingPostStayThankYou({
       property_name: propertyName,
       review_url: reviewUrl,
     },
+    glampingBookingId,
   });
 }
 
@@ -1225,9 +1231,9 @@ export async function sendGlampingMenuSelectionReminder({
   checkInDate: string;
   checkInTime: string;
   daysUntilCheckin?: number;
-  glampingBookingId?: string;
+  glampingBookingId: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const managementUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${bookingCode}`;
+  const managementUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${glampingBookingId}`;
 
   // Determine template slug based on days until check-in
   let templateSlug = 'glamping-menu-selection-reminder'; // fallback to legacy template
@@ -1272,9 +1278,9 @@ export async function sendGlampingTripReminder({
   propertyName: string;
   checkInDate: string;
   checkInTime: string;
-  glampingBookingId?: string;
+  glampingBookingId: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const managementUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${bookingCode}`;
+  const managementUrl = `${process.env.NEXT_PUBLIC_APP_URL}/glamping/booking/confirmation/${glampingBookingId}`;
 
   return sendGlampingTemplateEmail({
     templateSlug: 'glamping-trip-reminder',

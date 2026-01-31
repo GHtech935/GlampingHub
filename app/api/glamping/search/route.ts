@@ -35,12 +35,10 @@ export async function GET(request: NextRequest) {
           SELECT MIN(p.amount)
           FROM glamping_items i
           LEFT JOIN glamping_pricing p ON p.item_id = i.id AND p.event_id IS NULL
+          LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
           WHERE i.zone_id = z.id
-            AND EXISTS (
-              SELECT 1 FROM glamping_item_attributes a
-              WHERE a.item_id = i.id
-                AND a.default_calendar_status = 'available'
-            )
+            AND COALESCE(a.is_active, true) = true
+            AND a.default_calendar_status = 'available'
         ) as base_price,
         -- Featured zone image
         (
@@ -86,6 +84,7 @@ export async function GET(request: NextRequest) {
             LEFT JOIN glamping_categories c ON c.id = i.category_id
             LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
             WHERE i.zone_id = z.id
+              AND COALESCE(a.is_active, true) = true
               AND a.default_calendar_status = 'available'
             ORDER BY i.created_at DESC
             LIMIT 3
@@ -112,6 +111,7 @@ export async function GET(request: NextRequest) {
         SELECT 1 FROM glamping_items i
         LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
         WHERE i.zone_id = z.id
+          AND COALESCE(a.is_active, true) = true
           AND a.default_calendar_status = 'available'
           AND NOT EXISTS (
             SELECT 1 FROM glamping_booking_items bi
@@ -190,6 +190,7 @@ export async function GET(request: NextRequest) {
         SELECT 1 FROM glamping_items i
         LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
         WHERE i.zone_id = z.id
+          AND COALESCE(a.is_active, true) = true
           AND a.default_calendar_status = 'available'
           AND NOT EXISTS (
             SELECT 1 FROM glamping_booking_items bi

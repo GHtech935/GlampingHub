@@ -16,6 +16,9 @@ const backgroundImages = [
   "/images/bg/bg_4.jpg",
   "/images/bg/bg_5.jpg",
   "/images/bg/bg_6.jpg",
+  "/images/bg/bg_7.jpg",
+  "/images/bg/bg_8.jpg",
+  "/images/bg/bg_9.jpg"
 ]
 
 export function HeroSection() {

@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { Plus, Search, Filter, Edit, Tent, ImageOff, DollarSign } from "lucide-react";
+import { Plus, Search, Edit, Tent, ImageOff, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ interface Item {
   active_bookings: number;
   deposit_type: string;
   deposit_value: number;
+  is_active: boolean;
 }
 
 const formatCurrency = (amount: number) => {
@@ -41,6 +42,7 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
 
   useEffect(() => {
     if (zoneId === "all") {
@@ -69,11 +71,20 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
     }
   };
 
-  const filteredItems = items.filter(
-    (item) =>
+  const filteredItems = items.filter((item) => {
+    // Filter by search
+    const matchesSearch =
       item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.sku?.toLowerCase().includes(search.toLowerCase())
-  );
+      item.sku?.toLowerCase().includes(search.toLowerCase());
+
+    // Filter by status
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && item.is_active) ||
+      (statusFilter === 'inactive' && !item.is_active);
+
+    return matchesSearch && matchesStatus;
+  });
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -113,10 +124,42 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
             className="pl-10"
           />
         </div>
-        <Button variant="outline">
-          <Filter className="w-4 h-4 mr-2" />
-          {t("filters.all")}
-        </Button>
+        {/* Status Filter */}
+        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setStatusFilter('active')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              statusFilter === 'active'
+                ? 'bg-primary text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            } border-r border-gray-300`}
+          >
+            {t('status.active')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('inactive')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              statusFilter === 'inactive'
+                ? 'bg-primary text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            } border-r border-gray-300`}
+          >
+            {t('status.inactive')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('all')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              statusFilter === 'all'
+                ? 'bg-primary text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {t('filters.all')}
+          </button>
+        </div>
       </div>
 
       {/* Cards Grid */}
@@ -134,7 +177,7 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
           {filteredItems.map((item) => (
             <div
               key={item.id}
-              className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+              className={`bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow ${!item.is_active ? 'opacity-60' : ''}`}
             >
               {/* Image */}
               <div className="relative aspect-[4/3] bg-gray-100">
@@ -158,6 +201,11 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
 
                 {/* Status badges overlaid on image */}
                 <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                  {!item.is_active && (
+                    <Badge variant="secondary" className="text-xs shadow-sm bg-gray-500 text-white">
+                      {t('status.inactive')}
+                    </Badge>
+                  )}
                   <Badge variant={getStatusVariant(item.status)} className="text-xs shadow-sm">
                     {t(`status.${item.status}`)}
                   </Badge>

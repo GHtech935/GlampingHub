@@ -321,7 +321,7 @@ export function GlampingMenuProductsSelector({
             <h4 className="font-medium text-gray-700 mb-3 text-sm uppercase tracking-wide">
               {categoryName}
             </h4>
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {products.map((product) => {
                 const selection = activeNightSelections[product.id];
                 const quantity = selection?.quantity || 0;
@@ -338,10 +338,10 @@ export function GlampingMenuProductsSelector({
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <div className="flex items-center gap-4">
-                      {/* Product Image */}
+                    <div className="flex flex-col">
+                      {/* Product Image - Full width, square aspect ratio */}
                       {product.image_url && (
-                        <div className="relative w-16 h-16 rounded-md overflow-hidden flex-shrink-0">
+                        <div className="relative w-full aspect-square rounded-lg overflow-hidden mb-3">
                           <Image
                             src={product.image_url}
                             alt={getLocalizedString(product.name, locale, 'Product')}
@@ -352,11 +352,38 @@ export function GlampingMenuProductsSelector({
                       )}
 
                       {/* Product Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
                           <span className="font-medium text-gray-900">
                             {getLocalizedString(product.name, locale, 'Unknown')}
                           </span>
+                          {/* Quantity Controls */}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleQuantityChange(product.id, product, -1)}
+                              disabled={quantity === 0}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <span className="w-8 text-center font-medium">{quantity}</span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleQuantityChange(product.id, product, 1)}
+                              disabled={isAtMax}
+                              title={isAtMax ? `Tối đa ${maxQuantity}` : ''}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
                           {product.is_required ? (
                             <Badge variant="destructive" className="text-xs">
                               {t.required}
@@ -384,7 +411,7 @@ export function GlampingMenuProductsSelector({
                           )}
                         </div>
                         {product.description && (
-                          <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">
+                          <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
                             {getLocalizedString(product.description, locale)}
                           </p>
                         )}
@@ -398,38 +425,12 @@ export function GlampingMenuProductsSelector({
                           )}
                         </p>
                       </div>
-
-                      {/* Quantity Controls */}
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleQuantityChange(product.id, product, -1)}
-                          disabled={quantity === 0}
-                        >
-                          <Minus className="h-4 w-4" />
-                        </Button>
-                        <span className="w-8 text-center font-medium">{quantity}</span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleQuantityChange(product.id, product, 1)}
-                          disabled={isAtMax}
-                          title={isAtMax ? `Tối đa ${maxQuantity}` : ''}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
                     </div>
 
                     {/* Voucher Input & Pricing Summary - Only show when quantity > 0 and price > 0 */}
                     {hasQuantity && product.price > 0 && (
-                      <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-                        {/* Left column: Voucher Input */}
+                      <div className="mt-4 space-y-3">
+                        {/* Voucher Input */}
                         <div className="p-3 bg-white rounded-lg border border-gray-200">
                           <VoucherInput
                             itemId={product.id}
@@ -452,7 +453,7 @@ export function GlampingMenuProductsSelector({
                           />
                         </div>
 
-                        {/* Right column: Pricing Breakdown */}
+                        {/* Pricing Breakdown */}
                         <div className="p-3 bg-gray-50 rounded-lg space-y-1.5 text-sm">
                           <div className="flex justify-between text-gray-600">
                             <span>{formatCurrency(product.price)} × {quantity}</span>
@@ -523,7 +524,7 @@ export function GlampingMenuProductsSelector({
                 <h4 className="font-medium text-gray-700 mb-3 text-sm uppercase tracking-wide">
                   {categoryName}
                 </h4>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {products.map((product) => {
                     const selection = activeNightSelections[product.id];
                     const quantity = selection?.quantity || 0;
@@ -540,10 +541,10 @@ export function GlampingMenuProductsSelector({
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <div className="flex items-center gap-4">
-                          {/* Product Image */}
+                        <div className="flex flex-col">
+                          {/* Product Image - Full width, square aspect ratio */}
                           {product.image_url && (
-                            <div className="relative w-16 h-16 rounded-md overflow-hidden flex-shrink-0">
+                            <div className="relative w-full aspect-square rounded-lg overflow-hidden mb-3">
                               <Image
                                 src={product.image_url}
                                 alt={getLocalizedString(product.name, locale, 'Product')}
@@ -554,11 +555,38 @@ export function GlampingMenuProductsSelector({
                           )}
 
                           {/* Product Info */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-2">
                               <span className="font-medium text-gray-900">
                                 {getLocalizedString(product.name, locale, 'Unknown')}
                               </span>
+                              {/* Quantity Controls */}
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleQuantityChange(product.id, product, -1)}
+                                  disabled={quantity === 0}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <span className="w-8 text-center font-medium">{quantity}</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleQuantityChange(product.id, product, 1)}
+                                  disabled={isAtMax}
+                                  title={isAtMax ? `Tối đa ${maxQuantity}` : ''}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
                               {product.is_required ? (
                                 <Badge variant="destructive" className="text-xs">
                                   {t.required}
@@ -586,7 +614,7 @@ export function GlampingMenuProductsSelector({
                               )}
                             </div>
                             {product.description && (
-                              <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">
+                              <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
                                 {getLocalizedString(product.description, locale)}
                               </p>
                             )}
@@ -600,38 +628,12 @@ export function GlampingMenuProductsSelector({
                               )}
                             </p>
                           </div>
-
-                          {/* Quantity Controls */}
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => handleQuantityChange(product.id, product, -1)}
-                              disabled={quantity === 0}
-                            >
-                              <Minus className="h-4 w-4" />
-                            </Button>
-                            <span className="w-8 text-center font-medium">{quantity}</span>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => handleQuantityChange(product.id, product, 1)}
-                              disabled={isAtMax}
-                              title={isAtMax ? `Tối đa ${maxQuantity}` : ''}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </div>
                         </div>
 
                         {/* Voucher Input & Pricing Summary - Only show when quantity > 0 and price > 0 */}
                         {hasQuantity && product.price > 0 && (
-                          <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-                            {/* Left column: Voucher Input */}
+                          <div className="mt-4 space-y-3">
+                            {/* Voucher Input */}
                             <div className="p-3 bg-white rounded-lg border border-gray-200">
                               <VoucherInput
                                 itemId={product.id}
@@ -654,7 +656,7 @@ export function GlampingMenuProductsSelector({
                               />
                             </div>
 
-                            {/* Right column: Pricing Breakdown */}
+                            {/* Pricing Breakdown */}
                             <div className="p-3 bg-gray-50 rounded-lg space-y-1.5 text-sm">
                               <div className="flex justify-between text-gray-600">
                                 <span>{formatCurrency(product.price)} × {quantity}</span>

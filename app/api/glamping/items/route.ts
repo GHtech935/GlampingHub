@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN glamping_zones z ON i.zone_id = z.id
       LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
       WHERE z.is_active = true
+        AND COALESCE(a.is_active, true) = true
     `;
 
     const params: any[] = [];

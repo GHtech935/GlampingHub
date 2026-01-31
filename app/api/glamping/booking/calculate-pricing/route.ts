@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Fetch item details with pricing and parameters
+    // Fetch item details with pricing and parameters (only active items)
     const itemQuery = `
       SELECT
         i.*,
@@ -53,11 +53,14 @@ export async function GET(request: NextRequest) {
         )) FILTER (WHERE it.tax_id IS NOT NULL) as taxes
       FROM glamping_items i
       LEFT JOIN glamping_zones z ON i.zone_id = z.id
+      LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
       LEFT JOIN glamping_item_parameters ip ON i.id = ip.item_id
       LEFT JOIN glamping_parameters p ON ip.parameter_id = p.id
       LEFT JOIN glamping_item_taxes it ON i.id = it.item_id
       LEFT JOIN glamping_taxes t ON it.tax_id = t.id
       WHERE i.id = $1
+        AND COALESCE(z.is_active, true) = true
+        AND COALESCE(a.is_active, true) = true
       GROUP BY i.id, z.id, z.name, z.bank_account_id
     `;
 
@@ -93,50 +96,45 @@ export async function GET(request: NextRequest) {
       parameterQuantities
     );
 
-    // Calculate total accommodation cost
+    // Calculate total accommodation cost using nightly breakdown with pricing_mode
     let accommodationCost = 0;
     const missingPricing: string[] = [];
 
     console.log('[Pricing Debug] Parameter Quantities:', parameterQuantities);
-    console.log('[Pricing Debug] Parameter Pricing:', parameterPricing);
+    console.log('[Pricing Debug] Raw Nightly Pricing:', rawNightlyPricing);
 
+    // Calculate accommodation cost using nightly pricing with pricing_mode
+    // pricing_mode: 'per_person' = price × quantity, 'per_group' = fixed price
+    rawNightlyPricing.forEach(night => {
+      Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
+        const nightPrice = night.parameters[paramId] || 0;
+        const pricingMode = night.pricingModes?.[paramId] || 'per_person';
+
+        let priceToAdd: number;
+        if (pricingMode === 'per_group') {
+          // Per group: fixed price for the group, regardless of quantity
+          priceToAdd = nightPrice;
+          console.log(`[Pricing] ${night.date} - ${paramId}: ${nightPrice} (per_group, fixed)`);
+        } else {
+          // Per person (default): multiply price by quantity
+          priceToAdd = nightPrice * quantity;
+          console.log(`[Pricing] ${night.date} - ${paramId}: ${nightPrice}/unit × ${quantity} = ${priceToAdd} (per_person)`);
+        }
+
+        accommodationCost += priceToAdd;
+      });
+    });
+
+    // Check for missing pricing
     Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
       const paramTotalPrice = parameterPricing[paramId];
-
-      // Check if pricing is missing or zero
       if (paramTotalPrice === undefined || paramTotalPrice === null) {
         console.warn(`[Pricing Warning] Missing pricing for parameter ${paramId}`);
         missingPricing.push(paramId);
       }
-
-      // paramTotalPrice is price PER UNIT for all nights
-      // Need to multiply by quantity
-      const priceToAdd = (paramTotalPrice || 0) * quantity;
-      accommodationCost += priceToAdd;
-
-      // Debug logging for each parameter
-      console.log(`[Pricing] Parameter ${paramId}: ${paramTotalPrice || 0}/unit × ${quantity} units = ${priceToAdd}`);
     });
 
-    console.log(`[Pricing] Total Accommodation Cost (Method 1): ${accommodationCost}`);
-
-    // Validation: Cross-check with nightly breakdown
-    let validationTotal = 0;
-    rawNightlyPricing.forEach(night => {
-      Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
-        const nightPrice = night.parameters[paramId] || 0;
-        validationTotal += nightPrice * quantity;
-      });
-    });
-
-    console.log(`[Pricing] Validation Total (Method 2 - from nightly breakdown): ${validationTotal}`);
-
-    // If there's a mismatch, log error and use validation total
-    if (Math.abs(validationTotal - accommodationCost) > 0.01) {
-      console.error(`[Pricing] MISMATCH DETECTED! Method 1: ${accommodationCost}, Method 2: ${validationTotal}`);
-      console.error('[Pricing] Using validation total (Method 2) as it sums nightly prices directly');
-      accommodationCost = validationTotal;
-    }
+    console.log(`[Pricing] Total Accommodation Cost: ${accommodationCost}`);
 
     // Check if all parameters have pricing
     if (missingPricing.length > 0) {
@@ -174,10 +172,19 @@ export async function GET(request: NextRequest) {
     // Transform nightlyPricing to match NightlyBreakdown component format
     const nightlyPricing = rawNightlyPricing.map(night => {
       // Calculate subtotal for this night (sum of price * quantity for each parameter)
+      // Using pricing_mode to determine calculation
       let subtotal = 0;
       Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
         const paramPrice = night.parameters[paramId] || 0;
-        subtotal += paramPrice * quantity;
+        const pricingMode = night.pricingModes?.[paramId] || 'per_person';
+
+        if (pricingMode === 'per_group') {
+          // Per group: fixed price for the group
+          subtotal += paramPrice;
+        } else {
+          // Per person: multiply by quantity
+          subtotal += paramPrice * quantity;
+        }
       });
 
       return {
@@ -190,6 +197,7 @@ export async function GET(request: NextRequest) {
         subtotalAfterDiscounts: subtotal,
         // Also keep raw parameters for glamping-specific display
         parameters: night.parameters,
+        pricingModes: night.pricingModes,
       };
     });
 
@@ -253,11 +261,20 @@ export async function GET(request: NextRequest) {
       balance: 0,
     };
 
+    // Extract pricing modes for each parameter (from first night, as it's consistent)
+    const parameterPricingModes: Record<string, 'per_person' | 'per_group'> = {};
+    if (rawNightlyPricing.length > 0) {
+      Object.keys(parameterQuantities).forEach(paramId => {
+        parameterPricingModes[paramId] = rawNightlyPricing[0].pricingModes?.[paramId] || 'per_person';
+      });
+    }
+
     // Return pricing breakdown
     return NextResponse.json({
       nights,
       parameterQuantities,
-      parameterPricing, // Price per parameter for all nights
+      parameterPricing, // Price per parameter for all nights (unit price, not multiplied by quantity)
+      parameterPricingModes, // Pricing mode for each parameter ('per_person' or 'per_group')
       nightlyPricing, // Breakdown by date
       menuProducts: menuProductsBreakdown,
       totals: {

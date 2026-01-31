@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
         COALESCE(a.inventory_quantity, 1) as inventory_quantity,
         COALESCE(a.unlimited_inventory, false) as unlimited_inventory,
         COALESCE(a.default_calendar_status, 'available') as status,
+        COALESCE(a.is_active, true) as is_active,
         a.visibility,
         a.allocation_type,
         (SELECT url FROM glamping_item_media WHERE item_id = i.id AND type = 'image' ORDER BY display_order ASC, created_at ASC LIMIT 1) as image_url,
@@ -141,6 +142,8 @@ export async function POST(request: NextRequest) {
       timeslots,
       // Tax fields
       taxes,
+      // Active status
+      is_active,
     } = body;
 
     // Validate required fields
@@ -186,9 +189,10 @@ export async function POST(request: NextRequest) {
           fixed_start_time,
           default_length_hours,
           visibility,
-          default_calendar_status
+          default_calendar_status,
+          is_active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           itemId,
           unlimited_inventory ? 0 : (inventory_quantity || 1),
@@ -199,7 +203,8 @@ export async function POST(request: NextRequest) {
           fixed_start_time || null,
           default_length_hours || null,
           visibility || 'everyone',
-          default_calendar_status || 'available'
+          default_calendar_status || 'available',
+          is_active !== undefined ? is_active : true
         ]
       );
 

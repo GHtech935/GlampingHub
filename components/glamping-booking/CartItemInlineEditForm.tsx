@@ -1,11 +1,15 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2, Check, ChevronDown, ChevronUp, Edit2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { formatCurrency } from '@/lib/utils';
 import { format, differenceInDays } from 'date-fns';
+import { vi } from 'date-fns/locale';
 import { GlampingDateRangePickerWithCalendar } from '@/components/admin/GlampingDateRangePickerWithCalendar';
 import { GlampingMenuProductsSelector } from '@/components/glamping-booking/GlampingMenuProductsSelector';
 import VoucherInput from '@/components/booking/VoucherInput';
@@ -60,6 +64,8 @@ export function CartItemInlineEditForm({
   item,
   isOpen
 }: CartItemInlineEditFormProps) {
+  const [isBookingInfoExpanded, setIsBookingInfoExpanded] = useState(false);
+
   // Use custom hooks
   const formState = useCartItemFormState(item);
   // Fetch all available parameters for the item
@@ -145,31 +151,122 @@ export function CartItemInlineEditForm({
     return null;
   }
 
+  // Format date for display
+  const formatDisplayDate = (date: Date | undefined) => {
+    if (!date) return '--';
+    return format(date, 'dd/MM/yyyy', { locale: vi });
+  };
+
+  // Get parameter name helper
+  const getParamName = (param: any) => {
+    if (!param) return '';
+    if (typeof param.name === 'object' && param.name !== null) {
+      return param.name.vi || param.name.en || '';
+    }
+    return param.name || '';
+  };
+
   return (
     <div className="space-y-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-200 mt-4">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="font-semibold text-blue-900">Đang chỉnh sửa</h4>
+      <div className="flex items-center justify-between">
         <AutoSaveIndicator status={autoSaveStatus} />
       </div>
 
-      {/* Date Range & Parameters (Integrated Calendar) */}
-      <div>
-        <GlampingDateRangePickerWithCalendar
-          itemId={item.itemId}
-          dateRange={formState.dateRange}
-          onDateRangeChange={formState.setDateRange}
-          locale="vi"
-          parameters={parameters}
-          parameterQuantities={formState.parameterQuantities}
-          onQuantitiesChange={formState.setParameterQuantities}
-          loadingParameters={parametersLoading}
-          overrideParameterPricing={pricingData?.parameterPricing}
-          // Pass nightly pricing with group pricing from API
-          overrideNightlyPricing={pricingData?.nightlyPricing}
-          // Consider loading if: hook is loading OR (dateRange valid but no pricing data yet)
-          // This prevents showing wrong calendar-based prices before group pricing loads
-          pricingLoading={pricingLoading || (formState.dateRange?.from && formState.dateRange?.to && !pricingData)}
-        />
+      {/* Booking Info Section - Collapsible */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        {/* Summary Header - Always visible */}
+        <div
+          className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+          onClick={() => setIsBookingInfoExpanded(!isBookingInfoExpanded)}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <h4 className="font-semibold text-gray-800">Thông tin đặt phòng</h4>
+                <Badge variant="secondary" className="text-xs">
+                  {nights} đêm
+                </Badge>
+              </div>
+
+              {/* Dates */}
+              <div className="text-sm text-gray-600 mb-2">
+                <span>Check-in: </span>
+                <strong>{formatDisplayDate(formState.dateRange?.from)}</strong>
+                <span className="mx-2">→</span>
+                <span>Check-out: </span>
+                <strong>{formatDisplayDate(formState.dateRange?.to)}</strong>
+              </div>
+
+              {/* Parameters Summary */}
+              {parameters && parameters.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {parameters.map((param) => {
+                    const quantity = formState.parameterQuantities[param.id] || formState.parameterQuantities[param.parameter_id] || 0;
+                    if (quantity === 0) return null;
+
+                    return (
+                      <Badge
+                        key={param.id || param.parameter_id}
+                        variant="outline"
+                        className="text-xs"
+                        style={{
+                          borderColor: param.color_code || undefined,
+                          color: param.color_code || undefined
+                        }}
+                      >
+                        {getParamName(param)}: {quantity}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Accommodation Price */}
+              {pricingData?.totals?.accommodationCost && (
+                <div className="mt-2 text-sm">
+                  <span className="text-gray-600">Tiền lều: </span>
+                  <span className="font-semibold text-blue-600">
+                    {formatCurrency(pricingData.totals.accommodationCost)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Edit Button */}
+            <Button
+              type="button"
+              variant={isBookingInfoExpanded ? "default" : "outline"}
+              size="sm"
+              className="flex-shrink-0"
+            >
+              <Edit2 className="h-4 w-4 mr-1" />
+              {isBookingInfoExpanded ? 'Đóng' : 'Sửa'}
+              {isBookingInfoExpanded ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Collapsible Content - Date Picker & Parameters */}
+        <Collapsible open={isBookingInfoExpanded}>
+          <CollapsibleContent>
+            <div className="p-4 pt-0 border-t border-gray-200">
+              <GlampingDateRangePickerWithCalendar
+                itemId={item.itemId}
+                dateRange={formState.dateRange}
+                onDateRangeChange={formState.setDateRange}
+                locale="vi"
+                parameters={parameters}
+                parameterQuantities={formState.parameterQuantities}
+                onQuantitiesChange={formState.setParameterQuantities}
+                loadingParameters={parametersLoading}
+                overrideParameterPricing={pricingData?.parameterPricing}
+                overrideParameterPricingModes={pricingData?.parameterPricingModes}
+                overrideNightlyPricing={pricingData?.nightlyPricing}
+                pricingLoading={pricingLoading || (formState.dateRange?.from && formState.dateRange?.to && !pricingData)}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
 
       {/* Menu Products */}

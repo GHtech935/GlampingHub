@@ -62,7 +62,7 @@
         "totalBookings": "đặt phòng"
     },
     "home": {
-        "heroTitle": "Comfy in Wild",
+        "heroTitle": "Tiện nghi giữa lòng hoang dã",
         "province": "Tỉnh thành",
         "provincePlaceholder": "Chọn tỉnh thành",
         "whereToGo": "Chọn campsite",
@@ -3114,9 +3114,11 @@
                     "packages_only": "Chỉ dùng trong Package"
                 },
                 "status": {
+                    "active": "Hoạt động",
                     "available": "Có sẵn",
                     "unavailable": "Không có sẵn",
-                    "disabled": "Vô hiệu hóa"
+                    "disabled": "Vô hiệu hóa",
+                    "inactive": "Ngừng hoạt động"
                 },
                 "inventory": {
                     "unlimited": "Không giới hạn",
@@ -3216,6 +3218,8 @@
                     "sunday": "Chủ Nhật",
                     "visibilityLabel": "Hiển thị",
                     "defaultCalendarStatus": "Trạng thái lịch mặc định",
+                    "isActive": "Trạng thái hoạt động",
+                    "isActiveDescription": "Item ngừng hoạt động sẽ bị ẩn khỏi tìm kiếm và đặt chỗ",
                     "parameters": "Tham số",
                     "uploadImages": "Tải lên hình ảnh",
                     "youtubeVideo": "Video YouTube",
@@ -3340,7 +3344,9 @@
                         "inventoryItem": "Kho Lều/Chỗ nghỉ",
                         "groupLabel": "Nhóm {min} đến {max}",
                         "perGroup": "/ {rate} / mỗi nhóm",
-                        "perParameter": "/ {rate} / mỗi {param}"
+                        "perParameter": "/ {rate} / mỗi {param}",
+                        "perPerson": "mỗi {name}",
+                        "perGroupFixed": "mỗi nhóm"
                     },
                     "calendarStatus": {
                         "title": "Trạng thái lịch mặc định",

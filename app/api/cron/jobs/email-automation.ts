@@ -66,6 +66,7 @@ export const emailAutomation: CronJobFunction = async (params) => {
           propertyName: `${booking.zone_name} - ${booking.item_name}`,
           checkInDate: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
           checkInTime: booking.check_in_time || '14:00',
+          glampingBookingId: booking.id,
         });
 
         // Send in-app notification
@@ -133,6 +134,7 @@ export const emailAutomation: CronJobFunction = async (params) => {
           customerName: `${booking.guest_first_name} ${booking.guest_last_name}`,
           bookingCode: booking.booking_code,
           propertyName: `${booking.zone_name} - ${booking.item_name}`,
+          glampingBookingId: booking.id,
         });
 
         // Send in-app notification (review request)

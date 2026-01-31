@@ -24,9 +24,25 @@ export function CategoryTabs({
   // Sort categories by weight
   const sortedCategories = [...categories].sort((a, b) => a.weight - b.weight);
 
+  // Calculate total item count for "All" tab
+  const totalItemCount = sortedCategories
+    .filter(cat => cat.status === 'active')
+    .reduce((sum, cat) => sum + (cat.item_count || 0), 0);
+
   return (
     <div className="mb-6">
       <div className="flex gap-2 overflow-x-auto pb-2">
+        {/* "All" Tab */}
+        <Button
+          variant={selectedCategory === '' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => onCategoryChange('')}
+          className="whitespace-nowrap"
+        >
+          Tất cả
+          {totalItemCount > 0 && ` (${totalItemCount})`}
+        </Button>
+
         {/* Category Tabs */}
         {sortedCategories
           .filter(cat => cat.status === 'active')

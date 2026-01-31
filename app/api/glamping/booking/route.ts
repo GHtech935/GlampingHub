@@ -25,14 +25,17 @@ async function checkItemAvailability(
   availableQuantity?: number;
   unlimited?: boolean;
 }> {
-  // Step 1: Get item inventory settings
+  // Step 1: Get item inventory settings (only active items)
   const itemAttrQuery = `
     SELECT
       COALESCE(a.inventory_quantity, 1) as inventory_quantity,
       COALESCE(a.unlimited_inventory, false) as unlimited_inventory
     FROM glamping_items i
     LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+    LEFT JOIN glamping_zones z ON i.zone_id = z.id
     WHERE i.id = $1
+      AND COALESCE(z.is_active, true) = true
+      AND COALESCE(a.is_active, true) = true
   `;
   const itemAttrResult = await client.query(itemAttrQuery, [itemId]);
 
@@ -140,12 +143,27 @@ export async function POST(request: NextRequest) {
 
       console.log('[Multi-Item Booking] Processing booking for', items.length, 'items');
 
-      // Step 1: Validate all items belong to same zone
+      // Step 1: Validate all items belong to same zone (only active items)
       const itemIds = items.map((item: any) => item.itemId);
       const zoneCheckQuery = `
-        SELECT DISTINCT zone_id FROM glamping_items WHERE id = ANY($1)
+        SELECT DISTINCT i.zone_id
+        FROM glamping_items i
+        LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+        LEFT JOIN glamping_zones z ON i.zone_id = z.id
+        WHERE i.id = ANY($1)
+          AND COALESCE(z.is_active, true) = true
+          AND COALESCE(a.is_active, true) = true
       `;
       const zoneCheckResult = await client.query(zoneCheckQuery, [itemIds]);
+
+      if (zoneCheckResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        client.release();
+        return NextResponse.json(
+          { error: 'One or more items are not available for booking' },
+          { status: 400 }
+        );
+      }
 
       if (zoneCheckResult.rows.length > 1) {
         await client.query('ROLLBACK');
@@ -158,7 +176,7 @@ export async function POST(request: NextRequest) {
 
       const zoneId = zoneCheckResult.rows[0]?.zone_id;
 
-      // Step 2: Fetch details for all items
+      // Step 2: Fetch details for all items (only active items)
       const itemsQuery = `
         SELECT
           i.*,
@@ -181,11 +199,14 @@ export async function POST(request: NextRequest) {
           )) FILTER (WHERE it.tax_id IS NOT NULL) as taxes
         FROM glamping_items i
         LEFT JOIN glamping_zones z ON i.zone_id = z.id
+        LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
         LEFT JOIN glamping_item_parameters ip ON i.id = ip.item_id
         LEFT JOIN glamping_parameters p ON ip.parameter_id = p.id
         LEFT JOIN glamping_item_taxes it ON i.id = it.item_id
         LEFT JOIN glamping_taxes t ON it.tax_id = t.id
         WHERE i.id = ANY($1)
+          AND COALESCE(z.is_active, true) = true
+          AND COALESCE(a.is_active, true) = true
         GROUP BY i.id, z.id, z.name, z.bank_account_id
       `;
       const itemsResult = await client.query(itemsQuery, [itemIds]);
@@ -1158,7 +1179,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch item details
+    // Fetch item details (only active items)
     const itemQuery = `
       SELECT
         i.*,
@@ -1181,11 +1202,14 @@ export async function POST(request: NextRequest) {
         )) FILTER (WHERE it.tax_id IS NOT NULL) as taxes
       FROM glamping_items i
       LEFT JOIN glamping_zones z ON i.zone_id = z.id
+      LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
       LEFT JOIN glamping_item_parameters ip ON i.id = ip.item_id
       LEFT JOIN glamping_parameters p ON ip.parameter_id = p.id
       LEFT JOIN glamping_item_taxes it ON i.id = it.item_id
       LEFT JOIN glamping_taxes t ON it.tax_id = t.id
       WHERE i.id = $1
+        AND COALESCE(z.is_active, true) = true
+        AND COALESCE(a.is_active, true) = true
       GROUP BY i.id, z.id, z.name, z.bank_account_id
     `;
 

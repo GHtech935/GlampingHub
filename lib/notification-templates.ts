@@ -177,7 +177,7 @@ export const CUSTOMER_NOTIFICATION_TEMPLATES = {
       vi: 'Đừng quên chọn món ăn cho chuyến đi! Bạn chỉ có thể chỉnh sửa đến 24h trước check-in.',
       en: 'Don\'t forget to select your meals! You can only edit until 24h before check-in.'
     },
-    link: '/glamping/booking/confirmation/{booking_code}',
+    link: '/glamping/booking/confirmation/{booking_id}',
     sendEmail: true
   },
 
@@ -599,8 +599,8 @@ export const EMAIL_TEMPLATE_MAP: Record<string, string> = {
  * // Returns: '/admin/glamping/bookings?id=123'
  *
  * // Customer link transformation
- * transformLinkForGlamping('/booking/confirmation/{booking_id}', 'customer', { booking_code: 'GH26000001' })
- * // Returns: '/glamping/booking/confirmation/GH26000001'
+ * transformLinkForGlamping('/booking/confirmation/{booking_id}', 'customer', { booking_id: 'uuid-123' })
+ * // Returns: '/glamping/booking/confirmation/uuid-123'
  */
 export function transformLinkForGlamping(
   link: string,
@@ -614,9 +614,9 @@ export function transformLinkForGlamping(
     // Transform: /booking/* => /glamping/booking/*
     let transformed = link.replace('/booking/', '/glamping/booking/');
 
-    // Replace {booking_id} with actual booking_code for glamping
-    if (data?.booking_code && transformed.includes('{booking_id}')) {
-      transformed = transformed.replace('{booking_id}', data.booking_code);
+    // Replace {booking_id} with actual booking_id (UUID) for glamping
+    if (data?.booking_id && transformed.includes('{booking_id}')) {
+      transformed = transformed.replace('{booking_id}', data.booking_id);
     }
 
     return transformed;
