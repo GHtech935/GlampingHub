@@ -87,11 +87,10 @@ export function AdminGlampingBookingFormModal({
 
   // ========== TENT MANAGEMENT ==========
   const addTent = useCallback(() => {
-    if (tents.length >= 10) return
     const newTent = createEmptyTent()
     setTents(prev => [...prev, newTent])
     setActiveTabId(newTent.id)
-  }, [tents.length])
+  }, [])
 
   const removeTent = useCallback((index: number) => {
     if (tents.length <= 1) return
@@ -520,7 +519,6 @@ export function AdminGlampingBookingFormModal({
               variant="ghost"
               size="sm"
               onClick={addTent}
-              disabled={tents.length >= 10}
               className="h-8 px-2 text-sm"
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
