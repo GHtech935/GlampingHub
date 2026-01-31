@@ -317,15 +317,17 @@ export default function GlampingBookingsPage() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => setShowCreateBookingModal(true)}
-            className="flex items-center gap-1.5 sm:gap-2 h-9 sm:h-10 touch-manipulation"
-          >
-            <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span className="text-xs sm:text-sm">{locale === 'vi' ? 'Tạo Booking' : 'Create Booking'}</span>
-          </Button>
+          {zoneId !== "all" && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setShowCreateBookingModal(true)}
+              className="flex items-center gap-1.5 sm:gap-2 h-9 sm:h-10 touch-manipulation"
+            >
+              <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="text-xs sm:text-sm">{locale === 'vi' ? 'Tạo Booking' : 'Create Booking'}</span>
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

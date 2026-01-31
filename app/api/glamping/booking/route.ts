@@ -1,11 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool, { getClient } from '@/lib/db';
+import { PoolClient } from 'pg';
 import { calculateGlampingPricing } from '@/lib/glamping-pricing';
 import {
   sendGlampingBookingConfirmation,
   sendGlampingBookingNotificationToStaff,
 } from '@/lib/email';
 import { validateVoucherDirect } from '@/lib/voucher-validation';
+
+/**
+ * Check if an item is available for booking in the given date range
+ * Considers inventory_quantity and unlimited_inventory settings
+ */
+async function checkItemAvailability(
+  client: PoolClient,
+  itemId: string,
+  checkInDate: string,
+  checkOutDate: string
+): Promise<{
+  available: boolean;
+  reason?: string;
+  inventoryQuantity?: number;
+  bookedQuantity?: number;
+  availableQuantity?: number;
+  unlimited?: boolean;
+}> {
+  // Step 1: Get item inventory settings
+  const itemAttrQuery = `
+    SELECT
+      COALESCE(a.inventory_quantity, 1) as inventory_quantity,
+      COALESCE(a.unlimited_inventory, false) as unlimited_inventory
+    FROM glamping_items i
+    LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+    WHERE i.id = $1
+  `;
+  const itemAttrResult = await client.query(itemAttrQuery, [itemId]);
+
+  if (itemAttrResult.rows.length === 0) {
+    return { available: false, reason: 'Item not found' };
+  }
+
+  const { inventory_quantity, unlimited_inventory } = itemAttrResult.rows[0];
+
+  // Step 2: If unlimited inventory, always available
+  if (unlimited_inventory) {
+    return { available: true, unlimited: true };
+  }
+
+  // Step 3: Count overlapping bookings for this item
+  // Overlap: existing.check_in < new.check_out AND existing.check_out > new.check_in
+  const bookingCountQuery = `
+    SELECT COUNT(DISTINCT bt.id) as booked_count
+    FROM glamping_booking_tents bt
+    JOIN glamping_bookings b ON bt.booking_id = b.id
+    WHERE bt.item_id = $1
+      AND b.status NOT IN ('cancelled', 'rejected')
+      AND bt.check_in_date < $3
+      AND bt.check_out_date > $2
+  `;
+  const bookingCountResult = await client.query(bookingCountQuery, [
+    itemId,
+    checkInDate,
+    checkOutDate,
+  ]);
+
+  const bookedQuantity = parseInt(bookingCountResult.rows[0].booked_count) || 0;
+  const availableQuantity = inventory_quantity - bookedQuantity;
+
+  // Step 4: Check if available
+  if (availableQuantity <= 0) {
+    return {
+      available: false,
+      reason: 'Item is fully booked for the selected dates',
+      inventoryQuantity: inventory_quantity,
+      bookedQuantity,
+      availableQuantity: 0,
+    };
+  }
+
+  return {
+    available: true,
+    inventoryQuantity: inventory_quantity,
+    bookedQuantity,
+    availableQuantity,
+  };
+}
 
 export async function POST(request: NextRequest) {
   const client = await getClient();
@@ -112,50 +191,34 @@ export async function POST(request: NextRequest) {
       const itemsResult = await client.query(itemsQuery, [itemIds]);
       const itemsMap = new Map(itemsResult.rows.map(row => [row.id, row]));
 
-      // Step 3: Check availability for ALL items (skip for admin bookings)
-      if (!isAdminBooking)
+      // Step 3: Check availability for ALL items (including admin bookings)
+      // Uses inventory_quantity to allow multiple bookings if quantity > 1
+      // Unlimited inventory items are always available
       for (const cartItem of items) {
-        const { itemId, checkInDate, checkOutDate, parameterQuantities } = cartItem;
+        const { itemId, checkInDate, checkOutDate } = cartItem;
 
-        const overlapQuery = `
-          SELECT b.id, b.booking_code, bi.parameter_id, b.check_in_date, b.check_out_date
-          FROM glamping_bookings b
-          JOIN glamping_booking_items bi ON b.id = bi.booking_id
-          WHERE bi.item_id = $1
-            AND b.status NOT IN ('cancelled', 'rejected')
-            AND (
-              (b.check_in_date < $3 AND b.check_out_date > $2)
-              OR (b.check_in_date >= $2 AND b.check_in_date < $3)
-              OR (b.check_out_date > $2 AND b.check_out_date <= $3)
-            )
-        `;
-        const overlapResult = await client.query(overlapQuery, [itemId, checkInDate, checkOutDate]);
+        const availability = await checkItemAvailability(
+          client,
+          itemId,
+          checkInDate,
+          checkOutDate
+        );
 
-        if (overlapResult.rows.length > 0) {
-          const requestedParams = Object.keys(parameterQuantities || {}).filter(
-            (paramId) => (parameterQuantities[paramId] as number) > 0
+        if (!availability.available) {
+          const itemData = itemsMap.get(itemId);
+          await client.query('ROLLBACK');
+          client.release();
+          return NextResponse.json(
+            {
+              error: `Lều "${itemData?.name || itemId}" đã được đặt hết trong khoảng thời gian này. Vui lòng chọn ngày khác hoặc chọn lều khác.`,
+              errorCode: 'DATES_NOT_AVAILABLE',
+              conflictingItem: itemId,
+              inventoryQuantity: availability.inventoryQuantity,
+              bookedQuantity: availability.bookedQuantity,
+              availableQuantity: availability.availableQuantity,
+            },
+            { status: 409 }
           );
-
-          for (const existingBooking of overlapResult.rows) {
-            if (requestedParams.includes(existingBooking.parameter_id)) {
-              const itemData = itemsMap.get(itemId);
-              await client.query('ROLLBACK');
-              client.release();
-              return NextResponse.json(
-                {
-                  error: `Item "${itemData?.name || itemId}" is not available for the selected dates. Please choose different dates or remove this item.`,
-                  errorCode: 'DATES_NOT_AVAILABLE',
-                  conflictingItem: itemId,
-                  conflictingBooking: {
-                    bookingCode: existingBooking.booking_code,
-                    checkIn: existingBooking.check_in_date,
-                    checkOut: existingBooking.check_out_date,
-                  },
-                },
-                { status: 409 }
-              );
-            }
-          }
         }
       }
 
@@ -1153,48 +1216,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for overlapping bookings (prevent double booking) - skip for admin bookings
-    if (!isAdminBooking) {
-    const overlapQuery = `
-      SELECT b.id, b.booking_code, bi.parameter_id, b.check_in_date, b.check_out_date
-      FROM glamping_bookings b
-      JOIN glamping_booking_items bi ON b.id = bi.booking_id
-      WHERE bi.item_id = $1
-        AND b.status NOT IN ('cancelled', 'rejected')
-        AND (
-          (b.check_in_date < $3 AND b.check_out_date > $2)
-          OR (b.check_in_date >= $2 AND b.check_in_date < $3)
-          OR (b.check_out_date > $2 AND b.check_out_date <= $3)
-        )
-    `;
-    const overlapResult = await client.query(overlapQuery, [itemId, checkInDate, checkOutDate]);
+    // Check availability using inventory_quantity (applies to ALL bookings including admin)
+    // Unlimited inventory items are always available
+    // Items with inventory_quantity > 1 can have multiple bookings per day
+    const availability = await checkItemAvailability(
+      client,
+      itemId,
+      checkInDate,
+      checkOutDate
+    );
 
-    // Check if any overlapping bookings use the same parameters we're trying to book
-    if (overlapResult.rows.length > 0) {
-      const requestedParams = Object.keys(parameterQuantities).filter(
-        (paramId) => (parameterQuantities[paramId] as number) > 0
+    if (!availability.available) {
+      await client.query('ROLLBACK');
+      client.release();
+      return NextResponse.json(
+        {
+          error: 'Lều đã được đặt hết trong khoảng thời gian này. Vui lòng chọn ngày khác.',
+          errorCode: 'DATES_NOT_AVAILABLE',
+          conflictingItem: itemId,
+          inventoryQuantity: availability.inventoryQuantity,
+          bookedQuantity: availability.bookedQuantity,
+          availableQuantity: availability.availableQuantity,
+        },
+        { status: 409 }
       );
-
-      for (const existingBooking of overlapResult.rows) {
-        if (requestedParams.includes(existingBooking.parameter_id)) {
-          await client.query('ROLLBACK');
-          client.release();
-          return NextResponse.json(
-            {
-              error: 'This item is not available for the selected dates. Please choose different dates.',
-              errorCode: 'DATES_NOT_AVAILABLE',
-              conflictingBooking: {
-                bookingCode: existingBooking.booking_code,
-                checkIn: existingBooking.check_in_date,
-                checkOut: existingBooking.check_out_date,
-              },
-            },
-            { status: 409 }
-          );
-        }
-      }
     }
-    } // end if (!isAdminBooking)
 
     // VALIDATION: Menu combos vs counted guests
     if (menuProducts && menuProducts.length > 0) {

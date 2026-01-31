@@ -2737,7 +2737,7 @@ export function ItemFormWizard({
                                   onClick={() => field.onChange('everyone')}
                                   className={`px-4 py-2 text-sm font-medium transition-colors ${
                                     field.value === 'everyone'
-                                      ? 'bg-blue-500 text-white'
+                                      ? 'bg-primary text-white'
                                       : 'bg-white text-gray-700 hover:bg-gray-50'
                                   } border-r border-gray-300`}
                                 >
@@ -2748,7 +2748,7 @@ export function ItemFormWizard({
                                   onClick={() => field.onChange('staff_only')}
                                   className={`px-4 py-2 text-sm font-medium transition-colors ${
                                     field.value === 'staff_only'
-                                      ? 'bg-blue-500 text-white'
+                                      ? 'bg-primary text-white'
                                       : 'bg-white text-gray-700 hover:bg-gray-50'
                                   } border-r border-gray-300`}
                                 >
@@ -2759,7 +2759,7 @@ export function ItemFormWizard({
                                   onClick={() => field.onChange('packages_only')}
                                   className={`px-4 py-2 text-sm font-medium transition-colors ${
                                     field.value === 'packages_only'
-                                      ? 'bg-blue-500 text-white'
+                                      ? 'bg-primary text-white'
                                       : 'bg-white text-gray-700 hover:bg-gray-50'
                                   }`}
                                 >

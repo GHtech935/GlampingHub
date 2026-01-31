@@ -133,13 +133,10 @@ export default function BankAccountsPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        // Extract count from error message if available (e.g., "used by 2 campsites/zones")
-        const countMatch = data.error?.match(/(\d+)\s*campsites?\/zones?/i);
-        const count = countMatch ? countMatch[1] : "0";
-
+        // Show the actual error message from API
         Swal.fire({
           title: t('messages.deleteError'),
-          text: t('messages.deleteErrorDesc', { count }),
+          text: data.error || t('messages.error'),
           icon: "error",
           confirmButtonColor: "#ef4444",
           didOpen: ensureSwalOnTop,

@@ -620,10 +620,10 @@
         "reportsRevenue": "Doanh thu",
         "reportsBookingVolume": "Lượng Booking",
         "reportsAdditionalCosts": "Chi phí phát sinh",
-        "reportsKitchenFood": "Món ăn cho bếp",
+        "reportsKitchenFood": "Báo cáo vận hành hằng ngày",
         "reportKitchenFood": {
-            "title": "Món ăn cho bếp",
-            "subtitle": "Món ăn hàng ngày cần chuẩn bị cho bếp",
+            "title": "Báo cáo vận hành hằng ngày",
+            "subtitle": "Báo cáo tổng hợp hằng ngày cho vận hành",
             "noData": "Không có món ăn cho ngày này",
             "summary": {
                 "date": "Ngày",
@@ -638,13 +638,18 @@
                 "guests": "Khách",
                 "menuItem": "Món ăn",
                 "quantity": "SL",
-                "notes": "Ghi chú"
+                "notes": "Ghi chú",
+                "bookingNotes": "Ghi chú Booking"
             },
             "actions": {
                 "export": "Xuất",
                 "exportExcel": "Xuất Excel",
                 "exportCSV": "Xuất CSV",
                 "viewBooking": "Xem booking"
+            },
+            "notesModal": {
+                "title": "Ghi chú Booking",
+                "noNotes": "Chưa có ghi chú nào"
             }
         },
         "reportAdditionalCosts": {

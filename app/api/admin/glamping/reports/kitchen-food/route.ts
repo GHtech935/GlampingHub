@@ -120,6 +120,34 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch booking notes
+    const bookingIds = [...new Set(dataResult.rows.map((r: any) => r.booking_id))];
+    let notesByBookingId = new Map<string, Array<{ id: string; authorName: string; content: string; createdAt: string }>>();
+
+    if (bookingIds.length > 0) {
+      const notesResult = await client.query(
+        `SELECT n.id, n.booking_id, n.content, n.created_at,
+                u.first_name, u.last_name
+         FROM glamping_booking_notes n
+         JOIN users u ON u.id = n.author_id
+         WHERE n.booking_id = ANY($1::uuid[])
+         ORDER BY n.created_at ASC`,
+        [bookingIds]
+      );
+      for (const row of notesResult.rows) {
+        if (!notesByBookingId.has(row.booking_id)) {
+          notesByBookingId.set(row.booking_id, []);
+        }
+        const authorName = `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Unknown';
+        notesByBookingId.get(row.booking_id)!.push({
+          id: row.id,
+          authorName,
+          content: row.content,
+          createdAt: row.created_at,
+        });
+      }
+    }
+
     // Aggregated menu items summary query
     const summaryQuery = `
       SELECT
@@ -152,6 +180,7 @@ export async function GET(request: NextRequest) {
       bookingId: string;
       bookingCode: string;
       bookerName: string;
+      notes: Array<{ id: string; authorName: string; content: string; createdAt: string }>;
       tents: Map<string, {
         tentId: string;
         itemId: string;
@@ -182,6 +211,7 @@ export async function GET(request: NextRequest) {
           bookingId,
           bookingCode: row.booking_code,
           bookerName: `${firstName} ${lastName}`.trim() || "Unknown",
+          notes: notesByBookingId.get(bookingId) || [],
           tents: new Map(),
         });
       }
@@ -222,6 +252,7 @@ export async function GET(request: NextRequest) {
       bookingId: booking.bookingId,
       bookingCode: booking.bookingCode,
       bookerName: booking.bookerName,
+      notes: booking.notes,
       tentCount: booking.tents.size,
       tents: Array.from(booking.tents.values())
         .sort((a, b) => a.displayOrder - b.displayOrder)

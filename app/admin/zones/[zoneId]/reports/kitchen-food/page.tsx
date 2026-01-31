@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
-import { Eye } from "lucide-react";
+import { Eye, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "react-hot-toast";
@@ -11,6 +11,20 @@ import { useAdminLocale } from "@/components/providers/AdminI18nProvider";
 import { ExportDropdown } from "@/components/admin/reports/ExportDropdown";
 import { exportToExcel, exportToCSV } from "@/lib/export-utils";
 import { GlampingBookingDetailModal } from "@/components/admin/glamping/GlampingBookingDetailModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+
+interface BookingNote {
+  id: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
+}
 
 interface MenuProduct {
   menuItemId: string;
@@ -37,6 +51,7 @@ interface BookingData {
   bookingCode: string;
   bookerName: string;
   tentCount: number;
+  notes: BookingNote[];
   tents: TentData[];
 }
 
@@ -69,6 +84,7 @@ interface FlatRow {
   quantity: number;
   parameters: TentParameter[];
   notes: string | null;
+  bookingNotes: BookingNote[];
 }
 
 export default function KitchenFoodReportPage() {
@@ -78,6 +94,7 @@ export default function KitchenFoodReportPage() {
   const tCols = useTranslations("admin.reportKitchenFood.columns");
   const tActions = useTranslations("admin.reportKitchenFood.actions");
   const tSummary = useTranslations("admin.reportKitchenFood.summary");
+  const tNotesModal = useTranslations("admin.reportKitchenFood.notesModal");
   const { locale } = useAdminLocale();
 
   // Default to today's date
@@ -90,6 +107,10 @@ export default function KitchenFoodReportPage() {
   // Booking detail modal state
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // Notes modal state
+  const [notesModalBookingId, setNotesModalBookingId] = useState<string | null>(null);
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -125,6 +146,23 @@ export default function KitchenFoodReportPage() {
     setIsDetailModalOpen(false);
   };
 
+  const handleOpenNotesModal = (bookingId: string) => {
+    setNotesModalBookingId(bookingId);
+    setIsNotesModalOpen(true);
+  };
+
+  const handleCloseNotesModal = () => {
+    setNotesModalBookingId(null);
+    setIsNotesModalOpen(false);
+  };
+
+  // Get notes for the currently selected booking in the modal
+  const currentBookingNotes = useMemo(() => {
+    if (!notesModalBookingId) return [];
+    const booking = data.find(b => b.bookingId === notesModalBookingId);
+    return booking?.notes || [];
+  }, [notesModalBookingId, data]);
+
   // Transform nested data to flat rows for table display
   const flatRows: FlatRow[] = useMemo(() => {
     const rows: FlatRow[] = [];
@@ -145,6 +183,7 @@ export default function KitchenFoodReportPage() {
             quantity: product.quantity,
             parameters: tent.parameters || [],
             notes: product.notes,
+            bookingNotes: booking.notes || [],
           });
           isFirstRowOfBooking = false;
           isFirstRowOfTent = false;
@@ -265,6 +304,7 @@ export default function KitchenFoodReportPage() {
       tCols("booker"),
       tCols("item"),
       tCols("menuItem"),
+      tCols("quantity"),
       ...paramLabels,
       tCols("notes")
     ];
@@ -282,46 +322,64 @@ export default function KitchenFoodReportPage() {
     worksheet.getColumn(3).width = 20;
     worksheet.getColumn(4).width = 25;
     worksheet.getColumn(5).width = 25;
+    worksheet.getColumn(6).width = 8;
     paramLabels.forEach((_, idx) => {
-      worksheet.getColumn(6 + idx).width = 15;
+      worksheet.getColumn(7 + idx).width = 15;
     });
-    worksheet.getColumn(6 + paramLabels.length).width = 30;
+    worksheet.getColumn(7 + paramLabels.length).width = 50;
 
-    // Data rows
-    flatRows.forEach((row, idx) => {
-      // Build param values
-      const paramValues = paramLabels.map(label => {
-        if (!row.isFirstRowOfTent) return "";
-        const param = row.parameters.find(p => p.label === label);
-        return param ? param.quantity : "";
-      });
+    // Data rows - expand each booking with notes
+    data.forEach((booking) => {
+      // Determine the max rows needed: max of (menu products count, notes count, 1)
+      const menuProductCount = booking.tents.reduce((sum, tent) => sum + tent.menuProducts.length, 0);
+      const notesCount = booking.notes?.length || 0;
+      const maxRows = Math.max(menuProductCount, notesCount, 1);
 
-      const dataRow = worksheet.addRow([
-        row.isFirstRowOfBooking ? row.tentCount : "",
-        row.isFirstRowOfBooking ? row.bookingCode : "",
-        row.isFirstRowOfBooking ? row.bookerName : "",
-        row.isFirstRowOfTent ? row.itemName : "",
-        row.menuItemName,
-        ...paramValues,
-        row.notes || ""
-      ]);
-
-      dataRow.eachCell((cell) => {
-        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-      });
-
-      // Highlight tent rows
-      if (row.isFirstRowOfTent) {
-        dataRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
-      }
-
-      // Alternate row colors
-      if (idx % 2 === 1) {
-        dataRow.eachCell((cell, colNumber) => {
-          if (colNumber !== 4 || !row.isFirstRowOfTent) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-          }
+      // Build flat menu product rows for this booking
+      const menuProductRows: { tent: typeof booking.tents[0]; product: typeof booking.tents[0]['menuProducts'][0]; isFirstOfTent: boolean }[] = [];
+      booking.tents.forEach(tent => {
+        tent.menuProducts.forEach((product, idx) => {
+          menuProductRows.push({ tent, product, isFirstOfTent: idx === 0 });
         });
+      });
+
+      // Generate export rows
+      for (let i = 0; i < maxRows; i++) {
+        const menuRow = menuProductRows[i];
+        const note = booking.notes?.[i];
+
+        // Build param values
+        const paramValues = paramLabels.map(label => {
+          if (!menuRow || !menuRow.isFirstOfTent) return "";
+          const param = menuRow.tent.parameters.find(p => p.label === label);
+          return param ? param.quantity : "";
+        });
+
+        // Combine menu product notes and booking notes into single column
+        const noteParts: string[] = [];
+        if (menuRow?.product.notes) noteParts.push(menuRow.product.notes);
+        if (note) noteParts.push(`${note.authorName}: ${note.content}`);
+        const combinedNotes = noteParts.join(" | ");
+
+        const dataRow = worksheet.addRow([
+          i === 0 ? booking.tentCount : "",
+          i === 0 ? booking.bookingCode : "",
+          i === 0 ? booking.bookerName : "",
+          menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
+          menuRow?.product.menuItemName || "",
+          menuRow?.product.quantity || "",
+          ...paramValues,
+          combinedNotes
+        ]);
+
+        dataRow.eachCell((cell) => {
+          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        });
+
+        // Highlight tent rows
+        if (menuRow?.isFirstOfTent) {
+          dataRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
+        }
       }
     });
 
@@ -354,29 +412,54 @@ export default function KitchenFoodReportPage() {
       { header: tCols("booker"), key: "bookerName" },
       { header: tCols("item"), key: "itemName" },
       { header: tCols("menuItem"), key: "menuItemName" },
+      { header: tCols("quantity"), key: "quantity" },
       ...paramLabels.map(label => ({ header: label, key: label })),
       { header: tCols("notes"), key: "notes" },
     ];
 
-    const exportData = flatRows.map((row) => {
-      const rowData: Record<string, any> = {
-        tentCount: row.isFirstRowOfBooking ? row.tentCount : "",
-        bookingCode: row.isFirstRowOfBooking ? row.bookingCode : "",
-        bookerName: row.isFirstRowOfBooking ? row.bookerName : "",
-        itemName: row.isFirstRowOfTent ? row.itemName : "",
-        menuItemName: row.menuItemName,
-        notes: row.notes || "",
-      };
-      // Add parameter values
-      paramLabels.forEach(label => {
-        if (row.isFirstRowOfTent) {
-          const param = row.parameters.find(p => p.label === label);
-          rowData[label] = param ? param.quantity : "";
-        } else {
-          rowData[label] = "";
-        }
+    // Build export data with expanded rows for booking notes
+    const exportData: Record<string, any>[] = [];
+    data.forEach((booking) => {
+      const menuProductRows: { tent: typeof booking.tents[0]; product: typeof booking.tents[0]['menuProducts'][0]; isFirstOfTent: boolean }[] = [];
+      booking.tents.forEach(tent => {
+        tent.menuProducts.forEach((product, idx) => {
+          menuProductRows.push({ tent, product, isFirstOfTent: idx === 0 });
+        });
       });
-      return rowData;
+
+      const notesCount = booking.notes?.length || 0;
+      const maxRows = Math.max(menuProductRows.length, notesCount, 1);
+
+      for (let i = 0; i < maxRows; i++) {
+        const menuRow = menuProductRows[i];
+        const note = booking.notes?.[i];
+
+        // Combine menu product notes and booking notes into single column
+        const noteParts: string[] = [];
+        if (menuRow?.product.notes) noteParts.push(menuRow.product.notes);
+        if (note) noteParts.push(`${note.authorName}: ${note.content}`);
+        const combinedNotes = noteParts.join(" | ");
+
+        const rowData: Record<string, any> = {
+          tentCount: i === 0 ? booking.tentCount : "",
+          bookingCode: i === 0 ? booking.bookingCode : "",
+          bookerName: i === 0 ? booking.bookerName : "",
+          itemName: menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
+          menuItemName: menuRow?.product.menuItemName || "",
+          quantity: menuRow?.product.quantity || "",
+          notes: combinedNotes,
+        };
+        // Add parameter values
+        paramLabels.forEach(label => {
+          if (menuRow?.isFirstOfTent) {
+            const param = menuRow.tent.parameters.find(p => p.label === label);
+            rowData[label] = param ? param.quantity : "";
+          } else {
+            rowData[label] = "";
+          }
+        });
+        exportData.push(rowData);
+      }
     });
 
     exportToCSV(exportData, exportCols, {
@@ -475,35 +558,65 @@ export default function KitchenFoodReportPage() {
           <thead>
             <tr>
               <th style="width: 5%;">${tCols("tentCount")}</th>
-              <th style="width: 12%;">${tCols("bookingCode")}</th>
-              <th style="width: 15%;">${tCols("booker")}</th>
-              <th style="width: 18%;">${tCols("item")}</th>
-              <th style="width: 18%;">${tCols("menuItem")}</th>
-              ${paramLabels.map(label => `<th class="text-center" style="width: 8%;">${label}</th>`).join('')}
+              <th style="width: 10%;">${tCols("bookingCode")}</th>
+              <th style="width: 10%;">${tCols("booker")}</th>
+              <th style="width: 14%;">${tCols("item")}</th>
+              <th style="width: 14%;">${tCols("menuItem")}</th>
+              <th class="text-center" style="width: 5%;">${tCols("quantity")}</th>
+              ${paramLabels.map(label => `<th class="text-center" style="width: 6%;">${label}</th>`).join('')}
               <th>${tCols("notes")}</th>
             </tr>
           </thead>
           <tbody>
-            ${flatRows.map(row => `
-              <tr>
-                <td class="text-center">${row.isFirstRowOfBooking ? row.tentCount : ''}</td>
-                <td>${row.isFirstRowOfBooking ? row.bookingCode : ''}</td>
-                <td>${row.isFirstRowOfBooking ? row.bookerName : ''}</td>
-                <td class="${row.isFirstRowOfTent ? 'bg-yellow font-bold' : ''}">${row.isFirstRowOfTent ? row.itemName : ''}</td>
-                <td>${row.menuItemName}</td>
-                ${paramLabels.map(label => {
-                  if (!row.isFirstRowOfTent) return '<td class="text-center"></td>';
-                  const param = row.parameters.find(p => p.label === label);
-                  return `<td class="text-center">${param ? param.quantity : ''}</td>`;
-                }).join('')}
-                <td>${row.notes || ''}</td>
-              </tr>
-            `).join('')}
+            ${(() => {
+              // Build expanded rows for PDF
+              const pdfRows: string[] = [];
+              data.forEach((booking) => {
+                const menuProductRows: { tent: typeof booking.tents[0]; product: typeof booking.tents[0]['menuProducts'][0]; isFirstOfTent: boolean }[] = [];
+                booking.tents.forEach(tent => {
+                  tent.menuProducts.forEach((product, idx) => {
+                    menuProductRows.push({ tent, product, isFirstOfTent: idx === 0 });
+                  });
+                });
+
+                const notesCount = booking.notes?.length || 0;
+                const maxRows = Math.max(menuProductRows.length, notesCount, 1);
+
+                for (let i = 0; i < maxRows; i++) {
+                  const menuRow = menuProductRows[i];
+                  const note = booking.notes?.[i];
+
+                  // Combine menu product notes and booking notes into single column
+                  const noteParts: string[] = [];
+                  if (menuRow?.product.notes) noteParts.push(menuRow.product.notes);
+                  if (note) noteParts.push(`${note.authorName}: ${note.content}`);
+                  const combinedNotes = noteParts.join(' | ');
+
+                  pdfRows.push(`
+                    <tr>
+                      <td class="text-center">${i === 0 ? booking.tentCount : ''}</td>
+                      <td>${i === 0 ? booking.bookingCode : ''}</td>
+                      <td>${i === 0 ? booking.bookerName : ''}</td>
+                      <td class="${menuRow?.isFirstOfTent ? 'bg-yellow font-bold' : ''}">${menuRow?.isFirstOfTent ? menuRow.tent.itemName : ''}</td>
+                      <td>${menuRow?.product.menuItemName || ''}</td>
+                      <td class="text-center font-bold">${menuRow?.product.quantity || ''}</td>
+                      ${paramLabels.map(label => {
+                        if (!menuRow?.isFirstOfTent) return '<td class="text-center"></td>';
+                        const param = menuRow.tent.parameters.find(p => p.label === label);
+                        return `<td class="text-center">${param ? param.quantity : ''}</td>`;
+                      }).join('')}
+                      <td>${combinedNotes}</td>
+                    </tr>
+                  `);
+                }
+              });
+              return pdfRows.join('');
+            })()}
           </tbody>
         </table>
 
         <div class="footer">
-          <span>${locale === "vi" ? "Tổng số" : "Total"}: ${flatRows.length} ${locale === "vi" ? "dòng" : "rows"}</span>
+          <span>${locale === "vi" ? "Tổng số" : "Total"}: ${data.reduce((sum, b) => sum + Math.max(b.tents.reduce((s, t) => s + t.menuProducts.length, 0), b.notes?.length || 0, 1), 0)} ${locale === "vi" ? "dòng" : "rows"}</span>
           <span>${locale === "vi" ? "Ngày xuất" : "Exported"}: ${currentDate}</span>
         </div>
       </body>
@@ -776,9 +889,29 @@ export default function KitchenFoodReportPage() {
                         {row.quantity}
                       </td>
 
-                      {/* Notes */}
-                      <td className="px-4 py-3 text-sm text-gray-500 max-w-[200px]">
-                        <span className="truncate block">{row.notes || "-"}</span>
+                      {/* Notes - combined menu product notes and booking notes icon */}
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        <div className="flex items-center gap-2">
+                          {row.notes && <span className="truncate max-w-[180px]">{row.notes}</span>}
+                          {row.isFirstRowOfBooking && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenNotesModal(row.bookingId)}
+                              className="relative flex-shrink-0"
+                            >
+                              <MessageSquare className="h-4 w-4" />
+                              {row.bookingNotes.length > 0 && (
+                                <Badge
+                                  variant="destructive"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                                >
+                                  {row.bookingNotes.length}
+                                </Badge>
+                              )}
+                            </Button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Actions - only show for first row of booking */}
@@ -813,6 +946,34 @@ export default function KitchenFoodReportPage() {
         onClose={handleCloseDetailModal}
         onUpdate={fetchData}
       />
+
+      {/* Notes Modal */}
+      <Dialog open={isNotesModalOpen} onOpenChange={setIsNotesModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{tNotesModal("title")}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[400px] overflow-y-auto">
+            {currentBookingNotes.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">{tNotesModal("noNotes")}</p>
+            ) : (
+              <div className="space-y-3">
+                {currentBookingNotes.map((note) => (
+                  <div key={note.id} className="border rounded-lg p-3 bg-gray-50">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-sm text-gray-900">{note.authorName}</span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(note.createdAt).toLocaleString(locale === "vi" ? "vi-VN" : "en-US")}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

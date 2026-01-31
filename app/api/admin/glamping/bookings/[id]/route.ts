@@ -431,9 +431,11 @@ export async function PUT(
             gz.name as zone_name
           FROM glamping_bookings gb
           JOIN customers c ON gb.customer_id = c.id
-          JOIN glamping_items gi ON gb.item_id = gi.id
+          JOIN glamping_booking_items gbi ON gbi.booking_id = gb.id
+          JOIN glamping_items gi ON gbi.item_id = gi.id
           JOIN glamping_zones gz ON gi.zone_id = gz.id
-          WHERE gb.id = $1`,
+          WHERE gb.id = $1
+          LIMIT 1`,
           [id]
         );
 

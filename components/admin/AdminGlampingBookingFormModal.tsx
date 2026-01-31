@@ -388,6 +388,15 @@ export function AdminGlampingBookingFormModal({
         })
         onSuccess()
         handleClose()
+      } else if (response.status === 409 && result.errorCode === 'DATES_NOT_AVAILABLE') {
+        // Specific handling for availability conflict
+        toast({
+          title: locale === 'vi' ? 'Lều không khả dụng' : 'Item Not Available',
+          description: result.error || (locale === 'vi'
+            ? 'Lều đã được đặt hết trong khoảng thời gian này. Vui lòng chọn ngày khác.'
+            : 'This item is fully booked for the selected dates. Please choose different dates.'),
+          variant: 'destructive'
+        })
       } else {
         throw new Error(result.error || 'Failed to create booking')
       }

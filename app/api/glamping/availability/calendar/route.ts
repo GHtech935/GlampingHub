@@ -52,18 +52,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all bookings that overlap with the date range
+    // Use glamping_booking_tents which stores per-tent dates (supports multi-tent bookings with different dates)
     const bookingsQuery = await pool.query(`
       SELECT
-        b.check_in_date::text as check_in_date,
-        b.check_out_date::text as check_out_date
-      FROM glamping_booking_items bi
-      JOIN glamping_bookings b ON bi.booking_id = b.id
-      WHERE bi.item_id = $1
-        AND b.status NOT IN ('cancelled')
-        AND b.check_in_date IS NOT NULL
-        AND b.check_out_date IS NOT NULL
-        AND b.check_in_date < $3
-        AND b.check_out_date > $2
+        bt.check_in_date::text as check_in_date,
+        bt.check_out_date::text as check_out_date
+      FROM glamping_booking_tents bt
+      JOIN glamping_bookings b ON bt.booking_id = b.id
+      WHERE bt.item_id = $1
+        AND b.status NOT IN ('cancelled', 'rejected')
+        AND bt.check_in_date IS NOT NULL
+        AND bt.check_out_date IS NOT NULL
+        AND bt.check_in_date < $3
+        AND bt.check_out_date > $2
     `, [itemId, startDate, endDate]);
 
     // Generate all days in the range

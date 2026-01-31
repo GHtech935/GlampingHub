@@ -620,10 +620,10 @@
         "reportsRevenue": "Revenue",
         "reportsBookingVolume": "Booking Volume",
         "reportsAdditionalCosts": "Additional Costs",
-        "reportsKitchenFood": "Food for Kitchen",
+        "reportsKitchenFood": "Daily Operations Report",
         "reportKitchenFood": {
-            "title": "Food for Kitchen",
-            "subtitle": "Daily menu items for kitchen preparation",
+            "title": "Daily Operations Report",
+            "subtitle": "Daily summary report for operations",
             "noData": "No menu items for this date",
             "summary": {
                 "date": "Date",
@@ -638,13 +638,18 @@
                 "guests": "Guests",
                 "menuItem": "Menu Item",
                 "quantity": "Qty",
-                "notes": "Notes"
+                "notes": "Notes",
+                "bookingNotes": "Booking Notes"
             },
             "actions": {
                 "export": "Export",
                 "exportExcel": "Export Excel",
                 "exportCSV": "Export CSV",
                 "viewBooking": "View booking"
+            },
+            "notesModal": {
+                "title": "Booking Notes",
+                "noNotes": "No notes yet"
             }
         },
         "reportAdditionalCosts": {

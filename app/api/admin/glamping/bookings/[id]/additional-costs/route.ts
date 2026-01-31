@@ -101,7 +101,7 @@ export async function POST(
 
     const { id: bookingId } = await params;
     const body = await request.json();
-    const { name, unitPrice, quantity = 1, notes } = body;
+    const { name, unitPrice, quantity = 1, notes, menuItemId } = body;
 
     // Validation
     if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -142,12 +142,12 @@ export async function POST(
     // Insert additional cost
     const insertResult = await client.query(
       `INSERT INTO glamping_booking_additional_costs
-        (booking_id, name, quantity, unit_price, tax_rate, notes, created_by_user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+        (booking_id, name, quantity, unit_price, tax_rate, notes, menu_item_id, created_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING
         id, booking_id, name, quantity, unit_price, total_price,
         tax_rate, tax_amount, notes, created_at, updated_at`,
-      [bookingId, name.trim(), parsedQuantity, parsedUnitPrice, taxRate, notes || null, session.id]
+      [bookingId, name.trim(), parsedQuantity, parsedUnitPrice, taxRate, notes || null, menuItemId || null, session.id]
     );
 
     const newCost = insertResult.rows[0];
