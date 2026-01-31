@@ -47,6 +47,7 @@ export default function TagsPage({ params }: { params: Promise<{ zoneId: string 
 
   // Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
 
   // Redirect to dashboard if "all" zones selected (not supported on this page)
   useEffect(() => {
@@ -220,7 +221,7 @@ export default function TagsPage({ params }: { params: Promise<{ zoneId: string 
                 <TableRow key={tag.id} className={index % 2 === 1 ? 'bg-gray-50' : ''}>
                   <TableCell>
                     <button
-                      onClick={() => router.push(`/admin/zones/${zoneId}/tags/${tag.id}/edit`)}
+                      onClick={() => setEditingTag(tag)}
                       className="text-blue-600 hover:text-blue-800 font-medium hover:underline"
                     >
                       {tag.name}
@@ -244,7 +245,7 @@ export default function TagsPage({ params }: { params: Promise<{ zoneId: string 
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => router.push(`/admin/zones/${zoneId}/tags/${tag.id}/edit`)}
+                        onClick={() => setEditingTag(tag)}
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -264,12 +265,22 @@ export default function TagsPage({ params }: { params: Promise<{ zoneId: string 
         </Table>
       </div>
 
-      {/* Create Tag Modal */}
+      {/* Create/Edit Tag Modal */}
       <TagFormModal
-        open={showCreateModal}
-        onOpenChange={setShowCreateModal}
-        onSuccess={fetchTags}
+        open={showCreateModal || !!editingTag}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowCreateModal(false);
+            setEditingTag(null);
+          }
+        }}
+        onSuccess={() => {
+          setShowCreateModal(false);
+          setEditingTag(null);
+          fetchTags();
+        }}
         zoneId={zoneId}
+        tag={editingTag}
       />
     </div>
   );

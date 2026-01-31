@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,18 +22,27 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
 
+interface Tag {
+  id: string;
+  name: string;
+  weight: number;
+  visibility: string;
+}
+
 interface TagFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   zoneId?: string; // Optional for zone-specific tags
+  tag?: Tag | null; // For edit mode
 }
 
 export function TagFormModal({
   open,
   onOpenChange,
   onSuccess,
-  zoneId
+  zoneId,
+  tag
 }: TagFormModalProps) {
   const { toast } = useToast();
   const t = useTranslations("admin.glamping.tags.form");
@@ -44,6 +53,29 @@ export function TagFormModal({
     weight: 0,
     visibility: "staff",
   });
+
+  const isEditMode = !!tag;
+
+  // Reset form when modal opens/closes or tag changes
+  useEffect(() => {
+    if (open) {
+      if (tag) {
+        // Edit mode: pre-fill form with tag data
+        setFormData({
+          name: tag.name,
+          weight: tag.weight,
+          visibility: tag.visibility,
+        });
+      } else {
+        // Create mode: reset form
+        setFormData({
+          name: "",
+          weight: 0,
+          visibility: "staff",
+        });
+      }
+    }
+  }, [open, tag]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,8 +96,12 @@ export function TagFormModal({
         ? { ...formData, zone_id: zoneId }
         : formData;
 
-      const response = await fetch('/api/admin/glamping/tags', {
-        method: 'POST',
+      const url = isEditMode
+        ? `/api/admin/glamping/tags/${tag.id}`
+        : '/api/admin/glamping/tags';
+
+      const response = await fetch(url, {
+        method: isEditMode ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
@@ -73,12 +109,12 @@ export function TagFormModal({
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || t("createFailed"));
+        throw new Error(result.error || (isEditMode ? t("updateFailed") : t("createFailed")));
       }
 
       toast({
         title: tc("success"),
-        description: t("createSuccess"),
+        description: isEditMode ? t("updateSuccess") : t("createSuccess"),
       });
 
       // Reset form
@@ -105,9 +141,9 @@ export function TagFormModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("modalTitle")}</DialogTitle>
+          <DialogTitle>{isEditMode ? t("editModalTitle") : t("modalTitle")}</DialogTitle>
           <DialogDescription>
-            {t("modalDescription")}
+            {isEditMode ? t("editModalDescription") : t("modalDescription")}
           </DialogDescription>
         </DialogHeader>
 
@@ -175,7 +211,7 @@ export function TagFormModal({
               {tc("cancel")}
             </Button>
             <Button type="submit" disabled={loading || !formData.name}>
-              {loading ? tc("loading") : t("createButton")}
+              {loading ? tc("loading") : (isEditMode ? t("updateButton") : t("createButton"))}
             </Button>
           </DialogFooter>
         </form>

@@ -3613,7 +3613,12 @@
                     "statusHelp": "Hidden categories won't be displayed to customers",
                     "createButton": "Create Category",
                     "createSuccess": "Category created successfully",
-                    "createFailed": "Failed to create category"
+                    "createFailed": "Failed to create category",
+                    "editModalTitle": "Edit Category",
+                    "editModalDescription": "Update category information",
+                    "updateButton": "Save Changes",
+                    "updateSuccess": "Category updated successfully",
+                    "updateFailed": "Failed to update category"
                 },
                 "delete": {
                     "title": "Delete Category",
@@ -3671,7 +3676,12 @@
                     "visibilityHelp": "Staff-only tags are hidden from customers",
                     "createButton": "Create Tag",
                     "createSuccess": "Tag created successfully",
-                    "createFailed": "Failed to create tag"
+                    "createFailed": "Failed to create tag",
+                    "editModalTitle": "Edit Tag",
+                    "editModalDescription": "Update tag information",
+                    "updateButton": "Save Changes",
+                    "updateSuccess": "Tag updated successfully",
+                    "updateFailed": "Failed to update tag"
                 },
                 "delete": {
                     "title": "Delete Tag",

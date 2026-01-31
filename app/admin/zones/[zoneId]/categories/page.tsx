@@ -47,6 +47,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ zoneId: s
 
   // Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   // Redirect to dashboard if "all" zones selected (not supported on this page)
   useEffect(() => {
@@ -220,7 +221,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ zoneId: s
                 <TableRow key={category.id} className={index % 2 === 1 ? 'bg-gray-50' : ''}>
                   <TableCell>
                     <button
-                      onClick={() => router.push(`/admin/zones/${zoneId}/categories/${category.id}/edit`)}
+                      onClick={() => setEditingCategory(category)}
                       className="text-blue-600 hover:text-blue-800 font-medium hover:underline"
                     >
                       {category.name}
@@ -244,7 +245,7 @@ export default function CategoriesPage({ params }: { params: Promise<{ zoneId: s
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => router.push(`/admin/zones/${zoneId}/categories/${category.id}/edit`)}
+                        onClick={() => setEditingCategory(category)}
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -264,12 +265,22 @@ export default function CategoriesPage({ params }: { params: Promise<{ zoneId: s
         </Table>
       </div>
 
-      {/* Create Category Modal */}
+      {/* Create/Edit Category Modal */}
       <CategoryFormModal
-        open={showCreateModal}
-        onOpenChange={setShowCreateModal}
-        onSuccess={fetchCategories}
+        open={showCreateModal || !!editingCategory}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowCreateModal(false);
+            setEditingCategory(null);
+          }
+        }}
+        onSuccess={() => {
+          setShowCreateModal(false);
+          setEditingCategory(null);
+          fetchCategories();
+        }}
         zoneId={zoneId}
+        category={editingCategory}
       />
     </div>
   );

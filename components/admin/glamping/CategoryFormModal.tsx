@@ -22,18 +22,27 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
 
+interface Category {
+  id: string;
+  name: string;
+  weight: number;
+  status: string;
+}
+
 interface CategoryFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   zoneId?: string; // Optional for zone-specific categories
+  category?: Category | null; // For edit mode
 }
 
 export function CategoryFormModal({
   open,
   onOpenChange,
   onSuccess,
-  zoneId
+  zoneId,
+  category
 }: CategoryFormModalProps) {
   const { toast } = useToast();
   const t = useTranslations("admin.glamping.categories.form");
@@ -45,12 +54,29 @@ export function CategoryFormModal({
     status: "active",
   });
 
-  // Fetch next available weight when modal opens
+  const isEditMode = !!category;
+
+  // Reset form when modal opens/closes or category changes
   useEffect(() => {
     if (open) {
-      fetchNextWeight();
+      if (category) {
+        // Edit mode: pre-fill form with category data
+        setFormData({
+          name: category.name,
+          weight: category.weight,
+          status: category.status,
+        });
+      } else {
+        // Create mode: reset form and fetch next weight
+        setFormData({
+          name: "",
+          weight: 0,
+          status: "active",
+        });
+        fetchNextWeight();
+      }
     }
-  }, [open, zoneId]);
+  }, [open, category, zoneId]);
 
   const fetchNextWeight = async () => {
     try {
@@ -95,8 +121,12 @@ export function CategoryFormModal({
         ? { ...formData, zone_id: zoneId }
         : formData;
 
-      const response = await fetch('/api/admin/glamping/categories', {
-        method: 'POST',
+      const url = isEditMode
+        ? `/api/admin/glamping/categories/${category.id}`
+        : '/api/admin/glamping/categories';
+
+      const response = await fetch(url, {
+        method: isEditMode ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
@@ -104,12 +134,12 @@ export function CategoryFormModal({
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || t("createFailed"));
+        throw new Error(result.error || (isEditMode ? t("updateFailed") : t("createFailed")));
       }
 
       toast({
         title: tc("success"),
-        description: t("createSuccess"),
+        description: isEditMode ? t("updateSuccess") : t("createSuccess"),
       });
 
       // Reset form
@@ -136,9 +166,9 @@ export function CategoryFormModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("modalTitle")}</DialogTitle>
+          <DialogTitle>{isEditMode ? t("editModalTitle") : t("modalTitle")}</DialogTitle>
           <DialogDescription>
-            {t("modalDescription")}
+            {isEditMode ? t("editModalDescription") : t("modalDescription")}
           </DialogDescription>
         </DialogHeader>
 
@@ -206,7 +236,7 @@ export function CategoryFormModal({
               {tc("cancel")}
             </Button>
             <Button type="submit" disabled={loading || !formData.name}>
-              {loading ? tc("loading") : t("createButton")}
+              {loading ? tc("loading") : (isEditMode ? t("updateButton") : t("createButton"))}
             </Button>
           </DialogFooter>
         </form>

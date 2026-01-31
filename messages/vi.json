@@ -3613,7 +3613,12 @@
                     "statusHelp": "Danh mục ẩn sẽ không được hiển thị cho khách hàng",
                     "createButton": "Tạo danh mục",
                     "createSuccess": "Đã tạo danh mục thành công",
-                    "createFailed": "Không thể tạo danh mục"
+                    "createFailed": "Không thể tạo danh mục",
+                    "editModalTitle": "Chỉnh sửa danh mục",
+                    "editModalDescription": "Cập nhật thông tin danh mục",
+                    "updateButton": "Lưu thay đổi",
+                    "updateSuccess": "Đã cập nhật danh mục thành công",
+                    "updateFailed": "Không thể cập nhật danh mục"
                 },
                 "delete": {
                     "title": "Xóa danh mục",
@@ -3671,7 +3676,12 @@
                     "visibilityHelp": "Thẻ chỉ dành cho nhân viên sẽ bị ẩn khỏi khách hàng",
                     "createButton": "Tạo thẻ",
                     "createSuccess": "Đã tạo thẻ thành công",
-                    "createFailed": "Không thể tạo thẻ"
+                    "createFailed": "Không thể tạo thẻ",
+                    "editModalTitle": "Chỉnh sửa thẻ",
+                    "editModalDescription": "Cập nhật thông tin thẻ",
+                    "updateButton": "Lưu thay đổi",
+                    "updateSuccess": "Đã cập nhật thẻ thành công",
+                    "updateFailed": "Không thể cập nhật thẻ"
                 },
                 "delete": {
                     "title": "Xóa thẻ",
