@@ -344,7 +344,7 @@
         "confirmationSent": "Confirmation email sent",
         "invalidBookingInfo": "Invalid booking information",
         "loadingBookingInfo": "Loading booking information...",
-        "bookingSuccess": "Booking successful!",
+        "bookingSuccess": "Booking confirmed!",
         "bookingError": "An error occurred while booking",
         "bookingFailed": "Booking failed",
         "payNow": "Pay now",
@@ -377,7 +377,6 @@
         "datesAlreadyBooked": "Dates Already Booked",
         "datesAlreadyBookedMessage": "Sorry, this item is already booked for the selected dates. Please choose different dates or go back to the item details page to select available dates.",
         "confirmButton": "OK",
-        "bookingSuccess": "Booking confirmed!",
         "bookingSuccessPayment": "Booking created! Please complete payment."
     },
     "adminLogin": {
@@ -436,6 +435,8 @@
         "dailyManifest": "Daily Manifest",
         "dailyList": "Daily List",
         "bookingNotes": "Notes",
+        "calendar": "Calendar",
+        "calendarBooking": "Booking",
         "bookingNotesPage": {
             "title": "Booking Notes",
             "subtitle": "{count} bookings with notes",
@@ -461,7 +462,6 @@
                 "custom": "Custom"
             }
         },
-        "calendar": "Calendar",
         "pricing": "Pricing",
         "products": "Products",
         "discounts": "Discounts",
@@ -3221,6 +3221,8 @@
                     "defaultCalendarStatus": "Default Calendar Status",
                     "isActive": "Active Status",
                     "isActiveDescription": "Inactive items are hidden from public search and bookings",
+                    "displayOrder": "Display Order",
+                    "displayOrderDescription": "Lower numbers appear first in the list",
                     "parameters": "Parameters",
                     "uploadImages": "Upload Images",
                     "youtubeVideo": "YouTube Video",
@@ -3618,7 +3620,9 @@
                     "editModalDescription": "Update category information",
                     "updateButton": "Save Changes",
                     "updateSuccess": "Category updated successfully",
-                    "updateFailed": "Failed to update category"
+                    "updateFailed": "Failed to update category",
+                    "isTentCategory": "This is a tent category",
+                    "isTentCategoryHelp": "If checked, this category will appear on the Items (Tent) page. If unchecked, it will appear on the Common Items page."
                 },
                 "delete": {
                     "title": "Delete Category",
@@ -3947,7 +3951,9 @@
                 "nameRequired": "Name is required in both languages",
                 "createSuccess": "Category created successfully",
                 "updateSuccess": "Category updated successfully",
-                "deleteSuccess": "Category deleted successfully"
+                "deleteSuccess": "Category deleted successfully",
+                "isTentCategory": "This is a tent/menu category",
+                "isTentCategoryHelp": "If checked, this category will appear on the Menu page. If unchecked, it will appear on the Common Items page."
             },
             "zones": {
                 "title": "Glamping Zones",
@@ -4315,8 +4321,133 @@
                 "allMenuDesc": "View and manage menu items from all zones",
                 "allDiscountsTitle": "All Discounts",
                 "allDiscountsDesc": "View and manage discounts from all zones"
+            },
+            "commonItems": {
+                "title": "Common Items",
+                "subtitle": "Manage shared items",
+                "addNew": "Add new item",
+                "search": "Search items...",
+                "categoryButton": "Categories",
+                "noImage": "No image",
+                "unlimited": "Unlimited",
+                "deleteConfirm": "Are you sure you want to delete this item?",
+                "deleteSuccess": "Item deleted successfully",
+                "table": {
+                    "image": "Image",
+                    "name": "Name",
+                    "sku": "SKU",
+                    "category": "Category",
+                    "price": "Price",
+                    "unit": "Unit",
+                    "stock": "Stock",
+                    "inventory": "Inventory",
+                    "visibility": "Visibility",
+                    "actions": "Actions",
+                    "unlimited": "Unlimited",
+                    "status": "Status"
+                },
+                "filter": {
+                    "allStatus": "All statuses",
+                    "allAvailability": "All availability",
+                    "allCategories": "All categories"
+                },
+                "filters": {
+                    "all": "All"
+                },
+                "status": {
+                    "active": "Active",
+                    "hidden": "Hidden",
+                    "available": "Available",
+                    "unavailable": "Unavailable",
+                    "disabled": "Disabled",
+                    "inactive": "Inactive"
+                },
+                "availability": {
+                    "available": "Available",
+                    "unavailable": "Unavailable"
+                },
+                "card": {
+                    "slots": "{count} slots",
+                    "activeBookings": "{count} active bookings",
+                    "basePrice": "Base price",
+                    "deposit": "Deposit",
+                    "manage": "Manage item",
+                    "noImage": "No image"
+                },
+                "form": {
+                    "modalTitle": "Add new common item",
+                    "editModalTitle": "Edit common item",
+                    "nameLabel": "Item name",
+                    "nameViPlaceholder": "Vietnamese name",
+                    "nameEnPlaceholder": "English name",
+                    "descriptionLabel": "Description",
+                    "categoryLabel": "Category",
+                    "categoryPlaceholder": "Select category",
+                    "categoryNone": "-- No category --",
+                    "categoryHelp": "Select item category or leave empty",
+                    "priceLabel": "Price",
+                    "taxRateLabel": "Tax rate (%)",
+                    "unitLabel": "Unit",
+                    "unitViPlaceholder": "item",
+                    "unitEnPlaceholder": "item",
+                    "statusLabel": "Status",
+                    "statusActive": "Active",
+                    "statusHidden": "Hidden",
+                    "availableLabel": "In stock",
+                    "maxQuantityLabel": "Maximum quantity",
+                    "stockLabel": "Stock",
+                    "stockPlaceholder": "Leave empty = unlimited",
+                    "stockHelp": "Leave empty for unlimited stock",
+                    "displayOrderLabel": "Display order",
+                    "advanceBookingLabel": "Requires advance booking",
+                    "advanceHoursLabel": "Advance hours",
+                    "imageUrlLabel": "Image",
+                    "imageFileRequired": "Please select an image file",
+                    "imageUploadSuccess": "Image uploaded successfully",
+                    "imageUploadFailed": "Failed to upload image",
+                    "uploading": "Uploading...",
+                    "uploadImage": "Upload image",
+                    "imageHelp": "Click to select an image from your computer",
+                    "createButton": "Create item",
+                    "updateButton": "Update item",
+                    "nameRequired": "Item name is required",
+                    "priceRequired": "Price is required",
+                    "createSuccess": "Item created successfully",
+                    "updateSuccess": "Item updated successfully",
+                    "createFailed": "Failed to create item",
+                    "updateFailed": "Failed to update item",
+                    "guestLimitError": "Maximum guests must be greater than or equal to minimum guests",
+                    "guestLimitBothRequired": "Please fill in both minimum and maximum guests, or leave both empty"
+                }
+            },
+            "commonItemCategories": {
+                "title": "Manage Common Item Categories",
+                "addCategory": "Add Category",
+                "editCategory": "Edit Category",
+                "newCategory": "Add New Category",
+                "noCategories": "No categories yet",
+                "nameLabel": "Category Name",
+                "nameVi": "Name (Vietnamese)",
+                "nameEn": "Name (English)",
+                "descriptionVi": "Description (Vietnamese)",
+                "descriptionEn": "Description (English)",
+                "weight": "Sort order",
+                "status": "Status",
+                "actions": "Actions",
+                "cancel": "Cancel",
+                "create": "Create",
+                "update": "Update",
+                "delete": "Delete",
+                "deleteConfirm": "Are you sure you want to delete this category?",
+                "statusActive": "Active",
+                "statusHidden": "Hidden",
+                "nameRequired": "Name is required in both languages",
+                "createSuccess": "Category created successfully",
+                "updateSuccess": "Category updated successfully",
+                "deleteSuccess": "Category deleted successfully"
             }
-        }
+        },
+        "commonItems": "Common Items"
     },
     "pitch": {
         "types": {

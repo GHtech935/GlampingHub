@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
         i.zone_id,
         i.category_id,
         i.summary,
+        i.display_order,
         c.name as category_name,
         z.name as zone_name,
         COALESCE(a.inventory_quantity, 1) as inventory_quantity,
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
       WHERE z.is_active = true
         AND COALESCE(a.is_active, true) = true
+        AND COALESCE(c.is_tent_category, true) = true
     `;
 
     const params: any[] = [];
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
       query += ` AND i.category_id = $${params.length}`;
     }
 
-    query += ' ORDER BY i.created_at DESC';
+    query += ' ORDER BY COALESCE(i.display_order, 999999) ASC, i.created_at DESC';
 
     const result = await pool.query(query, params);
 

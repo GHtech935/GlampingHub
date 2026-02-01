@@ -47,6 +47,7 @@ export async function GET(
         i.summary,
         i.created_at,
         i.updated_at,
+        COALESCE(i.display_order, 0) as display_order,
         c.name as category_name,
         a.inventory_quantity,
         a.unlimited_inventory,
@@ -466,6 +467,8 @@ export async function PUT(
       taxes,
       // Active status
       is_active,
+      // Display order
+      display_order,
     } = body;
 
     if (!name) {
@@ -479,9 +482,9 @@ export async function PUT(
       // Update item
       await client.query(
         `UPDATE glamping_items
-         SET name = $1, sku = $2, category_id = $3, summary = $4, updated_at = NOW()
-         WHERE id = $5`,
-        [name, sku || null, category_id || null, summary || null, id]
+         SET name = $1, sku = $2, category_id = $3, summary = $4, display_order = COALESCE($5, display_order), updated_at = NOW()
+         WHERE id = $6`,
+        [name, sku || null, category_id || null, summary || null, display_order, id]
       );
 
       // Update or insert attributes

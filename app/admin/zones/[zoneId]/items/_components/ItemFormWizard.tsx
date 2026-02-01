@@ -165,8 +165,13 @@ export interface ItemFormWizardProps {
     event_pricing?: Record<string, number>;
     menu_products?: Array<any>;
     is_active?: boolean;
+    display_order?: number;
   };
   onSuccess?: (itemId: string) => void;
+  /** Filter categories by is_tent_category. Default: true (for Items), set false for Common Items */
+  isTentCategory?: boolean;
+  /** Base path for navigation. Default: 'items', use 'common-items' for Common Items */
+  basePath?: string;
 }
 
 export function ItemFormWizard({
@@ -174,7 +179,9 @@ export function ItemFormWizard({
   itemId,
   zoneId,
   initialData,
-  onSuccess
+  onSuccess,
+  isTentCategory = true,
+  basePath = 'items',
 }: ItemFormWizardProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -204,6 +211,9 @@ export function ItemFormWizard({
   // Pricing state (Phase 8.2)
   const [pricingRate, setPricingRate] = useState<string>('per_night');
   const [calendarStatus, setCalendarStatus] = useState<string>('available');
+
+  // Display order state
+  const [displayOrder, setDisplayOrder] = useState<number>(0);
 
   // Media state (Phase 6.3)
   const [images, setImages] = useState<Array<{file?: File, url?: string, preview: string, caption: string}>>([]);
@@ -589,6 +599,10 @@ export function ItemFormWizard({
 
         setTimeslots(transformedSlots);
       }
+      // Set display order
+      if (initialData.display_order !== undefined) {
+        setDisplayOrder(initialData.display_order);
+      }
     }
   }, [mode, initialData, form]);
 
@@ -597,7 +611,7 @@ export function ItemFormWizard({
     const fetchData = async () => {
       try {
         const [categoriesRes, tagsRes, parametersRes] = await Promise.all([
-          fetch(`/api/admin/glamping/categories?zone_id=${zoneId}`),
+          fetch(`/api/admin/glamping/categories?zone_id=${zoneId}&is_tent_category=${isTentCategory}`),
           fetch(`/api/admin/glamping/tags?zone_id=${zoneId}`),
           fetch(`/api/admin/glamping/parameters?zone_id=${zoneId}`),
         ]);
@@ -661,7 +675,7 @@ export function ItemFormWizard({
   const fetchEventCategoriesAndItems = async () => {
     try {
       const [categoriesRes, itemsRes] = await Promise.all([
-        fetch(`/api/admin/glamping/categories?zone_id=${zoneId}`),
+        fetch(`/api/admin/glamping/categories?zone_id=${zoneId}&is_tent_category=${isTentCategory}`),
         fetch(`/api/admin/glamping/items?zone_id=${zoneId}`)
       ]);
 
@@ -983,6 +997,8 @@ export function ItemFormWizard({
         zone_id: zoneId, // Add zone_id for multi-zone support
         // Tags (Step 1) - use mapped tags with real UUIDs
         tags: mappedTags,
+        // Display order (Step 1)
+        display_order: displayOrder,
         // Media (Step 2)
         images: validImages,
         youtube_url: youtubeUrl,
@@ -1121,8 +1137,8 @@ export function ItemFormWizard({
             const stepKey = STEPS[nextStep - 1]?.key;
             if (stepKey) {
               const urlPath = mode === 'edit'
-                ? `/admin/zones/${zoneId}/items/${finalItemId}/edit#${stepKey}`
-                : `/admin/zones/${zoneId}/items/new?item_id=${finalItemId}#${stepKey}`;
+                ? `/admin/zones/${zoneId}/${basePath}/${finalItemId}/edit#${stepKey}`
+                : `/admin/zones/${zoneId}/${basePath}/new?item_id=${finalItemId}#${stepKey}`;
               router.replace(urlPath, { scroll: false });
             }
           }
@@ -1137,7 +1153,7 @@ export function ItemFormWizard({
         if (onSuccess && finalItemId) {
           onSuccess(finalItemId);
         } else {
-          router.push(`/admin/zones/${zoneId}/items`);
+          router.push(`/admin/zones/${zoneId}/${basePath}`);
         }
       }
     } catch (error: any) {
@@ -1180,7 +1196,8 @@ export function ItemFormWizard({
                 name: category.name,
                 weight: 1000,
                 status: "active",
-                zone_id: zoneId
+                zone_id: zoneId,
+                is_tent_category: isTentCategory
               }),
             });
 
@@ -1197,7 +1214,7 @@ export function ItemFormWizard({
           setPendingCategories([]);
 
           // Refresh categories
-          const catRes = await fetch(`/api/admin/glamping/categories?zone_id=${zoneId}`);
+          const catRes = await fetch(`/api/admin/glamping/categories?zone_id=${zoneId}&is_tent_category=${isTentCategory}`);
           const catData = await catRes.json();
           setCategories(catData.categories || []);
         }
@@ -1269,7 +1286,7 @@ export function ItemFormWizard({
         form.setValue('sku', result.sku || finalSKU);
 
         // 8. Update URL with item_id and hash
-        const newUrl = `/admin/zones/${zoneId}/items/new?item_id=${newItemId}#media`;
+        const newUrl = `/admin/zones/${zoneId}/${basePath}/new?item_id=${newItemId}#media`;
         router.replace(newUrl, { scroll: false });
 
         toast({
@@ -1319,7 +1336,7 @@ export function ItemFormWizard({
         const stepKey = STEPS[prevStep - 1]?.key;
         if (stepKey) {
           router.replace(
-            `/admin/zones/${zoneId}/items/new?item_id=${createdItemId}#${stepKey}`,
+            `/admin/zones/${zoneId}/${basePath}/new?item_id=${createdItemId}#${stepKey}`,
             { scroll: false }
           );
         }
@@ -2491,6 +2508,21 @@ export function ItemFormWizard({
                         </FormItem>
                       )}
                     />
+
+                    {/* Display Order */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t('displayOrder')}
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        className="w-32"
+                        value={displayOrder}
+                        onChange={(e) => setDisplayOrder(parseInt(e.target.value) || 0)}
+                      />
+                      <p className="text-sm text-gray-500 mt-1">{t('displayOrderDescription')}</p>
+                    </div>
                   </div>
                 )}
 

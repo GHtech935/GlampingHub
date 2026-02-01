@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const zoneId = searchParams.get('zone_id');
     const categoryId = searchParams.get('category_id');
     const sku = searchParams.get('sku');
+    const isTentCategory = searchParams.get('is_tent_category');
 
     let query = `
       SELECT
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
         i.sku,
         i.zone_id,
         i.category_id,
+        COALESCE(i.display_order, 0) as display_order,
         c.name as category_name,
         z.name->>'vi' as zone_name,
         COALESCE(a.inventory_quantity, 1) as inventory_quantity,
@@ -87,11 +89,18 @@ export async function GET(request: NextRequest) {
       params.push(sku);
     }
 
+    // Filter by is_tent_category (via category)
+    if (isTentCategory !== null) {
+      const isTent = isTentCategory === 'true';
+      conditions.push(`c.is_tent_category = $${params.length + 1}`);
+      params.push(isTent);
+    }
+
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
 
-    query += ' ORDER BY i.created_at DESC';
+    query += ' ORDER BY i.display_order ASC, i.created_at DESC';
 
     const result = await pool.query(query, params);
 
@@ -174,12 +183,19 @@ export async function POST(request: NextRequest) {
     try {
       await client.query('BEGIN');
 
+      // Get max display_order for this zone to set next value
+      const maxOrderResult = await client.query(
+        `SELECT COALESCE(MAX(display_order), 0) + 1 as next_order FROM glamping_items WHERE zone_id = $1`,
+        [zone_id]
+      );
+      const nextDisplayOrder = maxOrderResult.rows[0].next_order;
+
       // Insert item
       const itemResult = await client.query(
-        `INSERT INTO glamping_items (name, sku, zone_id, category_id, summary)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO glamping_items (name, sku, zone_id, category_id, summary, display_order)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id`,
-        [name, sku || null, zone_id, category_id || null, summary || null]
+        [name, sku || null, zone_id, category_id || null, summary || null, nextDisplayOrder]
       );
 
       const itemId = itemResult.rows[0].id;

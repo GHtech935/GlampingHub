@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,7 @@ interface Category {
   name: string;
   weight: number;
   status: string;
+  is_tent_category?: boolean;
 }
 
 interface CategoryFormModalProps {
@@ -52,6 +54,7 @@ export function CategoryFormModal({
     name: "",
     weight: 0,
     status: "active",
+    is_tent_category: true,
   });
 
   const isEditMode = !!category;
@@ -65,6 +68,7 @@ export function CategoryFormModal({
           name: category.name,
           weight: category.weight,
           status: category.status,
+          is_tent_category: category.is_tent_category ?? true,
         });
       } else {
         // Create mode: reset form and fetch next weight
@@ -72,6 +76,7 @@ export function CategoryFormModal({
           name: "",
           weight: 0,
           status: "active",
+          is_tent_category: true,
         });
         fetchNextWeight();
       }
@@ -147,6 +152,7 @@ export function CategoryFormModal({
         name: "",
         weight: 0,
         status: "active",
+        is_tent_category: true,
       });
 
       onSuccess();
@@ -223,6 +229,28 @@ export function CategoryFormModal({
               <p className="text-xs text-gray-500">
                 {t("statusHelp")}
               </p>
+            </div>
+
+            <div className="flex items-center space-x-2 pt-2">
+              <Checkbox
+                id="is_tent_category"
+                checked={formData.is_tent_category}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, is_tent_category: checked as boolean })
+                }
+                disabled={loading}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor="is_tent_category"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  {t("isTentCategory")}
+                </Label>
+                <p className="text-xs text-gray-500">
+                  {t("isTentCategoryHelp")}
+                </p>
+              </div>
             </div>
           </div>
 

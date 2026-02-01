@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
     // Get accessible zone IDs (null = all, [] = none)
     const accessibleZoneIds = getAccessibleGlampingZoneIds(session);
 
-    // Get zone_id filter
+    // Get query parameters
     const searchParams = request.nextUrl.searchParams;
     const zoneId = searchParams.get('zone_id');
+    const isTentCategory = searchParams.get('is_tent_category');
 
     let query = `
       SELECT
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
         c.zone_id,
         c.weight,
         c.status,
+        c.is_tent_category,
         c.created_at,
         c.updated_at,
         z.name->>'vi' as zone_name,
@@ -57,6 +59,12 @@ export async function GET(request: NextRequest) {
       params.push(zoneId);
     }
 
+    // Filter by is_tent_category if provided
+    if (isTentCategory !== null) {
+      conditions.push(`c.is_tent_category = $${params.length + 1}`);
+      params.push(isTentCategory === 'true');
+    }
+
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
@@ -87,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, zone_id, weight, status } = body;
+    const { name, zone_id, weight, status, is_tent_category } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -106,10 +114,10 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await pool.query(
-      `INSERT INTO glamping_categories (name, zone_id, weight, status)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, zone_id, weight, status`,
-      [name, zone_id, weight || 0, status || 'active']
+      `INSERT INTO glamping_categories (name, zone_id, weight, status, is_tent_category)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, zone_id, weight, status, is_tent_category`,
+      [name, zone_id, weight || 0, status || 'active', is_tent_category !== false]
     );
 
     return NextResponse.json({

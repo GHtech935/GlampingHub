@@ -58,7 +58,8 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
 
   const fetchItems = async () => {
     try {
-      const response = await fetch(`/api/admin/glamping/items?zone_id=${zoneId}`);
+      // Filter by is_tent_category=true for tent items only
+      const response = await fetch(`/api/admin/glamping/items?zone_id=${zoneId}&is_tent_category=true`);
       const data = await response.json();
 
       if (data.items) {

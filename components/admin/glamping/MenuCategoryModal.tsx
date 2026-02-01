@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -37,6 +38,7 @@ interface MenuCategory {
   description?: { vi: string; en: string };
   weight: number;
   status: string;
+  is_tent_category?: boolean;
 }
 
 interface MenuCategoryModalProps {
@@ -67,6 +69,7 @@ export function MenuCategoryModal({
     descriptionEn: "",
     weight: 0,
     status: "active",
+    is_tent_category: true,
   });
 
   useEffect(() => {
@@ -101,6 +104,7 @@ export function MenuCategoryModal({
       descriptionEn: "",
       weight: 0,
       status: "active",
+      is_tent_category: true,
     });
     setEditingId(null);
     setShowForm(false);
@@ -119,6 +123,7 @@ export function MenuCategoryModal({
       descriptionEn: category.description?.en || "",
       weight: category.weight,
       status: category.status,
+      is_tent_category: category.is_tent_category !== false,
     });
     setEditingId(category.id);
     setShowForm(true);
@@ -149,6 +154,7 @@ export function MenuCategoryModal({
         },
         weight: formData.weight,
         status: formData.status,
+        is_tent_category: formData.is_tent_category,
       };
 
       const url = editingId
@@ -327,6 +333,22 @@ export function MenuCategoryModal({
                   </Select>
                 </div>
               </div>
+
+              <div className="flex items-center space-x-2 pt-2">
+                <Checkbox
+                  id="is_tent_category"
+                  checked={formData.is_tent_category}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, is_tent_category: checked as boolean })
+                  }
+                />
+                <Label htmlFor="is_tent_category" className="font-normal cursor-pointer">
+                  {t("isTentCategory")}
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500 ml-6">
+                {t("isTentCategoryHelp")}
+              </p>
 
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={resetForm}>

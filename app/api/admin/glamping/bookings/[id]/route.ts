@@ -390,6 +390,13 @@ export async function PUT(
 
     // Record status change in history
     if (status !== current.status || paymentStatus !== current.payment_status) {
+      // Check if user exists in users table before inserting
+      const userCheck = await client.query(
+        'SELECT id FROM users WHERE id = $1',
+        [session.id]
+      );
+      const validUserId = userCheck.rows.length > 0 ? session.id : null;
+
       const historyQuery = `
         INSERT INTO glamping_booking_status_history
         (booking_id, previous_status, new_status, previous_payment_status, new_payment_status, changed_by_user_id)
@@ -401,7 +408,7 @@ export async function PUT(
         status || current.status,
         current.payment_status,
         paymentStatus || current.payment_status,
-        session.id,
+        validUserId,
       ]);
     }
 

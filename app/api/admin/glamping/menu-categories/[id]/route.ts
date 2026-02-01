@@ -10,7 +10,7 @@ export async function GET(
     const { id } = await params;
 
     const result = await pool.query(
-      `SELECT id, zone_id, name, description, weight, status, created_at, updated_at
+      `SELECT id, zone_id, name, description, weight, status, is_tent_category, created_at, updated_at
        FROM glamping_menu_categories
        WHERE id = $1`,
       [id]
@@ -41,7 +41,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, description, weight, status } = body;
+    const { name, description, weight, status, is_tent_category } = body;
 
     // Validation
     if (!name) {
@@ -57,14 +57,16 @@ export async function PUT(
            description = $2,
            weight = $3,
            status = $4,
+           is_tent_category = $5,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5
+       WHERE id = $6
        RETURNING *`,
       [
         JSON.stringify(name),
         description ? JSON.stringify(description) : null,
         weight || 0,
         status || 'active',
+        is_tent_category !== false,
         id
       ]
     );

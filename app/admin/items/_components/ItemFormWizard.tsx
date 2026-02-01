@@ -564,7 +564,7 @@ export function ItemFormWizard({
     const fetchData = async () => {
       try {
         const [categoriesRes, tagsRes, parametersRes] = await Promise.all([
-          fetch('/api/admin/glamping/categories'),
+          fetch('/api/admin/glamping/categories?is_tent_category=true'),
           fetch('/api/admin/glamping/tags'),
           fetch('/api/admin/glamping/parameters'),
         ]);
@@ -597,7 +597,7 @@ export function ItemFormWizard({
   const fetchEventCategoriesAndItems = async () => {
     try {
       const [categoriesRes, itemsRes] = await Promise.all([
-        fetch('/api/admin/glamping/categories'),
+        fetch('/api/admin/glamping/categories?is_tent_category=true'),
         fetch('/api/admin/glamping/items')
       ]);
 
@@ -887,7 +887,8 @@ export function ItemFormWizard({
             body: JSON.stringify({
               name: category.name,
               weight: 1000,
-              status: "active"
+              status: "active",
+              is_tent_category: true
             }),
           });
 
@@ -904,7 +905,7 @@ export function ItemFormWizard({
         setPendingCategories([]);
 
         // Refresh categories only
-        const catRes = await fetch('/api/admin/glamping/categories');
+        const catRes = await fetch('/api/admin/glamping/categories?is_tent_category=true');
         const catData = await catRes.json();
         setCategories(catData.categories || []);
 

@@ -16,7 +16,7 @@ export async function GET(
     const { id } = await params;
 
     const result = await pool.query(
-      `SELECT id, name, weight, status, created_at, updated_at
+      `SELECT id, name, weight, status, is_tent_category, created_at, updated_at
        FROM glamping_categories
        WHERE id = $1`,
       [id]
@@ -49,7 +49,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, weight, status } = body;
+    const { name, weight, status, is_tent_category } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -57,10 +57,10 @@ export async function PUT(
 
     const result = await pool.query(
       `UPDATE glamping_categories
-       SET name = $1, weight = $2, status = $3, updated_at = NOW()
-       WHERE id = $4
-       RETURNING id, name, weight, status`,
-      [name, weight || 0, status || 'active', id]
+       SET name = $1, weight = $2, status = $3, is_tent_category = $4, updated_at = NOW()
+       WHERE id = $5
+       RETURNING id, name, weight, status, is_tent_category`,
+      [name, weight || 0, status || 'active', is_tent_category !== false, id]
     );
 
     if (result.rows.length === 0) {

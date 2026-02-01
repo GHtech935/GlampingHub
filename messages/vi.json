@@ -344,7 +344,7 @@
         "confirmationSent": "Email xác nhận đã được gửi",
         "invalidBookingInfo": "Thông tin đặt chỗ không hợp lệ",
         "loadingBookingInfo": "Đang tải thông tin đặt chỗ...",
-        "bookingSuccess": "Đặt chỗ thành công!",
+        "bookingSuccess": "Đặt phòng thành công!",
         "bookingError": "Có lỗi xảy ra khi đặt chỗ",
         "bookingFailed": "Đặt chỗ thất bại",
         "payNow": "Thanh toán ngay",
@@ -377,7 +377,6 @@
         "datesAlreadyBooked": "Ngày đã được đặt",
         "datesAlreadyBookedMessage": "Rất tiếc, mặt hàng này đã được đặt trong khoảng thời gian bạn chọn. Vui lòng chọn ngày khác hoặc quay lại trang chi tiết để chọn ngày còn trống.",
         "confirmButton": "Đồng ý",
-        "bookingSuccess": "Đặt phòng thành công!",
         "bookingSuccessPayment": "Đặt phòng thành công! Vui lòng thanh toán."
     },
     "adminLogin": {
@@ -436,6 +435,8 @@
         "dailyManifest": "Biểu Đồ Hàng Ngày",
         "dailyList": "Danh Sách Hàng Ngày",
         "bookingNotes": "Ghi Chú",
+        "calendar": "Lịch",
+        "calendarBooking": "Booking",
         "bookingNotesPage": {
             "title": "Ghi Chú Booking",
             "subtitle": "Tổng cộng {count} booking có ghi chú",
@@ -461,7 +462,6 @@
                 "custom": "Tùy chỉnh"
             }
         },
-        "calendar": "Lịch",
         "pricing": "Giá",
         "products": "Sản phẩm",
         "discounts": "Giảm giá",
@@ -3221,6 +3221,8 @@
                     "defaultCalendarStatus": "Trạng thái lịch mặc định",
                     "isActive": "Trạng thái hoạt động",
                     "isActiveDescription": "Item ngừng hoạt động sẽ bị ẩn khỏi tìm kiếm và đặt chỗ",
+                    "displayOrder": "Thứ tự hiển thị",
+                    "displayOrderDescription": "Số nhỏ hơn sẽ hiển thị trước",
                     "parameters": "Tham số",
                     "uploadImages": "Tải lên hình ảnh",
                     "youtubeVideo": "Video YouTube",
@@ -3618,7 +3620,9 @@
                     "editModalDescription": "Cập nhật thông tin danh mục",
                     "updateButton": "Lưu thay đổi",
                     "updateSuccess": "Đã cập nhật danh mục thành công",
-                    "updateFailed": "Không thể cập nhật danh mục"
+                    "updateFailed": "Không thể cập nhật danh mục",
+                    "isTentCategory": "Đây là danh mục lều",
+                    "isTentCategoryHelp": "Nếu chọn, danh mục này sẽ hiển thị trên trang Items (Lều). Nếu không chọn, sẽ hiển thị trên trang Item chung."
                 },
                 "delete": {
                     "title": "Xóa danh mục",
@@ -3969,7 +3973,9 @@
                 "nameRequired": "Tên là bắt buộc ở cả hai ngôn ngữ",
                 "createSuccess": "Tạo category thành công",
                 "updateSuccess": "Cập nhật category thành công",
-                "deleteSuccess": "Xóa category thành công"
+                "deleteSuccess": "Xóa category thành công",
+                "isTentCategory": "Đây là danh mục lều/menu",
+                "isTentCategoryHelp": "Nếu chọn, danh mục này sẽ hiển thị trên trang Menu. Nếu không chọn, sẽ hiển thị trên trang Item chung."
             },
             "zones": {
                 "title": "Khu Glamping",
@@ -4385,8 +4391,133 @@
                 "allMenuDesc": "Xem và quản lý món ăn từ tất cả các khu",
                 "allDiscountsTitle": "Tất Cả Giảm Giá",
                 "allDiscountsDesc": "Xem và quản lý giảm giá từ tất cả các khu"
+            },
+            "commonItems": {
+                "title": "Item chung",
+                "subtitle": "Quản lý các item dùng chung",
+                "addNew": "Thêm item mới",
+                "search": "Tìm kiếm item...",
+                "categoryButton": "Danh mục",
+                "noImage": "Chưa có ảnh",
+                "unlimited": "Không giới hạn",
+                "deleteConfirm": "Bạn có chắc muốn xóa item này?",
+                "deleteSuccess": "Xóa item thành công",
+                "table": {
+                    "image": "Hình ảnh",
+                    "name": "Tên",
+                    "sku": "Mã SKU",
+                    "category": "Danh mục",
+                    "price": "Giá",
+                    "unit": "Đơn vị",
+                    "stock": "Kho",
+                    "inventory": "Kho",
+                    "visibility": "Hiển thị",
+                    "actions": "Thao tác",
+                    "unlimited": "Không giới hạn",
+                    "status": "Trạng thái"
+                },
+                "filter": {
+                    "allStatus": "Tất cả trạng thái",
+                    "allAvailability": "Tất cả tình trạng",
+                    "allCategories": "Tất cả danh mục"
+                },
+                "filters": {
+                    "all": "Tất cả"
+                },
+                "status": {
+                    "active": "Hoạt động",
+                    "hidden": "Ẩn",
+                    "available": "Có sẵn",
+                    "unavailable": "Không có sẵn",
+                    "disabled": "Vô hiệu hóa",
+                    "inactive": "Ngừng hoạt động"
+                },
+                "availability": {
+                    "available": "Hoạt động",
+                    "unavailable": "Không hoạt động"
+                },
+                "card": {
+                    "slots": "{count} slots",
+                    "activeBookings": "{count} đang đặt",
+                    "basePrice": "Giá cơ bản",
+                    "deposit": "Đặt cọc",
+                    "manage": "Quản lý item",
+                    "noImage": "Chưa có ảnh"
+                },
+                "form": {
+                    "modalTitle": "Thêm item chung mới",
+                    "editModalTitle": "Chỉnh sửa item chung",
+                    "nameLabel": "Tên item",
+                    "nameViPlaceholder": "Tên tiếng Việt",
+                    "nameEnPlaceholder": "Tên tiếng Anh",
+                    "descriptionLabel": "Mô tả",
+                    "categoryLabel": "Danh mục",
+                    "categoryPlaceholder": "Chọn danh mục",
+                    "categoryNone": "-- Không chọn danh mục --",
+                    "categoryHelp": "Chọn danh mục item hoặc để trống",
+                    "priceLabel": "Giá",
+                    "taxRateLabel": "Thuế (%)",
+                    "unitLabel": "Đơn vị",
+                    "unitViPlaceholder": "cái",
+                    "unitEnPlaceholder": "item",
+                    "statusLabel": "Trạng thái",
+                    "statusActive": "Hoạt động",
+                    "statusHidden": "Ẩn",
+                    "availableLabel": "Còn hàng",
+                    "maxQuantityLabel": "Số lượng tối đa",
+                    "stockLabel": "Tồn kho",
+                    "stockPlaceholder": "Để trống = không giới hạn",
+                    "stockHelp": "Để trống nếu không giới hạn tồn kho",
+                    "displayOrderLabel": "Thứ tự hiển thị",
+                    "advanceBookingLabel": "Yêu cầu đặt trước",
+                    "advanceHoursLabel": "Số giờ đặt trước",
+                    "imageUrlLabel": "Hình ảnh",
+                    "imageFileRequired": "Vui lòng chọn file hình ảnh",
+                    "imageUploadSuccess": "Tải ảnh lên thành công",
+                    "imageUploadFailed": "Không thể tải ảnh lên",
+                    "uploading": "Đang tải lên...",
+                    "uploadImage": "Tải ảnh lên",
+                    "imageHelp": "Nhấn để chọn hình ảnh từ máy tính của bạn",
+                    "createButton": "Tạo item mới",
+                    "updateButton": "Cập nhật item",
+                    "nameRequired": "Tên item là bắt buộc",
+                    "priceRequired": "Giá là bắt buộc",
+                    "createSuccess": "Tạo item thành công",
+                    "updateSuccess": "Cập nhật item thành công",
+                    "createFailed": "Tạo item thất bại",
+                    "updateFailed": "Cập nhật item thất bại",
+                    "guestLimitError": "Số khách tối đa phải lớn hơn hoặc bằng số khách tối thiểu",
+                    "guestLimitBothRequired": "Vui lòng điền cả số khách tối thiểu và tối đa, hoặc để trống cả 2"
+                }
+            },
+            "commonItemCategories": {
+                "title": "Quản lý Danh mục Item chung",
+                "addCategory": "Thêm Danh mục",
+                "editCategory": "Chỉnh sửa Danh mục",
+                "newCategory": "Thêm Danh mục Mới",
+                "noCategories": "Chưa có danh mục nào",
+                "nameLabel": "Tên Danh mục",
+                "nameVi": "Tên (Tiếng Việt)",
+                "nameEn": "Name (English)",
+                "descriptionVi": "Mô tả (Tiếng Việt)",
+                "descriptionEn": "Description (English)",
+                "weight": "Thứ tự sắp xếp",
+                "status": "Trạng thái",
+                "actions": "Hành động",
+                "cancel": "Hủy",
+                "create": "Tạo mới",
+                "update": "Cập nhật",
+                "delete": "Xóa",
+                "deleteConfirm": "Bạn có chắc muốn xóa danh mục này?",
+                "statusActive": "Active",
+                "statusHidden": "Hidden",
+                "nameRequired": "Tên là bắt buộc ở cả hai ngôn ngữ",
+                "createSuccess": "Tạo danh mục thành công",
+                "updateSuccess": "Cập nhật danh mục thành công",
+                "deleteSuccess": "Xóa danh mục thành công"
             }
-        }
+        },
+        "commonItems": "Item chung"
     },
     "pitch": {
         "types": {

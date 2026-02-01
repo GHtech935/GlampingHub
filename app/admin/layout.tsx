@@ -37,6 +37,7 @@ import {
   Activity,
   List,
   StickyNote,
+  Layers,
 } from "lucide-react";
 
 // Role type
@@ -166,6 +167,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     if (pathname.includes('/bookings')) {
       setExpandedMenus(prev => new Set([...prev, 'bookings']));
     }
+    if (pathname.includes('/booking-calendar')) {
+      setExpandedMenus(prev => new Set([...prev, 'calendar']));
+    }
   }, [pathname]);
 
   // Navigation with role-based access (GLAMPING ONLY)
@@ -179,6 +183,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       items: [
         { name: currentZoneId === "all" ? t('zone') : t('dashboard'), href: `${zonePrefix}/dashboard`, icon: LayoutDashboard, roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'] },
         { name: t('items'), href: `${zonePrefix}/items`, icon: Package, roles: ['admin', 'operations', 'owner', 'glamping_owner'] },
+        { name: t('commonItems'), href: `${zonePrefix}/common-items`, icon: Layers, roles: ['admin', 'operations', 'owner', 'glamping_owner'] },
         { name: t('menu'), href: `${zonePrefix}/menu`, icon: UtensilsCrossed, roles: ['admin', 'operations', 'owner', 'glamping_owner'] },
         {
           name: t('bookings'),
@@ -208,6 +213,20 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               name: t('bookingNotes'),
               href: `${zonePrefix}/bookings/notes`,
               icon: StickyNote,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+          ],
+        },
+        {
+          name: t('calendar'),
+          href: 'calendar',
+          icon: Calendar,
+          roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+          children: [
+            {
+              name: t('calendarBooking'),
+              href: `${zonePrefix}/booking-calendar`,
+              icon: CalendarDays,
               roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
             },
           ],
