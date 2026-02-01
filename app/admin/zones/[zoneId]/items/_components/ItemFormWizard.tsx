@@ -2022,33 +2022,82 @@ export function ItemFormWizard({
   };
 
   // Handle edit event
-  const handleEditEvent = (eventId: string) => {
-    // TODO: Implement in Phase 3
-    const event = attachedEvents.find(e => e.id === eventId);
-    if (event) {
-      setEventFormData({
-        name: event.name,
-        type: event.type as 'seasonal' | 'special' | 'closure',
-        start_date: event.start_date || '',
-        end_date: event.end_date || '',
-        recurrence: (event.recurrence || 'one_time') as 'one_time' | 'weekly' | 'monthly' | 'yearly' | 'always',
-        days_of_week: event.days_of_week || [],
-        pricing_type: event.pricing_type as 'base_price' | 'new_price' | 'dynamic' | 'yield',
-        status: event.status as 'available' | 'unavailable',
-        active: true,
-        applicable_times: "all",
-        rules_id: null,
-        dynamic_pricing: {
-          value: event.dynamic_pricing_value || 0,
-          mode: (event.dynamic_pricing_mode || 'percent') as 'percent' | 'fixed',
-        },
-        yield_thresholds: event.yield_thresholds || [
-          { stock: 0, rate_adjustment: 0 }
-        ],
-      });
-      setEditingEventId(eventId);
-      setShowEditEventModal(true);
+  const handleEditEvent = async (eventId: string) => {
+    const localEvent = attachedEvents.find(e => e.id === eventId);
+    if (!localEvent) return;
+
+    // Helper function to format date for input[type="date"] (YYYY-MM-DD)
+    const formatDateForInput = (dateValue: string | null | undefined): string => {
+      if (!dateValue) return '';
+      // If already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        return dateValue;
+      }
+      // Handle ISO format (2024-01-15T00:00:00.000Z) - extract just the date part
+      if (dateValue.includes('T')) {
+        return dateValue.split('T')[0];
+      }
+      // Fallback: try to parse and format
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) return '';
+      // Use local date to avoid timezone issues
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    // Fetch full event data from API to get item_ids and complete data
+    let event = localEvent;
+    try {
+      const response = await fetch(`/api/admin/glamping/events/${eventId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.event) {
+          // Use API data which has complete info including item_ids
+          event = data.event;
+          // Pre-select các items đang sử dụng event này
+          setSelectedItemsForEvent(data.event.item_ids || []);
+        } else {
+          // Fallback: ít nhất select item hiện tại
+          setSelectedItemsForEvent(itemId ? [itemId] : []);
+        }
+      } else {
+        // Fallback: ít nhất select item hiện tại
+        setSelectedItemsForEvent(itemId ? [itemId] : []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch event data:', error);
+      setSelectedItemsForEvent(itemId ? [itemId] : []);
     }
+
+    // Handle dynamic_pricing - API returns nested object, local data has flat fields
+    const eventAny = event as any;
+    const dynamicPricingValue = eventAny.dynamic_pricing?.value ?? event.dynamic_pricing_value ?? 0;
+    const dynamicPricingMode = eventAny.dynamic_pricing?.mode ?? event.dynamic_pricing_mode ?? 'percent';
+
+    setEventFormData({
+      name: event.name,
+      type: event.type as 'seasonal' | 'special' | 'closure',
+      start_date: formatDateForInput(event.start_date),
+      end_date: event.end_date ? formatDateForInput(event.end_date) : null,
+      recurrence: (event.recurrence || 'one_time') as 'one_time' | 'weekly' | 'monthly' | 'yearly' | 'always',
+      days_of_week: event.days_of_week || [],
+      pricing_type: event.pricing_type as 'base_price' | 'new_price' | 'dynamic' | 'yield',
+      status: event.status as 'available' | 'unavailable',
+      active: eventAny.active !== undefined ? eventAny.active : true,
+      applicable_times: "all",
+      rules_id: null,
+      dynamic_pricing: {
+        value: dynamicPricingValue,
+        mode: dynamicPricingMode as 'percent' | 'fixed',
+      },
+      yield_thresholds: eventAny.yield_thresholds || [
+        { stock: 0, rate_adjustment: 0 }
+      ],
+    });
+    setEditingEventId(eventId);
+    setShowEditEventModal(true);
   };
 
   // Handle update event
@@ -2056,7 +2105,37 @@ export function ItemFormWizard({
     try {
       if (!editingEventId) return;
 
-      // Update event in attachedEvents array
+      // 1. Call API to update database
+      const updateResponse = await fetch(
+        `/api/admin/glamping/events/${editingEventId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: eventFormData.name,
+            type: eventFormData.type,
+            start_date: eventFormData.start_date,
+            end_date: eventFormData.end_date,
+            recurrence: eventFormData.recurrence,
+            days_of_week: eventFormData.days_of_week.length > 0 ? eventFormData.days_of_week : null,
+            pricing_type: eventFormData.pricing_type,
+            status: eventFormData.status,
+            active: eventFormData.active,
+            applicable_times: eventFormData.applicable_times,
+            rules_id: eventFormData.rules_id,
+            dynamic_pricing: eventFormData.dynamic_pricing,
+            yield_thresholds: eventFormData.yield_thresholds,
+            item_ids: selectedItemsForEvent,
+          }),
+        }
+      );
+
+      if (!updateResponse.ok) {
+        const errorData = await updateResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to update event');
+      }
+
+      // 2. After API success, update local state
       setAttachedEvents(attachedEvents.map(event =>
         event.id === editingEventId
           ? {
@@ -2077,7 +2156,7 @@ export function ItemFormWizard({
           : event
       ));
 
-      // Reset form and close modal
+      // 3. Reset form and close modal
       setEventFormData({
         name: '',
         type: 'seasonal',
@@ -4073,13 +4152,13 @@ export function ItemFormWizard({
                                         {t('itemEvents.types.seasonal')}
                                       </span>
                                     )}
-                                    {event.type === 'special_pricing' && (
+                                    {(event.type === 'special' || event.type === 'special_pricing') && (
                                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/20 text-primary">
                                         <Calendar className="w-3 h-3 mr-1" />
                                         {t('itemEvents.types.specialPricing')}
                                       </span>
                                     )}
-                                    {event.type === 'closure_dates' && (
+                                    {(event.type === 'closure' || event.type === 'closure_dates') && (
                                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                         <X className="w-3 h-3 mr-1" />
                                         {t('itemEvents.types.closureDates')}

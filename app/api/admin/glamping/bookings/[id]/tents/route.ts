@@ -79,23 +79,48 @@ export async function POST(
     const item = itemResult.rows[0];
     const itemName = getLocalizedString(item.name);
 
-    // Check item availability for the date range
-    const availabilityResult = await client.query(
-      `SELECT date, status FROM glamping_availability
-       WHERE item_id = $1 AND date >= $2 AND date < $3`,
-      [itemId, checkInDate, checkOutDate]
+    // Check item availability using inventory_quantity
+    // Step 1: Get item inventory settings
+    const itemAttrResult = await client.query(
+      `SELECT
+        COALESCE(a.inventory_quantity, 1) as inventory_quantity,
+        COALESCE(a.unlimited_inventory, false) as unlimited_inventory
+      FROM glamping_items i
+      LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+      WHERE i.id = $1`,
+      [itemId]
     );
 
-    const unavailableDates = availabilityResult.rows.filter(
-      row => row.status === 'unavailable' || row.status === 'blocked'
-    );
+    const { inventory_quantity, unlimited_inventory } = itemAttrResult.rows[0] || { inventory_quantity: 1, unlimited_inventory: false };
 
-    if (unavailableDates.length > 0) {
-      await client.query('ROLLBACK');
-      return NextResponse.json(
-        { error: "Item not available for selected dates", unavailableDates: unavailableDates.map(d => d.date) },
-        { status: 400 }
+    // Step 2: If not unlimited, check overlapping bookings
+    if (!unlimited_inventory) {
+      const bookingCountResult = await client.query(
+        `SELECT COUNT(DISTINCT bt.id) as booked_count
+        FROM glamping_booking_tents bt
+        JOIN glamping_bookings b ON bt.booking_id = b.id
+        WHERE bt.item_id = $1
+          AND b.status NOT IN ('cancelled', 'rejected')
+          AND bt.check_in_date < $3
+          AND bt.check_out_date > $2`,
+        [itemId, checkInDate, checkOutDate]
       );
+
+      const bookedQuantity = parseInt(bookingCountResult.rows[0].booked_count) || 0;
+
+      if (bookedQuantity >= inventory_quantity) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          {
+            error: "Lều đã được đặt hết trong khoảng thời gian này",
+            errorCode: "DATES_NOT_AVAILABLE",
+            inventoryQuantity: inventory_quantity,
+            bookedQuantity,
+            availableQuantity: 0,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // Calculate subtotal from parameters if not provided

@@ -23,6 +23,7 @@ import { GlampingEditMenuProductModal } from "./GlampingEditMenuProductModal";
 import { AddAdditionalCostModal } from "./AddAdditionalCostModal";
 import { GlampingEditAdditionalCostModal } from "./GlampingEditAdditionalCostModal";
 import { GlampingAddTentModal } from "./GlampingAddTentModal";
+import { GlampingAddMenuProductModal } from "./GlampingAddMenuProductModal";
 
 interface TentItem {
   id: string;
@@ -131,6 +132,7 @@ const texts = {
     addAdditionalCost: 'Thêm',
     unitPrice: 'Đơn giá',
     addTent: 'Thêm lều',
+    addProduct: 'Thêm',
   },
   en: {
     loading: 'Loading...',
@@ -164,6 +166,7 @@ const texts = {
     addAdditionalCost: 'Add',
     unitPrice: 'Unit Price',
     addTent: 'Add Tent',
+    addProduct: 'Add',
   },
 };
 
@@ -183,6 +186,7 @@ export function GlampingBookingEditTab({
   const [editingAdditionalCost, setEditingAdditionalCost] = useState<AdditionalCostItem | null>(null);
   const [showAddCostModal, setShowAddCostModal] = useState(false);
   const [showAddTentModal, setShowAddTentModal] = useState(false);
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [deletingItem, setDeletingItem] = useState<{
     type: 'tent' | 'menu_product' | 'additional_cost';
     id: string;
@@ -263,6 +267,12 @@ export function GlampingBookingEditTab({
     onRefresh();
   };
 
+  const handleProductAdded = () => {
+    setShowAddProductModal(false);
+    fetchItems();
+    onRefresh();
+  };
+
   const openTentEdit = (tent: TentItem) => {
     setEditingTent({
       id: tent.id,
@@ -326,6 +336,86 @@ export function GlampingBookingEditTab({
 
   return (
     <div className="space-y-4">
+      {/* Additional Costs Section - MOVED TO TOP */}
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="px-4 py-3 bg-amber-50 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-amber-700">{t.additionalCosts}</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddCostModal(true)}
+            disabled={isUpdating}
+            className="h-7 px-2 text-xs border-amber-300 text-amber-600 hover:bg-amber-100"
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            {t.addAdditionalCost}
+          </Button>
+        </div>
+        {data.additionalCosts && data.additionalCosts.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50/50">
+                  <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.qty}</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.unitPrice}</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.total}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.additionalCosts.map((cost) => (
+                  <tr key={cost.id} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900">{cost.name}</div>
+                      {cost.notes && (
+                        <div className="text-xs text-gray-500 mt-0.5">{cost.notes}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center text-gray-900">
+                      {cost.quantity}
+                    </td>
+                    <td className="px-3 py-3 text-right text-gray-900">
+                      {formatCurrency(cost.unitPrice)}
+                    </td>
+                    <td className="px-3 py-3 text-right font-medium text-gray-900">
+                      {formatCurrency(cost.totalPrice)}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setEditingAdditionalCost(cost)}
+                          disabled={isUpdating}
+                        >
+                          <Pencil className="h-3 w-3 mr-1" />
+                          {t.edit}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => setDeletingItem({ type: 'additional_cost', id: cost.id, name: cost.name })}
+                          disabled={isUpdating}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-4 text-center text-sm text-gray-500">
+            {locale === 'vi' ? 'Chưa có chi phí phát sinh' : 'No additional costs'}
+          </div>
+        )}
+      </div>
+
       {/* Tents Section */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
@@ -419,11 +509,23 @@ export function GlampingBookingEditTab({
       </div>
 
       {/* Menu Products Section */}
-      {data.menuProducts.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b">
-            <h3 className="font-semibold text-gray-900">{t.menuProducts}</h3>
-          </div>
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">{t.menuProducts}</h3>
+          {zoneId && data.tents.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddProductModal(true)}
+              disabled={isUpdating}
+              className="h-7 px-2 text-xs"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              {t.addProduct}
+            </Button>
+          )}
+        </div>
+        {data.menuProducts.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -484,85 +586,9 @@ export function GlampingBookingEditTab({
               </tbody>
             </table>
           </div>
-        </div>
-      )}
-
-      {/* Additional Costs Section */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="px-4 py-3 bg-amber-50 border-b flex items-center justify-between">
-          <h3 className="font-semibold text-amber-700">{t.additionalCosts}</h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAddCostModal(true)}
-            disabled={isUpdating}
-            className="h-7 px-2 text-xs border-amber-300 text-amber-600 hover:bg-amber-100"
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            {t.addAdditionalCost}
-          </Button>
-        </div>
-        {data.additionalCosts && data.additionalCosts.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50/50">
-                  <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
-                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.qty}</th>
-                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.unitPrice}</th>
-                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.total}</th>
-                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.additionalCosts.map((cost) => (
-                  <tr key={cost.id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{cost.name}</div>
-                      {cost.notes && (
-                        <div className="text-xs text-gray-500 mt-0.5">{cost.notes}</div>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center text-gray-900">
-                      {cost.quantity}
-                    </td>
-                    <td className="px-3 py-3 text-right text-gray-900">
-                      {formatCurrency(cost.unitPrice)}
-                    </td>
-                    <td className="px-3 py-3 text-right font-medium text-gray-900">
-                      {formatCurrency(cost.totalPrice)}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setEditingAdditionalCost(cost)}
-                          disabled={isUpdating}
-                        >
-                          <Pencil className="h-3 w-3 mr-1" />
-                          {t.edit}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => setDeletingItem({ type: 'additional_cost', id: cost.id, name: cost.name })}
-                          disabled={isUpdating}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         ) : (
           <div className="p-4 text-center text-sm text-gray-500">
-            {locale === 'vi' ? 'Chưa có chi phí phát sinh' : 'No additional costs'}
+            {locale === 'vi' ? 'Chưa có sản phẩm nào' : 'No products yet'}
           </div>
         )}
       </div>
@@ -643,6 +669,18 @@ export function GlampingBookingEditTab({
           onSave={handleTentAdded}
           bookingId={booking.id}
           zoneId={zoneId}
+          locale={locale}
+        />
+      )}
+
+      {/* Add Menu Product Modal */}
+      {zoneId && (
+        <GlampingAddMenuProductModal
+          isOpen={showAddProductModal}
+          onClose={() => setShowAddProductModal(false)}
+          onSave={handleProductAdded}
+          bookingId={booking.id}
+          tents={data?.tents || []}
           locale={locale}
         />
       )}

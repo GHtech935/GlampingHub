@@ -510,20 +510,11 @@ export function GlampingBookingFinancialTab({
       {/* LEFT: Items Table (60% width) */}
       <div className="lg:col-span-2">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Receipt className="h-5 w-5" />
               {t.itemDetails}
             </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAddCostModal(true)}
-              className="text-amber-600 border-amber-300 hover:bg-amber-50"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              {t.addAdditionalCost}
-            </Button>
           </CardHeader>
           <CardContent>
             {loadingItems ? (

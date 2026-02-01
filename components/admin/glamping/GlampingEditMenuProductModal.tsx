@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +97,8 @@ export function GlampingEditMenuProductModal({
 
   const [quantity, setQuantity] = useState(product.quantity);
   const [unitPrice, setUnitPrice] = useState<number>(product.unitPrice);
+  const [originalPrice, setOriginalPrice] = useState<number | null>(null);
+  const [loadingPrice, setLoadingPrice] = useState(true);
   const [servingDate, setServingDate] = useState(() => toDateInputValue(product.servingDate));
   const [subtotalOverride, setSubtotalOverride] = useState<number | undefined>(undefined);
   const [showSubtotalOverride, setShowSubtotalOverride] = useState(false);
@@ -106,6 +108,32 @@ export function GlampingEditMenuProductModal({
   const [discountAmount, setDiscountAmount] = useState(product.discountAmount || 0);
   const [validatingVoucher, setValidatingVoucher] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Fetch the original product price from the menu item
+  useEffect(() => {
+    const fetchProductPrice = async () => {
+      setLoadingPrice(true);
+      try {
+        const response = await fetch(`/api/admin/glamping/menu/${product.menuItemId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const price = parseFloat(data.menuItem?.price || data.price || '0');
+          setOriginalPrice(price);
+          setUnitPrice(price);
+        }
+      } catch (error) {
+        console.error('Failed to fetch product price:', error);
+        // Fallback to the existing unit price
+        setOriginalPrice(product.unitPrice);
+      } finally {
+        setLoadingPrice(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchProductPrice();
+    }
+  }, [isOpen, product.menuItemId, product.unitPrice]);
 
   const calculatedTotal = quantity * unitPrice;
   const effectiveTotal = subtotalOverride !== undefined ? subtotalOverride : calculatedTotal;
@@ -230,14 +258,17 @@ export function GlampingEditMenuProductModal({
             />
           </div>
 
-          {/* Unit Price */}
+          {/* Unit Price - Read Only */}
           <div>
             <Label>{t.unitPrice}</Label>
-            <CurrencyInput
-              value={unitPrice}
-              onValueChange={(val) => setUnitPrice(val ?? 0)}
-              className="mt-1"
-            />
+            <div className="mt-1 flex items-center h-10 px-3 rounded-md border border-gray-200 bg-gray-50">
+              {loadingPrice ? (
+                <span className="text-gray-400 text-sm">{locale === 'vi' ? 'Đang tải...' : 'Loading...'}</span>
+              ) : (
+                <span className="font-medium text-gray-900">{formatCurrency(unitPrice)}</span>
+              )}
+              <span className="ml-auto text-xs text-gray-500">VND</span>
+            </div>
           </div>
 
           {/* Serving Date */}
