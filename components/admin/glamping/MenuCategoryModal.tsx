@@ -70,7 +70,6 @@ export function MenuCategoryModal({
     descriptionEn: "",
     weight: 0,
     status: "active",
-    is_tent_category: true,
     show_to_customer: true,
   });
 
@@ -106,7 +105,6 @@ export function MenuCategoryModal({
       descriptionEn: "",
       weight: 0,
       status: "active",
-      is_tent_category: true,
       show_to_customer: true,
     });
     setEditingId(null);
@@ -126,7 +124,6 @@ export function MenuCategoryModal({
       descriptionEn: category.description?.en || "",
       weight: category.weight,
       status: category.status,
-      is_tent_category: category.is_tent_category !== false,
       show_to_customer: category.show_to_customer !== false,
     });
     setEditingId(category.id);
@@ -158,7 +155,6 @@ export function MenuCategoryModal({
         },
         weight: formData.weight,
         status: formData.status,
-        is_tent_category: formData.is_tent_category,
         show_to_customer: formData.show_to_customer,
       };
 
@@ -341,22 +337,6 @@ export function MenuCategoryModal({
 
               <div className="flex items-center space-x-2 pt-2">
                 <Checkbox
-                  id="is_tent_category"
-                  checked={formData.is_tent_category}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, is_tent_category: checked as boolean })
-                  }
-                />
-                <Label htmlFor="is_tent_category" className="font-normal cursor-pointer">
-                  {t("isTentCategory")}
-                </Label>
-              </div>
-              <p className="text-xs text-gray-500 ml-6">
-                {t("isTentCategoryHelp")}
-              </p>
-
-              <div className="flex items-center space-x-2 pt-2">
-                <Checkbox
                   id="show_to_customer"
                   checked={formData.show_to_customer}
                   onCheckedChange={(checked) =>
@@ -390,6 +370,7 @@ export function MenuCategoryModal({
                   <TableHead>{t("nameLabel")}</TableHead>
                   <TableHead>{t("descriptionVi")}</TableHead>
                   <TableHead className="text-center">{t("weight")}</TableHead>
+                  <TableHead className="text-center">{t("showToCustomer")}</TableHead>
                   <TableHead className="text-center">{t("status")}</TableHead>
                   <TableHead className="text-right">{t("actions")}</TableHead>
                 </TableRow>
@@ -397,13 +378,13 @@ export function MenuCategoryModal({
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
+                    <TableCell colSpan={6} className="text-center py-8">
                       {tc("loading")}
                     </TableCell>
                   </TableRow>
                 ) : categories.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                       {t("noCategories")}
                     </TableCell>
                   </TableRow>
@@ -412,14 +393,7 @@ export function MenuCategoryModal({
                     <TableRow key={category.id}>
                       <TableCell>
                         <div>
-                          <div className="font-medium flex items-center gap-2">
-                            {category.name.vi}
-                            {category.show_to_customer !== false && (
-                              <Badge variant="outline" className="text-xs">
-                                {t("showToCustomerBadge")}
-                              </Badge>
-                            )}
-                          </div>
+                          <div className="font-medium">{category.name.vi}</div>
                           <div className="text-xs text-gray-500">{category.name.en}</div>
                         </div>
                       </TableCell>
@@ -427,6 +401,13 @@ export function MenuCategoryModal({
                         {category.description?.vi || '-'}
                       </TableCell>
                       <TableCell className="text-center">{category.weight}</TableCell>
+                      <TableCell className="text-center">
+                        {category.show_to_customer !== false ? (
+                          <Badge variant="success">{tc("yes")}</Badge>
+                        ) : (
+                          <Badge variant="secondary">{tc("no")}</Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-center">
                         {category.status === "active" ? (
                           <Badge variant="success">{t("statusActive")}</Badge>
