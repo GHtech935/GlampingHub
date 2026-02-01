@@ -251,9 +251,9 @@ export function GlampingEditMenuProductModal({
             <Label>{t.quantity}</Label>
             <Input
               type="number"
-              min={1}
+              min={0}
               value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+              onChange={(e) => setQuantity(Math.max(0, parseInt(e.target.value) || 0))}
               className="mt-1"
             />
           </div>

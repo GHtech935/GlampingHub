@@ -508,7 +508,7 @@ export function GlampingBookingEditTab({
         )}
       </div>
 
-      {/* Menu Products Section */}
+      {/* Menu Products Section - Grouped by Tent then by Date */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
           <h3 className="font-semibold text-gray-900">{t.menuProducts}</h3>
@@ -526,65 +526,203 @@ export function GlampingBookingEditTab({
           )}
         </div>
         {data.menuProducts.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50/50">
-                  <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
-                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.qty}</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-600">{t.date}</th>
-                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.total}</th>
-                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.menuProducts.map((product) => (
-                  <tr key={product.id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{product.productName}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{product.categoryName}</div>
-                      {product.voucherCode && (
-                        <Badge variant="secondary" className="mt-1 text-xs">
-                          {t.voucher}: {product.voucherCode} (-{formatCurrency(product.discountAmount)})
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center text-gray-900">
-                      {product.quantity}
-                    </td>
-                    <td className="px-3 py-3 text-gray-900">
-                      {product.servingDate ? formatDate(product.servingDate) : '-'}
-                    </td>
-                    <td className="px-3 py-3 text-right font-medium text-gray-900">
-                      {formatCurrency(product.totalPrice - product.discountAmount)}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => openProductEdit(product)}
-                          disabled={isUpdating}
-                        >
-                          <Pencil className="h-3 w-3 mr-1" />
-                          {t.edit}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => setDeletingItem({ type: 'menu_product', id: product.id, name: product.productName })}
-                          disabled={isUpdating}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+          <div className="divide-y divide-gray-100">
+            {/* Group products by tent, then by date */}
+            {(() => {
+              // Group by tent
+              const productsByTent = new Map<string, MenuProductItem[]>();
+              const productsWithoutTent: MenuProductItem[] = [];
+
+              data.menuProducts.forEach(product => {
+                if (product.bookingTentId) {
+                  const existing = productsByTent.get(product.bookingTentId) || [];
+                  existing.push(product);
+                  productsByTent.set(product.bookingTentId, existing);
+                } else {
+                  productsWithoutTent.push(product);
+                }
+              });
+
+              // Sort tents by order in data.tents
+              const sortedTentIds = data.tents.map(t => t.id);
+              const sortedEntries = Array.from(productsByTent.entries()).sort((a, b) => {
+                const aIdx = sortedTentIds.indexOf(a[0]);
+                const bIdx = sortedTentIds.indexOf(b[0]);
+                return aIdx - bIdx;
+              });
+
+              // Group by date within each tent
+              const groupByDate = (products: MenuProductItem[]) => {
+                const byDate = new Map<string, MenuProductItem[]>();
+                products.forEach(p => {
+                  const dateKey = p.servingDate || 'no-date';
+                  const existing = byDate.get(dateKey) || [];
+                  existing.push(p);
+                  byDate.set(dateKey, existing);
+                });
+                // Sort by date
+                return Array.from(byDate.entries()).sort((a, b) => {
+                  if (a[0] === 'no-date') return 1;
+                  if (b[0] === 'no-date') return -1;
+                  return a[0].localeCompare(b[0]);
+                });
+              };
+
+              return (
+                <>
+                  {sortedEntries.map(([tentId, products], tentIdx) => {
+                    const tent = data.tents.find(t => t.id === tentId);
+                    const productsByDate = groupByDate(products);
+
+                    return (
+                      <div key={tentId}>
+                        {/* Tent Header */}
+                        {data.tents.length > 1 && (
+                          <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+                            <span className="font-medium text-sm text-blue-800">
+                              {locale === 'vi' ? 'Lều' : 'Tent'} {tentIdx + 1}: {tent?.itemName || '-'}
+                            </span>
+                            <span className="text-xs text-blue-600 ml-2">
+                              ({formatDate(tent?.checkInDate || '')} - {formatDate(tent?.checkOutDate || '')})
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Products grouped by date */}
+                        {productsByDate.map(([dateKey, dateProducts]) => (
+                          <div key={`${tentId}-${dateKey}`}>
+                            {/* Date Header */}
+                            <div className="px-4 py-1.5 bg-gray-50/70 border-b">
+                              <span className="text-xs font-medium text-gray-600">
+                                {dateKey === 'no-date'
+                                  ? (locale === 'vi' ? 'Chưa xác định ngày' : 'No date specified')
+                                  : formatDate(dateKey)}
+                              </span>
+                            </div>
+
+                            {/* Products table for this date */}
+                            <table className="w-full text-sm">
+                              <tbody>
+                                {dateProducts.map((product) => (
+                                  <tr key={product.id} className="border-b hover:bg-gray-50">
+                                    <td className="px-4 py-2.5">
+                                      <div className="font-medium text-gray-900">{product.productName}</div>
+                                      <div className="text-xs text-gray-500">{product.categoryName}</div>
+                                      {product.voucherCode && (
+                                        <Badge variant="secondary" className="mt-1 text-xs">
+                                          {t.voucher}: {product.voucherCode} (-{formatCurrency(product.discountAmount)})
+                                        </Badge>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center text-gray-900 w-16">
+                                      {product.quantity}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right font-medium text-gray-900 w-28">
+                                      {formatCurrency(product.totalPrice - product.discountAmount)}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center w-32">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-7 px-2 text-xs"
+                                          onClick={() => openProductEdit(product)}
+                                          disabled={isUpdating}
+                                        >
+                                          <Pencil className="h-3 w-3 mr-1" />
+                                          {t.edit}
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                          onClick={() => setDeletingItem({ type: 'menu_product', id: product.id, name: product.productName })}
+                                          disabled={isUpdating}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ))}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    );
+                  })}
+
+                  {/* Products without tent */}
+                  {productsWithoutTent.length > 0 && (
+                    <div>
+                      <div className="px-4 py-2 bg-gray-100 border-b">
+                        <span className="font-medium text-sm text-gray-700">
+                          {locale === 'vi' ? 'Sản phẩm chung' : 'General Products'}
+                        </span>
+                      </div>
+                      {groupByDate(productsWithoutTent).map(([dateKey, dateProducts]) => (
+                        <div key={`no-tent-${dateKey}`}>
+                          <div className="px-4 py-1.5 bg-gray-50/70 border-b">
+                            <span className="text-xs font-medium text-gray-600">
+                              {dateKey === 'no-date'
+                                ? (locale === 'vi' ? 'Chưa xác định ngày' : 'No date specified')
+                                : formatDate(dateKey)}
+                            </span>
+                          </div>
+                          <table className="w-full text-sm">
+                            <tbody>
+                              {dateProducts.map((product) => (
+                                <tr key={product.id} className="border-b hover:bg-gray-50">
+                                  <td className="px-4 py-2.5">
+                                    <div className="font-medium text-gray-900">{product.productName}</div>
+                                    <div className="text-xs text-gray-500">{product.categoryName}</div>
+                                    {product.voucherCode && (
+                                      <Badge variant="secondary" className="mt-1 text-xs">
+                                        {t.voucher}: {product.voucherCode} (-{formatCurrency(product.discountAmount)})
+                                      </Badge>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center text-gray-900 w-16">
+                                    {product.quantity}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right font-medium text-gray-900 w-28">
+                                    {formatCurrency(product.totalPrice - product.discountAmount)}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center w-32">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                        onClick={() => openProductEdit(product)}
+                                        disabled={isUpdating}
+                                      >
+                                        <Pencil className="h-3 w-3 mr-1" />
+                                        {t.edit}
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        onClick={() => setDeletingItem({ type: 'menu_product', id: product.id, name: product.productName })}
+                                        disabled={isUpdating}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         ) : (
           <div className="p-4 text-center text-sm text-gray-500">
