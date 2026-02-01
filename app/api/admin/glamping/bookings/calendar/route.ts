@@ -194,6 +194,47 @@ export async function GET(request: NextRequest) {
 
     const result = await client.query(query, values);
 
+    // First, group tents by booking_id + date range to consolidate bookings
+    // Key: booking_id-checkInDate-checkOutDate
+    const bookingDateGroups: Map<string, {
+      booking: any;
+      tents: Array<{ itemId: string; itemName: string; parameters: any[] }>;
+    }> = new Map();
+
+    for (const row of result.rows) {
+      const checkInStr = row.check_in_date instanceof Date
+        ? row.check_in_date.toISOString().split('T')[0]
+        : String(row.check_in_date).split('T')[0];
+      const checkOutStr = row.check_out_date instanceof Date
+        ? row.check_out_date.toISOString().split('T')[0]
+        : String(row.check_out_date).split('T')[0];
+
+      const groupKey = `${row.booking_id}-${checkInStr}-${checkOutStr}`;
+      const itemName = typeof row.item_name === 'object'
+        ? (row.item_name.vi || row.item_name.en || 'Unknown')
+        : row.item_name;
+
+      if (bookingDateGroups.has(groupKey)) {
+        // Add tent to existing group
+        const group = bookingDateGroups.get(groupKey)!;
+        group.tents.push({
+          itemId: row.item_id,
+          itemName,
+          parameters: row.parameters || [],
+        });
+      } else {
+        // Create new group
+        bookingDateGroups.set(groupKey, {
+          booking: row,
+          tents: [{
+            itemId: row.item_id,
+            itemName,
+            parameters: row.parameters || [],
+          }],
+        });
+      }
+    }
+
     // Group bookings by date
     const daysMap: Record<string, {
       events: any[];
@@ -202,32 +243,49 @@ export async function GET(request: NextRequest) {
       totalPaidAmount: number;
     }> = {};
 
-    // Process each booking tent
-    for (const row of result.rows) {
-      const checkIn = new Date(row.check_in_date);
-      const checkOut = new Date(row.check_out_date);
+    // Process each grouped booking (by date range)
+    for (const [groupKey, group] of bookingDateGroups) {
+      const row = group.booking;
+      const checkInStr = row.check_in_date instanceof Date
+        ? row.check_in_date.toISOString().split('T')[0]
+        : String(row.check_in_date).split('T')[0];
+      const checkOutStr = row.check_out_date instanceof Date
+        ? row.check_out_date.toISOString().split('T')[0]
+        : String(row.check_out_date).split('T')[0];
+
+      const checkIn = new Date(checkInStr);
+      const checkOut = new Date(checkOutStr);
       const customerName = `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Unknown';
-      const createdByName = row.created_by_user_id
-        ? `${row.created_by_first_name || ''} ${row.created_by_last_name || ''}`.trim()
-        : null;
+
+      // Build item name: show count if multiple tents, or single tent name
+      const tentCount = group.tents.length;
+      const itemName = tentCount > 1
+        ? `${tentCount} tents`
+        : group.tents[0].itemName;
+
+      // Combine all parameters from all tents
+      const allParameters = group.tents.flatMap(t => t.parameters || []);
 
       const event = {
         id: row.booking_id,
         bookingCode: row.booking_code,
         customerName,
-        checkInDate: row.check_in_date,
-        checkOutDate: row.check_out_date,
+        checkInDate: checkInStr,
+        checkOutDate: checkOutStr,
         status: row.status,
         paymentStatus: row.payment_status,
         totalGuests: row.total_guests || 0,
         totalAmount: parseFloat(row.total_amount) || 0,
-        itemId: row.item_id,
-        itemName: typeof row.item_name === 'object' ? (row.item_name.vi || row.item_name.en || 'Unknown') : row.item_name,
+        // Use groupKey as unique identifier for this booking+date combination
+        itemId: groupKey,
+        itemName,
+        tentCount,
+        tents: group.tents, // Include all tents for detail view
         customerEmail: row.email || '',
         customerPhone: row.phone || '',
         createdBy: row.created_by_user_id ? `${row.created_by_first_name || ''} ${row.created_by_last_name || ''}`.trim() : null,
         source: row.created_by_user_id ? 'admin' : 'web',
-        parameters: row.parameters || [],
+        parameters: allParameters,
       };
 
       // Add event to each day it spans (including checkout day)
@@ -246,8 +304,8 @@ export async function GET(request: NextRequest) {
             };
           }
 
-          // Add event if not already added for this day (avoid duplicates)
-          const existingEvent = daysMap[dateStr].events.find(e => e.id === event.id && e.itemId === event.itemId);
+          // Add event if not already added for this day (check by groupKey)
+          const existingEvent = daysMap[dateStr].events.find(e => e.itemId === groupKey);
           if (!existingEvent) {
             daysMap[dateStr].events.push(event);
           }

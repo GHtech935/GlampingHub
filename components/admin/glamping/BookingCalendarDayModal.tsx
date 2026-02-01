@@ -261,12 +261,20 @@ export function BookingCalendarDayModal({
 
                   {/* Item and Guest Info */}
                   <div className="space-y-2 text-sm">
-                    <div className="flex items-start gap-2">
-                      <span className="font-medium text-gray-900">{event.itemName}</span>
-                      {event.parameters && event.parameters.length > 0 && (
-                        <span className="text-gray-500">
-                          ({event.parameters.map(p => `${p.quantity} ${p.label}`).join(', ')})
-                        </span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-start gap-2">
+                        <span className="font-medium text-gray-900">{event.itemName}</span>
+                        {event.parameters && event.parameters.length > 0 && (
+                          <span className="text-gray-500">
+                            ({event.parameters.map(p => `${p.quantity} ${p.label}`).join(', ')})
+                          </span>
+                        )}
+                      </div>
+                      {/* Show individual tent names if multiple tents */}
+                      {event.tents && event.tents.length > 1 && (
+                        <div className="text-gray-500 text-xs pl-2">
+                          {event.tents.map((t, i) => t.itemName).join(', ')}
+                        </div>
                       )}
                     </div>
 

@@ -288,7 +288,7 @@ export function BookingCalendar({
                           gridColumn: `${startCol + 1} / span ${colSpan}`,
                           gridRow: eventIndex + 1,
                         }}
-                        title={`${event.customerName} - ${event.itemName} (${formatDate(event.checkInDate)} - ${formatDate(event.checkOutDate)})`}
+                        title={`${event.customerName} - ${event.itemName}${event.tentCount && event.tentCount > 1 ? ` (${event.tentCount} lều)` : ''} (${formatDate(event.checkInDate)} - ${formatDate(event.checkOutDate)})`}
                       >
                         {/* Left arrow for continuation from previous week */}
                         {continuesBefore && (
@@ -300,6 +300,13 @@ export function BookingCalendar({
 
                         {/* Customer name */}
                         <span className="truncate min-w-0">{event.customerName}</span>
+
+                        {/* Tent count badge if multiple */}
+                        {event.tentCount && event.tentCount > 1 && (
+                          <span className="flex-shrink-0 bg-white/30 px-1 rounded text-[10px]">
+                            {event.tentCount}
+                          </span>
+                        )}
 
                         {/* Date range - always show */}
                         <span className="text-[10px] opacity-70 flex-shrink-0 ml-auto">

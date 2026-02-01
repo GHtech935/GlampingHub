@@ -18,8 +18,14 @@ export interface CalendarEvent {
   paymentStatus: PaymentStatus;
   totalGuests: number;
   totalAmount: number;
+  /** Unique key for this booking+date range combination */
   itemId: string;
+  /** Display name: single tent name or "X tents" if multiple */
   itemName: string;
+  /** Number of tents in this booking for this date range */
+  tentCount?: number;
+  /** Individual tent details */
+  tents?: Array<{ itemId: string; itemName: string; parameters?: any[] }>;
   customerEmail: string;
   customerPhone: string;
   /** Admin user name if created by admin, null if customer booked via web */
