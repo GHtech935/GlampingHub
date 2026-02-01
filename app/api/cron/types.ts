@@ -22,9 +22,9 @@ export interface CronJobResult {
 }
 
 export interface CronJobParams {
-  jobId?: number;
+  jobId?: string;
   jobSlug: string;
-  logId?: number;
+  logId?: string;
   dryRun?: boolean;
 }
 
@@ -36,7 +36,7 @@ export interface CronJobRegistration {
 }
 
 export interface CronJobLog {
-  id: number;
+  id: string;
   job_slug: string;
   status: 'running' | 'success' | 'error';
   started_at: Date;

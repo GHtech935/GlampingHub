@@ -259,7 +259,8 @@ export async function GET(
     };
 
     // Extract parameter base prices (rows with NULL group_min/group_max)
-    const transformParameterBasePrices = (pricingRows: any[]) => {
+    // Also ensure parameters with groups have a base price entry (default to 0)
+    const transformParameterBasePrices = (pricingRows: any[], groupPricingData: Record<string, any[]>) => {
       const basePrices: Record<string, number> = {};
 
       pricingRows.forEach(row => {
@@ -268,6 +269,14 @@ export async function GET(
             (row.group_max === null || row.group_max === undefined) &&
             row.parameter_id) {
           basePrices[row.parameter_id] = parseFloat(row.amount);
+        }
+      });
+
+      // Ensure parameters with group pricing have a base price entry (default to 0)
+      // This fixes the bug where parameters with basePrice=0 and groups don't show in PricingTable
+      Object.keys(groupPricingData).forEach(paramId => {
+        if (paramId !== 'inventory' && !(paramId in basePrices)) {
+          basePrices[paramId] = 0;
         }
       });
 
@@ -383,6 +392,9 @@ export async function GET(
       row.event_id === null || row.event_id === undefined
     );
 
+    // Transform group pricing first, then use it for parameter base prices
+    const groupPricingData = transformGroupPricing(basePricingRows);
+
     return NextResponse.json({
       item: {
         ...item,
@@ -394,8 +406,8 @@ export async function GET(
         pricing_rate: pricingResult.rows[0]?.rate_type || 'per_night',
         calendar_status: item.default_calendar_status || 'available',
         base_price: getInventoryBasePrice(basePricingRows),
-        group_pricing: transformGroupPricing(basePricingRows),
-        parameter_base_prices: transformParameterBasePrices(basePricingRows),
+        group_pricing: groupPricingData,
+        parameter_base_prices: transformParameterBasePrices(basePricingRows, groupPricingData),
         event_pricing: transformPricingWithEvents(pricingResult.rows),
         deposit_type: depositResult.rows[0]?.type
           ? mapDepositTypeFromDb(depositResult.rows[0].type)

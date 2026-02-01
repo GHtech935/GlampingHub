@@ -42,7 +42,7 @@ export async function getCronJobConfig(jobSlug: string): Promise<CronJobConfig |
  * Acquire lock for cron job execution
  * Returns the job ID if lock is acquired, null otherwise
  */
-export async function acquireJobLock(jobSlug: string): Promise<number | null> {
+export async function acquireJobLock(jobSlug: string): Promise<string | null> {
   const client = await pool.connect();
   try {
     // Try to acquire lock by setting is_running = true
@@ -88,14 +88,26 @@ export async function releaseJobLock(jobSlug: string): Promise<void> {
 /**
  * Create a log entry for cron job execution start
  */
-export async function createJobLog(jobSlug: string): Promise<number> {
+export async function createJobLog(jobSlug: string): Promise<string> {
   const client = await pool.connect();
   try {
-    const result = await client.query(
-      `INSERT INTO cron_job_logs (job_slug, status, started_at)
-       VALUES ($1, 'running', NOW())
-       RETURNING id`,
+    // Get job info first to include job_id and job_name
+    const jobResult = await client.query(
+      `SELECT id, name FROM cron_jobs WHERE slug = $1`,
       [jobSlug]
+    );
+
+    if (jobResult.rows.length === 0) {
+      throw new Error(`Job not found: ${jobSlug}`);
+    }
+
+    const job = jobResult.rows[0];
+
+    const result = await client.query(
+      `INSERT INTO cron_job_logs (job_id, job_name, job_slug, status, started_at)
+       VALUES ($1, $2, $3, 'running', NOW())
+       RETURNING id`,
+      [job.id, job.name, jobSlug]
     );
 
     return result.rows[0].id;
@@ -108,7 +120,7 @@ export async function createJobLog(jobSlug: string): Promise<number> {
  * Update log entry when job completes
  */
 export async function completeJobLog(
-  logId: number,
+  logId: string,
   result: CronJobResult
 ): Promise<void> {
   const client = await pool.connect();

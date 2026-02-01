@@ -3947,6 +3947,15 @@ export function ItemFormWizard({
                                           ...groupPricing,
                                           [param.id]: [...existingGroups, { min: newMin, max: newMax, price: 0, pricing_mode: 'per_person' }]
                                         });
+
+                                        // Ensure base price key exists when adding group pricing
+                                        // This fixes the bug where parameters with groups but no base price don't show in PricingTable
+                                        if (!(param.id in parameterBasePrices)) {
+                                          setParameterBasePrices({
+                                            ...parameterBasePrices,
+                                            [param.id]: 0
+                                          });
+                                        }
                                       }}
                                     >
                                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

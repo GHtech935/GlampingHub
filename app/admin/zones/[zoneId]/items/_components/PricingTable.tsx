@@ -71,9 +71,11 @@ export function PricingTable({
 }: PricingTableProps) {
   const t = useTranslations("admin.pricingTable");
 
-  // Filter to only show parameters that have base prices set
+  // Filter to only show parameters that have base prices set OR have group pricing
+  // This ensures parameters with price=0 but with groups are still shown
   const activeParameters = parameters.filter(param =>
-    basePrices[param.id] !== undefined && basePrices[param.id] !== null
+    param.id in basePrices ||
+    (groupPricing[param.id] && groupPricing[param.id].length > 0)
   );
 
   // Check if inventory column should be shown
