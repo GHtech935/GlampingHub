@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await pool.query(
-      `SELECT id, zone_id, name, description, weight, status, is_tent_category, created_at, updated_at
+      `SELECT id, zone_id, name, description, weight, status, is_tent_category, show_to_customer, created_at, updated_at
        FROM glamping_menu_categories
        WHERE zone_id = $1
        ORDER BY weight ASC, created_at DESC`,
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { zone_id, name, description, weight, status, is_tent_category } = body;
+    const { zone_id, name, description, weight, status, is_tent_category, show_to_customer } = body;
 
     // Validation
     if (!zone_id || !name) {
@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
 
     const result = await pool.query(
       `INSERT INTO glamping_menu_categories
-       (zone_id, name, description, weight, status, is_tent_category)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       (zone_id, name, description, weight, status, is_tent_category, show_to_customer)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
         zone_id,
@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
         description ? JSON.stringify(description) : null,
         weight || 0,
         status || 'active',
-        is_tent_category !== false
+        is_tent_category !== false,
+        show_to_customer !== false
       ]
     );
 

@@ -90,6 +90,7 @@ export async function GET(
 
     // Get menu products linked to this item
     // Note: glamping_menu_items uses 'status' (active/hidden) and 'is_available' columns
+    // Filter by show_to_customer: only show categories that are visible to customers
     const menuProductsQuery = `
       SELECT
         mi.id as menu_item_id,
@@ -110,6 +111,7 @@ export async function GET(
       JOIN glamping_menu_items mi ON imp.menu_item_id = mi.id
       LEFT JOIN glamping_menu_categories mc ON mi.category_id = mc.id
       WHERE imp.item_id = $1
+        AND (mc.show_to_customer = true OR mc.show_to_customer IS NULL OR mc.id IS NULL)
       ORDER BY imp.display_order, mi.name
     `;
     const { rows: menuProducts } = await pool.query(menuProductsQuery, [id]);

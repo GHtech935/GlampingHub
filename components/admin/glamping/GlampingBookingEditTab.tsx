@@ -22,6 +22,7 @@ import { GlampingEditTentModal } from "./GlampingEditTentModal";
 import { GlampingEditMenuProductModal } from "./GlampingEditMenuProductModal";
 import { AddAdditionalCostModal } from "./AddAdditionalCostModal";
 import { GlampingEditAdditionalCostModal } from "./GlampingEditAdditionalCostModal";
+import { GlampingAddTentModal } from "./GlampingAddTentModal";
 
 interface TentItem {
   id: string;
@@ -91,6 +92,7 @@ interface GlampingBookingEditTabProps {
     status: string;
     paymentStatus: string;
   };
+  zoneId?: string;
   locale?: Locale;
   onRefresh: () => void;
   isUpdating?: boolean;
@@ -128,6 +130,7 @@ const texts = {
     additionalCosts: 'Chi phí phát sinh',
     addAdditionalCost: 'Thêm',
     unitPrice: 'Đơn giá',
+    addTent: 'Thêm lều',
   },
   en: {
     loading: 'Loading...',
@@ -160,11 +163,13 @@ const texts = {
     additionalCosts: 'Additional Costs',
     addAdditionalCost: 'Add',
     unitPrice: 'Unit Price',
+    addTent: 'Add Tent',
   },
 };
 
 export function GlampingBookingEditTab({
   booking,
+  zoneId,
   locale = 'vi',
   onRefresh,
   isUpdating = false,
@@ -177,6 +182,7 @@ export function GlampingBookingEditTab({
   const [editingProduct, setEditingProduct] = useState<ProductEditData | null>(null);
   const [editingAdditionalCost, setEditingAdditionalCost] = useState<AdditionalCostItem | null>(null);
   const [showAddCostModal, setShowAddCostModal] = useState(false);
+  const [showAddTentModal, setShowAddTentModal] = useState(false);
   const [deletingItem, setDeletingItem] = useState<{
     type: 'tent' | 'menu_product' | 'additional_cost';
     id: string;
@@ -251,6 +257,12 @@ export function GlampingBookingEditTab({
     onRefresh();
   };
 
+  const handleTentAdded = () => {
+    setShowAddTentModal(false);
+    fetchItems();
+    onRefresh();
+  };
+
   const openTentEdit = (tent: TentItem) => {
     setEditingTent({
       id: tent.id,
@@ -315,11 +327,23 @@ export function GlampingBookingEditTab({
   return (
     <div className="space-y-4">
       {/* Tents Section */}
-      {data.tents.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b">
-            <h3 className="font-semibold text-gray-900">{t.tents}</h3>
-          </div>
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">{t.tents}</h3>
+          {zoneId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddTentModal(true)}
+              disabled={isUpdating}
+              className="h-7 px-2 text-xs"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              {t.addTent}
+            </Button>
+          )}
+        </div>
+        {data.tents.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -387,8 +411,12 @@ export function GlampingBookingEditTab({
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="p-4 text-center text-sm text-gray-500">
+            {locale === 'vi' ? 'Chưa có lều nào' : 'No tents yet'}
+          </div>
+        )}
+      </div>
 
       {/* Menu Products Section */}
       {data.menuProducts.length > 0 && (
@@ -603,6 +631,18 @@ export function GlampingBookingEditTab({
           onSave={handleAdditionalCostSaved}
           cost={editingAdditionalCost}
           bookingId={booking.id}
+          locale={locale}
+        />
+      )}
+
+      {/* Add Tent Modal */}
+      {zoneId && (
+        <GlampingAddTentModal
+          isOpen={showAddTentModal}
+          onClose={() => setShowAddTentModal(false)}
+          onSave={handleTentAdded}
+          bookingId={booking.id}
+          zoneId={zoneId}
           locale={locale}
         />
       )}

@@ -3399,6 +3399,7 @@
                         "types": {
                             "seasonal": "Sự kiện Item theo mùa",
                             "seasonalDesc": "Đặt giá hoặc khả năng sử dụng theo mùa",
+                            "special": "Sự kiện đặc biệt",
                             "specialPricing": "Sự kiện Giá đặc biệt",
                             "specialPricingDesc": "Áp dụng giá đặc biệt cho các ngày cụ thể",
                             "closureDates": "Sự kiện Ngày đóng cửa",
@@ -3975,7 +3976,10 @@
                 "updateSuccess": "Cập nhật category thành công",
                 "deleteSuccess": "Xóa category thành công",
                 "isTentCategory": "Đây là danh mục lều/menu",
-                "isTentCategoryHelp": "Nếu chọn, danh mục này sẽ hiển thị trên trang Menu. Nếu không chọn, sẽ hiển thị trên trang Item chung."
+                "isTentCategoryHelp": "Nếu chọn, danh mục này sẽ hiển thị trên trang Menu. Nếu không chọn, sẽ hiển thị trên trang Item chung.",
+                "showToCustomer": "Hiển thị cho khách hàng",
+                "showToCustomerHelp": "Bật để khách hàng có thể chọn món trong danh mục này khi đặt phòng",
+                "showToCustomerBadge": "Khách chọn"
             },
             "zones": {
                 "title": "Khu Glamping",

@@ -58,7 +58,7 @@ export default function CategoryItemSelector({
         <CheckboxTree
           items={categories.map(cat => ({
             id: cat.id,
-            label: `${cat.items.length} ${t('items')}`,
+            label: `${cat.name} (${cat.items.length} ${t('items')})`,
             children: cat.items.map(item => ({
               id: item.id,
               label: item.name

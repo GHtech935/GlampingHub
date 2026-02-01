@@ -89,6 +89,7 @@ export async function GET(
         JOIN glamping_menu_items mi ON imp.menu_item_id = mi.id
         LEFT JOIN glamping_menu_categories mc ON mi.category_id = mc.id
         WHERE imp.item_id = $1 AND mi.status = 'active' AND mi.is_available = true
+          AND (mc.show_to_customer = true OR mc.show_to_customer IS NULL OR mc.id IS NULL)
         ORDER BY imp.display_order, mc.weight, mi.sort_order, mi.name`,
         [tent.item_id, locale]
       );

@@ -686,8 +686,35 @@ export function ItemFormWizard({
 
       setUploadingImages(false);
 
+      // CREATE PENDING CATEGORIES BEFORE ITEM CREATION
+      const categoryTempToRealIdMap: Record<string, string> = {};
+      if (pendingCategories.length > 0) {
+        for (const category of pendingCategories) {
+          const response = await fetch('/api/admin/glamping/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: category.name,
+              weight: 1000,
+              status: "active"
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.category?.id) {
+              categoryTempToRealIdMap[category.id] = result.category.id;
+            }
+          } else {
+            const errorResult = await response.json();
+            throw new Error(errorResult.error || 'Failed to create category');
+          }
+        }
+        setPendingCategories([]);
+      }
+
       // CREATE PENDING TAGS BEFORE ITEM CREATION
-      const tempToRealIdMap: Record<string, string> = {};
+      const tagTempToRealIdMap: Record<string, string> = {};
 
       if (pendingTags.length > 0) {
         for (const tag of pendingTags) {
@@ -704,7 +731,7 @@ export function ItemFormWizard({
           if (response.ok) {
             const result = await response.json();
             // Map temp ID to real UUID
-            tempToRealIdMap[tag.id] = result.tag.id;
+            tagTempToRealIdMap[tag.id] = result.tag.id;
           } else {
             // If any tag creation fails, throw error to stop item creation
             const errorResult = await response.json();
@@ -714,7 +741,18 @@ export function ItemFormWizard({
       }
 
       // Map selectedTags: replace temp IDs with real UUIDs
-      const mappedTags = selectedTags.map(tagId => tempToRealIdMap[tagId] || tagId);
+      const mappedTags = selectedTags.map(tagId => tagTempToRealIdMap[tagId] || tagId);
+
+      // Map category_id: replace temp ID with real UUID if needed
+      let finalCategoryId = data.category_id || null;
+      if (finalCategoryId && categoryTempToRealIdMap[finalCategoryId]) {
+        finalCategoryId = categoryTempToRealIdMap[finalCategoryId];
+      }
+      // Safety check: if still a temp ID, set to null
+      if (finalCategoryId && typeof finalCategoryId === 'string' && finalCategoryId.startsWith('temp-')) {
+        console.warn('Category temp ID not mapped, setting to null:', finalCategoryId);
+        finalCategoryId = null;
+      }
 
       // Transform timeslots format for database (if allocation type is timeslots)
       const dayNameToNumber: Record<string, number> = {
@@ -741,6 +779,8 @@ export function ItemFormWizard({
       const submitData = {
         ...data,
         sku: finalSKU,
+        // Category (Step 1) - use mapped category ID with real UUID
+        category_id: finalCategoryId,
         // Tags (Step 1) - use mapped tags with real UUIDs
         tags: mappedTags,
         // Media (Step 2)

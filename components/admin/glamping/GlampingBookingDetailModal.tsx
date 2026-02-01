@@ -861,6 +861,7 @@ export function GlampingBookingDetailModal({
                 status: booking.status,
                 paymentStatus: booking.paymentStatus,
               }}
+              zoneId={booking.zone?.id}
               locale={locale}
               onRefresh={() => {
                 fetchBookingDetails();

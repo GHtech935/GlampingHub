@@ -364,13 +364,13 @@ export async function recalculateGlampingBookingTotals(
 }
 
 /**
- * Log an edit/delete action to glamping booking history.
+ * Log an edit/delete/add action to glamping booking history.
  */
 export async function logGlampingBookingEditAction(
   client: PoolClient,
   bookingId: string,
   userId: string,
-  actionType: 'item_edit' | 'item_delete',
+  actionType: 'item_edit' | 'item_delete' | 'item_add',
   description: string
 ): Promise<void> {
   // Verify user exists in users table to avoid FK constraint violation

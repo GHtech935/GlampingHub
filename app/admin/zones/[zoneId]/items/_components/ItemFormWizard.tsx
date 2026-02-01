@@ -640,7 +640,7 @@ export function ItemFormWizard({
     fetchData();
   }, [toast]);
 
-  // Initialize incremental mode from URL parameters
+  // Initialize incremental mode from URL parameters and fetch item data
   useEffect(() => {
     if (typeof window !== 'undefined' && mode === 'create') {
       const params = new URLSearchParams(window.location.search);
@@ -665,8 +665,126 @@ export function ItemFormWizard({
           setCurrentStep(stepMap[hash]);
         }
 
-        // Optionally: Fetch item data to populate form
-        // (For now, user can just continue editing)
+        // Fetch item data to populate form
+        const fetchItemData = async () => {
+          try {
+            const response = await fetch(`/api/admin/glamping/items/${itemIdFromUrl}`);
+            if (response.ok) {
+              const data = await response.json();
+              const item = data.item;
+
+              if (item) {
+                // Populate form fields
+                form.setValue('name', item.name || '');
+                form.setValue('sku', item.sku || '');
+                form.setValue('category_id', item.category_id || '');
+                form.setValue('summary', item.summary || '');
+                form.setValue('inventory_quantity', item.inventory_quantity || 1);
+                form.setValue('unlimited_inventory', item.unlimited_inventory || false);
+                form.setValue('allocation_type', item.allocation_type || 'per_night');
+                form.setValue('visibility', item.visibility || 'everyone');
+                form.setValue('default_calendar_status', item.default_calendar_status || 'available');
+                form.setValue('is_active', item.is_active !== false);
+
+                // Set tags
+                if (item.tags && item.tags.length > 0) {
+                  setSelectedTags(item.tags.map((t: any) => t.id));
+                }
+
+                // Set media/images
+                if (item.media && item.media.length > 0) {
+                  const imageMedia = item.media.filter((m: any) => m.type === 'image');
+                  setImages(imageMedia.map((m: any) => ({
+                    url: m.url,
+                    preview: m.url,
+                    caption: m.caption || ''
+                  })));
+                }
+
+                // Set YouTube URL
+                if (item.youtube_url) {
+                  setYoutubeUrl(item.youtube_url);
+                }
+                if (item.video_start_time) {
+                  setYoutubeStartTime(item.video_start_time);
+                }
+
+                // Set parameters
+                if (item.parameters && item.parameters.length > 0) {
+                  setAttachedParameters(item.parameters.map((p: any) => ({
+                    id: p.id,
+                    name: p.name,
+                    color_code: p.color_code || '#3b82f6',
+                    inventory: p.controls_inventory ? 'Controlled' : 'Unlimited',
+                    visibility: p.visibility || 'everyone',
+                    min_max: {
+                      min: p.min_quantity ?? 0,
+                      max: p.max_quantity ?? 0
+                    }
+                  })));
+                }
+
+                // Set pricing
+                if (item.pricing_rate) {
+                  setPricingRate(item.pricing_rate);
+                }
+                if (item.group_pricing) {
+                  setGroupPricing(item.group_pricing);
+                }
+                if (item.parameter_base_prices) {
+                  setParameterBasePrices(item.parameter_base_prices);
+                }
+                if (item.event_pricing) {
+                  setEventPricing(item.event_pricing);
+                }
+
+                // Set deposit
+                if (item.deposit_type) {
+                  setDepositType(item.deposit_type);
+                }
+                if (item.deposit_value !== undefined) {
+                  setDepositValue(item.deposit_value);
+                }
+
+                // Set menu products
+                if (item.menu_products && item.menu_products.length > 0) {
+                  setMenuProducts(item.menu_products);
+                }
+
+                // Set timeslots
+                if (item.timeslots && item.timeslots.length > 0) {
+                  setTimeslots(item.timeslots.map((ts: any) => ({
+                    startTime: ts.start_time,
+                    endTime: ts.end_time,
+                    selectedDays: (ts.days_of_week || []).map((d: number) => {
+                      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                      return dayNames[d] || 'monday';
+                    })
+                  })));
+                }
+
+                // Set taxes
+                if (item.taxes && item.taxes.length > 0) {
+                  setTaxes(item.taxes);
+                }
+
+                // Set events
+                if (item.events && item.events.length > 0) {
+                  setAttachedEvents(item.events);
+                }
+
+                // Set display order
+                if (item.display_order !== undefined) {
+                  setDisplayOrder(item.display_order);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching item data:', error);
+          }
+        };
+
+        fetchItemData();
       }
     }
   }, [mode, initialData]);
@@ -676,7 +794,7 @@ export function ItemFormWizard({
     try {
       const [categoriesRes, itemsRes] = await Promise.all([
         fetch(`/api/admin/glamping/categories?zone_id=${zoneId}&is_tent_category=${isTentCategory}`),
-        fetch(`/api/admin/glamping/items?zone_id=${zoneId}`)
+        fetch(`/api/admin/glamping/items?zone_id=${zoneId}&is_tent_category=${isTentCategory}`)
       ]);
 
       const categoriesData = await categoriesRes.json();
@@ -685,27 +803,64 @@ export function ItemFormWizard({
       // Group items by category
       const categoryMap = new Map<string, EventCategory>();
 
-      categoriesData.categories.forEach((cat: any) => {
+      // Add all categories first
+      (categoriesData.categories || []).forEach((cat: any) => {
         categoryMap.set(cat.id, { ...cat, items: [] });
       });
 
-      itemsData.items.forEach((item: any) => {
-        const category = categoryMap.get(item.category_id);
-        if (category) {
-          category.items.push(item);
+      // Create "Uncategorized" group for items without category
+      const uncategorizedCategory: EventCategory = {
+        id: 'uncategorized',
+        name: 'Chưa phân loại',
+        items: []
+      };
+
+      // Group items by their category
+      (itemsData.items || []).forEach((item: any) => {
+        if (item.category_id && categoryMap.has(item.category_id)) {
+          const category = categoryMap.get(item.category_id);
+          if (category) {
+            category.items.push(item);
+          }
+        } else {
+          // Add to uncategorized
+          uncategorizedCategory.items.push(item);
         }
       });
 
-      setEventCategories(Array.from(categoryMap.values()));
+      // Build final list: all categories with items + uncategorized if has items
+      const result: EventCategory[] = [];
+
+      // Add categories that have items
+      categoryMap.forEach(cat => {
+        if (cat.items.length > 0) {
+          result.push(cat);
+        }
+      });
+
+      // Add uncategorized at the end if has items
+      if (uncategorizedCategory.items.length > 0) {
+        result.push(uncategorizedCategory);
+      }
+
+      setEventCategories(result);
     } catch (error) {
       console.error('Failed to fetch event categories:', error);
     }
   };
 
-  // Fetch event categories when modal opens
+  // Fetch event categories when modal opens and pre-select current item
   useEffect(() => {
     if (showCreateEventModal || showEditEventModal) {
       fetchEventCategoriesAndItems();
+
+      // Pre-select current item when creating new event
+      if (showCreateEventModal) {
+        const currentItemId = mode === 'edit' ? itemId : createdItemId;
+        if (currentItemId && selectedItemsForEvent.length === 0) {
+          setSelectedItemsForEvent([currentItemId]);
+        }
+      }
     }
   }, [showCreateEventModal, showEditEventModal]);
 
@@ -938,8 +1093,38 @@ export function ItemFormWizard({
           .map(img => ({ url: img.url!, caption: img.caption }));
       }
 
+      // CREATE PENDING CATEGORIES BEFORE ITEM CREATION/UPDATE
+      const categoryTempToRealIdMap: Record<string, string> = {};
+      if (pendingCategories.length > 0) {
+        for (const category of pendingCategories) {
+          const response = await fetch('/api/admin/glamping/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: category.name,
+              weight: 1000,
+              status: "active",
+              zone_id: zoneId,
+              is_tent_category: isTentCategory
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.category?.id) {
+              categoryTempToRealIdMap[category.id] = result.category.id;
+            }
+          } else {
+            const errorResult = await response.json();
+            throw new Error(errorResult.error || 'Failed to create category');
+          }
+        }
+        // Clear pending categories after creation
+        setPendingCategories([]);
+      }
+
       // CREATE PENDING TAGS BEFORE ITEM CREATION (only for non-incremental create)
-      const tempToRealIdMap: Record<string, string> = {};
+      const tagTempToRealIdMap: Record<string, string> = {};
 
       if (!isUpdateMode && pendingTags.length > 0) {
         for (const tag of pendingTags) {
@@ -957,7 +1142,7 @@ export function ItemFormWizard({
           if (response.ok) {
             const result = await response.json();
             // Map temp ID to real UUID
-            tempToRealIdMap[tag.id] = result.tag.id;
+            tagTempToRealIdMap[tag.id] = result.tag.id;
           } else {
             // If any tag creation fails, throw error to stop item creation
             const errorResult = await response.json();
@@ -967,7 +1152,18 @@ export function ItemFormWizard({
       }
 
       // Map selectedTags: replace temp IDs with real UUIDs
-      const mappedTags = selectedTags.map(tagId => tempToRealIdMap[tagId] || tagId);
+      const mappedTags = selectedTags.map(tagId => tagTempToRealIdMap[tagId] || tagId);
+
+      // Map category_id: replace temp ID with real UUID if needed
+      let finalCategoryId = data.category_id || null;
+      if (finalCategoryId && categoryTempToRealIdMap[finalCategoryId]) {
+        finalCategoryId = categoryTempToRealIdMap[finalCategoryId];
+      }
+      // Safety check: if still a temp ID, set to null
+      if (finalCategoryId && typeof finalCategoryId === 'string' && finalCategoryId.startsWith('temp-')) {
+        console.warn('Category temp ID not mapped in onSubmit, setting to null:', finalCategoryId);
+        finalCategoryId = null;
+      }
 
       // Transform timeslots format for database (if allocation type is timeslots)
       const dayNameToNumber: Record<string, number> = {
@@ -995,6 +1191,8 @@ export function ItemFormWizard({
         ...data,
         sku: finalSKU,
         zone_id: zoneId, // Add zone_id for multi-zone support
+        // Category (Step 1) - use mapped category ID with real UUID
+        category_id: finalCategoryId,
         // Tags (Step 1) - use mapped tags with real UUIDs
         tags: mappedTags,
         // Display order (Step 1)
@@ -1186,7 +1384,12 @@ export function ItemFormWizard({
       try {
         setLoading(true);
 
-        // 2. Create pending categories first (existing logic)
+        // 2. Get form data FIRST (before any state changes)
+        const formData = form.getValues();
+        const originalCategoryId = formData.category_id;
+
+        // 3. Create pending categories - use mapping
+        const categoryTempToRealIdMap: Record<string, string> = {};
         if (pendingCategories.length > 0) {
           for (const category of pendingCategories) {
             const response = await fetch('/api/admin/glamping/categories', {
@@ -1202,11 +1405,12 @@ export function ItemFormWizard({
             });
 
             const result = await response.json();
-            if (response.ok) {
-              // Update form value with real ID
-              if (form.getValues('category_id') === category.id) {
-                form.setValue('category_id', result.category.id);
-              }
+            if (response.ok && result.category?.id) {
+              // Store mapping from temp ID to real ID
+              categoryTempToRealIdMap[category.id] = result.category.id;
+            } else {
+              console.error('Failed to create category:', category.name, result.error);
+              throw new Error(result.error || 'Failed to create category');
             }
           }
 
@@ -1219,15 +1423,14 @@ export function ItemFormWizard({
           setCategories(catData.categories || []);
         }
 
-        // 3. Generate SKU if not provided
-        const formData = form.getValues();
+        // 4. Generate SKU if not provided
         let finalSKU = formData.sku;
         if (!finalSKU) {
           finalSKU = await generateUniqueSKU(formData.name);
         }
 
-        // 4. Create pending tags before item
-        const tempToRealIdMap: Record<string, string> = {};
+        // 5. Create pending tags before item
+        const tagTempToRealIdMap: Record<string, string> = {};
         if (pendingTags.length > 0) {
           for (const tag of pendingTags) {
             const response = await fetch('/api/admin/glamping/tags', {
@@ -1242,18 +1445,34 @@ export function ItemFormWizard({
             });
             if (response.ok) {
               const result = await response.json();
-              tempToRealIdMap[tag.id] = result.tag.id;
+              tagTempToRealIdMap[tag.id] = result.tag.id;
             }
           }
         }
-        const mappedTags = selectedTags.map(tagId => tempToRealIdMap[tagId] || tagId);
+        const mappedTags = selectedTags.map(tagId => tagTempToRealIdMap[tagId] || tagId);
 
-        // 5. POST Step 1 data with defaults for required fields
+        // 6. Map category_id: use original value and check mapping
+        let finalCategoryId: string | null = originalCategoryId || null;
+
+        if (finalCategoryId && typeof finalCategoryId === 'string') {
+          // Check if this is a temp ID that needs mapping
+          if (finalCategoryId.startsWith('temp-')) {
+            if (categoryTempToRealIdMap[finalCategoryId]) {
+              finalCategoryId = categoryTempToRealIdMap[finalCategoryId];
+            } else {
+              console.error('Temp category_id not found in mapping:', finalCategoryId);
+              finalCategoryId = null;
+            }
+          }
+          // else: already a real UUID, use as-is
+        }
+
+        // 6. POST Step 1 data with defaults for required fields
         const step1Data = {
           name: formData.name,
           sku: finalSKU,
           zone_id: zoneId,
-          category_id: formData.category_id || null,
+          category_id: finalCategoryId,
           summary: formData.summary || null,
           tags: mappedTags,
           // Defaults for required DB fields

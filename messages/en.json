@@ -3399,6 +3399,7 @@
                         "types": {
                             "seasonal": "Seasonal Item Event",
                             "seasonalDesc": "Set seasonal pricing or availability",
+                            "special": "Special Event",
                             "specialPricing": "Special Pricing Rate Item Event",
                             "specialPricingDesc": "Apply special pricing for specific dates",
                             "closureDates": "Closure Dates Item Event",
@@ -3953,7 +3954,10 @@
                 "updateSuccess": "Category updated successfully",
                 "deleteSuccess": "Category deleted successfully",
                 "isTentCategory": "This is a tent/menu category",
-                "isTentCategoryHelp": "If checked, this category will appear on the Menu page. If unchecked, it will appear on the Common Items page."
+                "isTentCategoryHelp": "If checked, this category will appear on the Menu page. If unchecked, it will appear on the Common Items page.",
+                "showToCustomer": "Show to customer",
+                "showToCustomerHelp": "Enable to allow customers to select items from this category when booking",
+                "showToCustomerBadge": "Customer select"
             },
             "zones": {
                 "title": "Glamping Zones",

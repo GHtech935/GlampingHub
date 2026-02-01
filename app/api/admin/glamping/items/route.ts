@@ -190,12 +190,19 @@ export async function POST(request: NextRequest) {
       );
       const nextDisplayOrder = maxOrderResult.rows[0].next_order;
 
+      // Validate category_id - skip temp IDs
+      let validCategoryId = category_id || null;
+      if (validCategoryId && typeof validCategoryId === 'string' && validCategoryId.startsWith('temp-')) {
+        console.warn('Skipping temp category_id:', validCategoryId);
+        validCategoryId = null;
+      }
+
       // Insert item
       const itemResult = await client.query(
         `INSERT INTO glamping_items (name, sku, zone_id, category_id, summary, display_order)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id`,
-        [name, sku || null, zone_id, category_id || null, summary || null, nextDisplayOrder]
+        [name, sku || null, zone_id, validCategoryId, summary || null, nextDisplayOrder]
       );
 
       const itemId = itemResult.rows[0].id;
@@ -233,7 +240,37 @@ export async function POST(request: NextRequest) {
 
       // Insert tags if provided
       if (tags && tags.length > 0) {
-        for (const tagId of tags) {
+        for (const tag of tags) {
+          let tagId: string;
+
+          // Check if this is a new tag (temp ID or object with name)
+          if (typeof tag === 'object' && tag.name) {
+            // It's a tag object, check if it exists or create new
+            if (tag.id && !String(tag.id).startsWith('temp-')) {
+              tagId = tag.id;
+            } else {
+              // Create new tag
+              const newTagResult = await client.query(
+                `INSERT INTO glamping_tags (name) VALUES ($1)
+                 ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                 RETURNING id`,
+                [tag.name]
+              );
+              tagId = newTagResult.rows[0].id;
+            }
+          } else if (typeof tag === 'string') {
+            // It's a string ID
+            if (tag.startsWith('temp-')) {
+              // Skip temp tags without name - shouldn't happen but safety check
+              console.warn('Skipping temp tag without name:', tag);
+              continue;
+            }
+            tagId = tag;
+          } else {
+            // Unknown format, skip
+            continue;
+          }
+
           await client.query(
             'INSERT INTO glamping_item_tags (item_id, tag_id) VALUES ($1, $2)',
             [itemId, tagId]

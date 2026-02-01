@@ -39,6 +39,7 @@ interface MenuCategory {
   weight: number;
   status: string;
   is_tent_category?: boolean;
+  show_to_customer?: boolean;
 }
 
 interface MenuCategoryModalProps {
@@ -70,6 +71,7 @@ export function MenuCategoryModal({
     weight: 0,
     status: "active",
     is_tent_category: true,
+    show_to_customer: true,
   });
 
   useEffect(() => {
@@ -105,6 +107,7 @@ export function MenuCategoryModal({
       weight: 0,
       status: "active",
       is_tent_category: true,
+      show_to_customer: true,
     });
     setEditingId(null);
     setShowForm(false);
@@ -124,6 +127,7 @@ export function MenuCategoryModal({
       weight: category.weight,
       status: category.status,
       is_tent_category: category.is_tent_category !== false,
+      show_to_customer: category.show_to_customer !== false,
     });
     setEditingId(category.id);
     setShowForm(true);
@@ -155,6 +159,7 @@ export function MenuCategoryModal({
         weight: formData.weight,
         status: formData.status,
         is_tent_category: formData.is_tent_category,
+        show_to_customer: formData.show_to_customer,
       };
 
       const url = editingId
@@ -350,6 +355,22 @@ export function MenuCategoryModal({
                 {t("isTentCategoryHelp")}
               </p>
 
+              <div className="flex items-center space-x-2 pt-2">
+                <Checkbox
+                  id="show_to_customer"
+                  checked={formData.show_to_customer}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, show_to_customer: checked as boolean })
+                  }
+                />
+                <Label htmlFor="show_to_customer" className="font-normal cursor-pointer">
+                  {t("showToCustomer")}
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500 ml-6">
+                {t("showToCustomerHelp")}
+              </p>
+
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={resetForm}>
                   {t("cancel")}
@@ -391,7 +412,14 @@ export function MenuCategoryModal({
                     <TableRow key={category.id}>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{category.name.vi}</div>
+                          <div className="font-medium flex items-center gap-2">
+                            {category.name.vi}
+                            {category.show_to_customer !== false && (
+                              <Badge variant="outline" className="text-xs">
+                                {t("showToCustomerBadge")}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="text-xs text-gray-500">{category.name.en}</div>
                         </div>
                       </TableCell>
