@@ -35,6 +35,8 @@ interface ItemBookingSummaryPanelProps {
   itemSku?: string;
   itemImageUrl?: string;
   locale: 'vi' | 'en';
+  enableSinglePersonSurchargeAlert?: boolean;
+  singlePersonSurchargeAlertText?: { vi: string; en: string };
 }
 
 export function ItemBookingSummaryPanel({
@@ -52,6 +54,8 @@ export function ItemBookingSummaryPanel({
   itemSku,
   itemImageUrl,
   locale,
+  enableSinglePersonSurchargeAlert,
+  singlePersonSurchargeAlertText,
 }: ItemBookingSummaryPanelProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -304,6 +308,9 @@ export function ItemBookingSummaryPanel({
                 ? (param.name.vi || param.name.en || '')
                 : (param.name || '');
 
+              // Check if should show single person surcharge alert for this parameter
+              const showParamAlert = enableSinglePersonSurchargeAlert && qty === 1 && pricePerUnitAllNights > 0 && singlePersonSurchargeAlertText;
+
               return (
                 <div key={param.id} className={`${index > 0 ? 'pt-4' : ''} ${index < parameters.length - 1 ? 'pb-4' : ''}`}>
                   {/* Mobile: vertical stack, Desktop (md+): horizontal row */}
@@ -317,9 +324,17 @@ export function ItemBookingSummaryPanel({
                           <span>Đang tải giá...</span>
                         </div>
                       ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
-                        <div className="text-xs text-gray-500 truncate">
-                          {formatCurrency(pricePerUnitAllNights)}/{isPerGroup ? 'nhóm' : 'khách'} ({nights} {t.nights})
-                        </div>
+                        <>
+                          <div className="text-xs text-gray-500 truncate">
+                            {formatCurrency(pricePerUnitAllNights)}/{isPerGroup ? 'nhóm' : 'khách'} ({nights} {t.nights})
+                          </div>
+                          {/* Single Person Surcharge Alert - below price line */}
+                          {showParamAlert && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800 mt-1">
+                              {locale === 'vi' ? singlePersonSurchargeAlertText.vi : singlePersonSurchargeAlertText.en}
+                            </div>
+                          )}
+                        </>
                       ) : null}
                     </div>
 

@@ -68,6 +68,9 @@ interface GlampingDateRangePickerWithCalendarProps {
   overrideNightlyPricing?: Array<{ date: string; parameters: Record<string, number> }>
   // Loading state for pricing (from parent's pricing hook)
   pricingLoading?: boolean
+  // Single person surcharge alert props
+  enableSinglePersonSurchargeAlert?: boolean
+  singlePersonSurchargeAlertText?: { vi: string; en: string }
 }
 
 export function GlampingDateRangePickerWithCalendar({
@@ -83,7 +86,9 @@ export function GlampingDateRangePickerWithCalendar({
   overrideParameterPricing,
   overrideParameterPricingModes,
   overrideNightlyPricing,
-  pricingLoading = false
+  pricingLoading = false,
+  enableSinglePersonSurchargeAlert,
+  singlePersonSurchargeAlertText,
 }: GlampingDateRangePickerWithCalendarProps) {
   const [calendar, setCalendar] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(false)
@@ -616,6 +621,8 @@ export function GlampingDateRangePickerWithCalendar({
                             : nightlyParameterPricing
                       }
                       pricingLoading={pricingLoading}
+                      enableSinglePersonSurchargeAlert={enableSinglePersonSurchargeAlert}
+                      singlePersonSurchargeAlertText={singlePersonSurchargeAlertText}
                     />
                   )}
                 </div>

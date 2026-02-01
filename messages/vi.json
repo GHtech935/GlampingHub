@@ -4349,7 +4349,21 @@
                 "errorSaveTitle": "Lỗi khi lưu cài đặt",
                 "errorSaveDesc": "Không thể lưu cài đặt khu vực. Vui lòng thử lại.",
                 "errorLoadTitle": "Lỗi khi tải cài đặt",
-                "errorLoadDesc": "Không thể tải cài đặt khu vực. Vui lòng làm mới trang."
+                "errorLoadDesc": "Không thể tải cài đặt khu vực. Vui lòng làm mới trang.",
+                "email": {
+                    "title": "Cài Đặt Email",
+                    "description": "Cấu hình các tùy chọn email cho khu vực này",
+                    "dinnerReminderLabel": "Email nhắc đặt bữa tối",
+                    "dinnerReminderDescription": "Hiển thị nút chọn bữa tối trong email xác nhận đặt phòng"
+                },
+                "singlePersonSurcharge": {
+                    "title": "Thông Báo Phụ Thu 1 Người",
+                    "description": "Cấu hình thông báo phụ thu khi chỉ có 1 khách",
+                    "enableLabel": "Hiển thị dòng alert phụ thu 1 người",
+                    "enableDescription": "Hiển thị thông báo khi khách đặt với số lượng 1 người",
+                    "textViLabel": "Nội dung tiếng Việt",
+                    "textEnLabel": "Nội dung tiếng Anh"
+                }
             },
             "common": {
                 "loading": "Đang tải...",
@@ -5222,6 +5236,59 @@
             "error": "Lỗi",
             "success": "Thành công"
         }
+    },
+    "profile": {
+        "title": "Thông tin cá nhân",
+        "subtitle": "Quản lý thông tin tài khoản của bạn",
+        "personalInfo": "Thông tin cá nhân",
+        "personalInfoDesc": "Cập nhật thông tin cá nhân của bạn",
+        "securitySettings": "Bảo mật",
+        "securitySettingsDesc": "Quản lý mật khẩu và bảo mật tài khoản",
+        "firstName": "Tên",
+        "lastName": "Họ",
+        "email": "Email",
+        "phone": "Số điện thoại",
+        "country": "Quốc gia",
+        "address": "Địa chỉ",
+        "city": "Thành phố",
+        "postalCode": "Mã bưu điện",
+        "currentPassword": "Mật khẩu hiện tại",
+        "newPassword": "Mật khẩu mới",
+        "confirmPassword": "Xác nhận mật khẩu mới",
+        "saveChanges": "Lưu thay đổi",
+        "changePassword": "Đổi mật khẩu",
+        "updateProfile": "Cập nhật hồ sơ",
+        "loading": "Đang tải...",
+        "saving": "Đang lưu...",
+        "profileUpdated": "Cập nhật thông tin thành công!",
+        "passwordChanged": "Đổi mật khẩu thành công!",
+        "errorUpdating": "Lỗi khi cập nhật thông tin",
+        "errorChangingPassword": "Lỗi khi đổi mật khẩu",
+        "passwordMismatch": "Mật khẩu xác nhận không khớp",
+        "passwordTooShort": "Mật khẩu phải có ít nhất 6 ký tự",
+        "incorrectPassword": "Mật khẩu hiện tại không đúng",
+        "loginRequired": "Vui lòng đăng nhập để xem trang này",
+        "loginButton": "Đăng nhập",
+        "memberSince": "Thành viên từ",
+        "emailVerified": "Email đã xác thực",
+        "emailNotVerified": "Email chưa xác thực",
+        "verifyEmail": "Xác thực email",
+        "accountType": "Loại tài khoản",
+        "registeredAccount": "Tài khoản đã đăng ký",
+        "guestAccount": "Tài khoản khách",
+        "totalBookings": "Tổng số đặt phòng",
+        "lastBooking": "Đặt phòng gần nhất"
+    },
+    "wishlist": {
+        "title": "Danh sách yêu thích",
+        "empty": "Danh sách yêu thích trống",
+        "emptyDescription": "Lưu lại những nơi bạn yêu thích để dễ dàng tìm lại sau",
+        "exploreNow": "Khám phá ngay",
+        "items": "mục",
+        "addedToWishlist": "Đã thêm vào danh sách yêu thích",
+        "removedFromWishlist": "Đã xóa khỏi danh sách yêu thích",
+        "loginRequired": "Vui lòng đăng nhập để lưu",
+        "loginButton": "Đăng nhập"
     },
     "glampingPayment": {
         "depositPaymentTitle": "Thanh toán đặt cọc",

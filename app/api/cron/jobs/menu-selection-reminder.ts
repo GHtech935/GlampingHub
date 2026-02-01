@@ -70,6 +70,7 @@ export const menuSelectionReminder: CronJobFunction = async (params) => {
         AND b.check_in_date <= CURRENT_DATE + INTERVAL '3 days'
         AND b.status = 'confirmed'
         AND b.payment_status IN ('deposit_paid', 'fully_paid')
+        AND COALESCE(z.enable_dinner_reminder_email, true) = true
         AND NOT EXISTS (
           SELECT 1 FROM glamping_booking_menu_products gbmp
           WHERE gbmp.booking_id = b.id

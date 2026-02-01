@@ -1,7 +1,7 @@
 import * as brevo from '@getbrevo/brevo';
 import { query } from './db';
 import { EMAIL_TEMPLATES } from './email-templates-html';
-import { GLAMPING_EMAIL_TEMPLATES } from './glamping-email-templates-html';
+import { GLAMPING_EMAIL_TEMPLATES, generateDinnerSectionHTML } from './glamping-email-templates-html';
 
 // Get Brevo API instance
 function getBrevoApiInstance() {
@@ -475,7 +475,7 @@ export async function sendPasswordResetEmail({
   const resetUrl = `${appUrl}/reset-password/${resetToken}`;
 
   return sendTemplateEmail({
-    templateSlug: 'password-reset',
+    templateSlug: 'glamping-password-reset',
     to: [{ email: customerEmail, name: customerName }],
     variables: {
       customer_name: customerName,
@@ -679,6 +679,7 @@ export async function sendGlampingBookingConfirmation({
   numberOfGuests,
   glampingBookingId,
   items,
+  enableDinnerReminderEmail = true,
 }: {
   customerEmail: string;
   customerName: string;
@@ -691,6 +692,7 @@ export async function sendGlampingBookingConfirmation({
   numberOfGuests: number;
   glampingBookingId: string;
   items?: TentItemForEmail[];
+  enableDinnerReminderEmail?: boolean;
 }) {
   const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
   const confirmationUrl = `${appUrl}/glamping/booking/confirmation/${glampingBookingId}`;
@@ -710,6 +712,12 @@ export async function sendGlampingBookingConfirmation({
     }]);
   }
 
+  // Generate dinner section HTML (conditionally based on zone setting)
+  const dinnerSection = generateDinnerSectionHTML(
+    enableDinnerReminderEmail !== false,
+    confirmationUrl
+  );
+
   return sendGlampingTemplateEmail({
     templateSlug: 'glamping-booking-confirmation',
     to: [{ email: customerEmail, name: customerName }],
@@ -718,6 +726,7 @@ export async function sendGlampingBookingConfirmation({
       booking_reference: bookingCode,
       zone_name: zoneName,
       tents_section: tentsSection,
+      dinner_section: dinnerSection,
       total_amount: formatCurrency(totalAmount),
       confirmation_url: confirmationUrl,
     },
@@ -1295,4 +1304,66 @@ export async function sendGlampingTripReminder({
     },
     glampingBookingId,
   });
+}
+
+/**
+ * Send notification email to admin users when an email fails to send
+ */
+export async function sendGlampingAdminFailedEmailNotification({
+  bookingCode,
+  templateName,
+  recipientEmail,
+  errorMessage,
+  glampingBookingId,
+}: {
+  bookingCode: string;
+  templateName: string;
+  recipientEmail: string;
+  errorMessage: string;
+  glampingBookingId?: string;
+}): Promise<void> {
+  try {
+    // Get admin users
+    const result = await query<{ email: string; first_name: string; last_name: string }>(
+      `SELECT email, first_name, last_name
+       FROM users
+       WHERE role IN ('admin', 'operations')
+         AND is_active = true
+         AND email IS NOT NULL`
+    );
+
+    if (result.rows.length === 0) {
+      console.log('No admin users found to notify about failed email');
+      return;
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
+    const notificationLink = `${appUrl}/admin/zones/all/bookings`;
+
+    // Send notification to each admin
+    for (const admin of result.rows) {
+      try {
+        await sendGlampingTemplateEmail({
+          templateSlug: 'glamping-admin-email-failed',
+          to: [{ email: admin.email, name: `${admin.first_name} ${admin.last_name}`.trim() || 'Admin' }],
+          variables: {
+            admin_name: `${admin.first_name} ${admin.last_name}`.trim() || 'Admin',
+            booking_reference: bookingCode,
+            template_name: templateName,
+            recipient_email: recipientEmail,
+            error_message: errorMessage,
+            notification_link: notificationLink,
+          },
+          glampingBookingId,
+        });
+        console.log(`✅ Failed email notification sent to admin ${admin.email}`);
+      } catch (emailErr) {
+        console.error(`Failed to send notification email to admin ${admin.email}:`, emailErr);
+      }
+    }
+
+    console.log(`Notified ${result.rows.length} admin(s) about failed email for booking ${bookingCode}`);
+  } catch (error) {
+    console.error('Error sending admin notification about failed email:', error);
+  }
 }

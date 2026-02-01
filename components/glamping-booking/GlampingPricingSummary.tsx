@@ -58,6 +58,9 @@ interface GlampingPricingSummaryProps {
   // Multi-item cart mode props
   cartItems?: GlampingCartItem[];
   isCartMode?: boolean;
+  // Single person surcharge alert props
+  enableSinglePersonSurchargeAlert?: boolean;
+  singlePersonSurchargeAlertText?: { vi: string; en: string };
 }
 
 // Helper function to extract localized string from JSONB field
@@ -86,6 +89,8 @@ export default function GlampingPricingSummary({
   menuProductSelections = {},
   cartItems = [],
   isCartMode = false,
+  enableSinglePersonSurchargeAlert,
+  singlePersonSurchargeAlertText,
 }: GlampingPricingSummaryProps) {
   const [showNightlyBreakdown, setShowNightlyBreakdown] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());

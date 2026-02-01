@@ -46,6 +46,8 @@ interface ItemDetailContentProps {
     base_price: number;
     extra_adult_price: number;
     extra_child_price: number;
+    enable_single_person_surcharge_alert?: boolean;
+    single_person_surcharge_alert_text?: { vi: string; en: string };
   };
   parameters: ItemParameter[];
   tags: ItemTag[];
@@ -156,6 +158,8 @@ export function ItemDetailContent({
               maxGuests={item.max_guests}
               parameters={parameters}
               locale={locale}
+              enableSinglePersonSurchargeAlert={item.enable_single_person_surcharge_alert}
+              singlePersonSurchargeAlertText={item.single_person_surcharge_alert_text}
             />
           </div>
         </div>

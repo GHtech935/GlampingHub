@@ -4279,7 +4279,21 @@
                 "errorSaveTitle": "Error saving settings",
                 "errorSaveDesc": "Failed to save zone settings. Please try again.",
                 "errorLoadTitle": "Error loading settings",
-                "errorLoadDesc": "Failed to load zone settings. Please refresh the page."
+                "errorLoadDesc": "Failed to load zone settings. Please refresh the page.",
+                "email": {
+                    "title": "Email Settings",
+                    "description": "Configure email options for this zone",
+                    "dinnerReminderLabel": "Dinner reminder email",
+                    "dinnerReminderDescription": "Show dinner selection button in booking confirmation email"
+                },
+                "singlePersonSurcharge": {
+                    "title": "Single Person Surcharge Alert",
+                    "description": "Configure the surcharge alert when there is only 1 guest",
+                    "enableLabel": "Show single person surcharge alert",
+                    "enableDescription": "Display a notice when guests book with quantity of 1 person",
+                    "textViLabel": "Vietnamese content",
+                    "textEnLabel": "English content"
+                }
             },
             "common": {
                 "loading": "Loading...",
@@ -5152,6 +5166,59 @@
             "error": "Error",
             "success": "Success"
         }
+    },
+    "profile": {
+        "title": "My Profile",
+        "subtitle": "Manage your account information",
+        "personalInfo": "Personal Information",
+        "personalInfoDesc": "Update your personal details",
+        "securitySettings": "Security",
+        "securitySettingsDesc": "Manage your password and account security",
+        "firstName": "First Name",
+        "lastName": "Last Name",
+        "email": "Email",
+        "phone": "Phone Number",
+        "country": "Country",
+        "address": "Address",
+        "city": "City",
+        "postalCode": "Postal Code",
+        "currentPassword": "Current Password",
+        "newPassword": "New Password",
+        "confirmPassword": "Confirm New Password",
+        "saveChanges": "Save Changes",
+        "changePassword": "Change Password",
+        "updateProfile": "Update Profile",
+        "loading": "Loading...",
+        "saving": "Saving...",
+        "profileUpdated": "Profile updated successfully!",
+        "passwordChanged": "Password changed successfully!",
+        "errorUpdating": "Error updating profile",
+        "errorChangingPassword": "Error changing password",
+        "passwordMismatch": "Passwords do not match",
+        "passwordTooShort": "Password must be at least 6 characters",
+        "incorrectPassword": "Current password is incorrect",
+        "loginRequired": "Please log in to view this page",
+        "loginButton": "Log in",
+        "memberSince": "Member since",
+        "emailVerified": "Email verified",
+        "emailNotVerified": "Email not verified",
+        "verifyEmail": "Verify email",
+        "accountType": "Account type",
+        "registeredAccount": "Registered account",
+        "guestAccount": "Guest account",
+        "totalBookings": "Total bookings",
+        "lastBooking": "Last booking"
+    },
+    "wishlist": {
+        "title": "Wishlist",
+        "empty": "Your wishlist is empty",
+        "emptyDescription": "Save items you love to find them easily later",
+        "exploreNow": "Explore Now",
+        "items": "items",
+        "addedToWishlist": "Added to wishlist",
+        "removedFromWishlist": "Removed from wishlist",
+        "loginRequired": "Please log in to save items",
+        "loginButton": "Log in"
     },
     "glampingPayment": {
         "depositPaymentTitle": "Deposit Payment",

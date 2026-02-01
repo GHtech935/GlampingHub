@@ -183,6 +183,7 @@ export async function POST(request: NextRequest) {
           z.id as zone_id,
           z.name->>'vi' as zone_name,
           z.bank_account_id,
+          COALESCE(z.enable_dinner_reminder_email, true) as enable_dinner_reminder_email,
           json_agg(DISTINCT jsonb_build_object(
             'parameter_id', ip.parameter_id,
             'id', p.id,
@@ -1063,6 +1064,9 @@ export async function POST(request: NextRequest) {
       // Send confirmation email
       if (resolvedEmail) {
         try {
+          // Get zone setting for dinner reminder email
+          const enableDinnerReminderEmail = firstItem?.enable_dinner_reminder_email !== false;
+
           await sendGlampingBookingConfirmation({
             customerEmail: resolvedEmail,
             customerName,
@@ -1075,6 +1079,7 @@ export async function POST(request: NextRequest) {
             numberOfGuests: totalAdults + totalChildren,
             glampingBookingId: booking.id,
             items: emailItems,
+            enableDinnerReminderEmail,
           });
         } catch (emailError) {
           console.error('[Multi-Item Booking] Failed to send confirmation email:', emailError);
@@ -1208,6 +1213,7 @@ export async function POST(request: NextRequest) {
         z.id as zone_id,
         z.name->>'vi' as zone_name,
         z.bank_account_id,
+        COALESCE(z.enable_dinner_reminder_email, true) as enable_dinner_reminder_email,
         json_agg(DISTINCT jsonb_build_object(
           'parameter_id', ip.parameter_id,
           'id', p.id,
@@ -1898,6 +1904,7 @@ export async function POST(request: NextRequest) {
         totalAmount: parseFloat(booking.total_amount),
         numberOfGuests: adults + children,
         glampingBookingId: booking.id,
+        enableDinnerReminderEmail: item.enable_dinner_reminder_email !== false,
       });
       console.log(`✅ Glamping booking confirmation email sent to ${guestEmail}`);
     } catch (emailError) {

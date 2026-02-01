@@ -242,17 +242,6 @@ export function LoginForm({
         </div>
       </form>
 
-      {/* Staff Login Link */}
-      {showHeader && (
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Bạn là nhân viên?{' '}
-            <Link href="/login-admin" className="font-medium text-primary hover:underline">
-              Đăng nhập trang quản trị
-            </Link>
-          </p>
-        </div>
-      )}
     </div>
   );
 }

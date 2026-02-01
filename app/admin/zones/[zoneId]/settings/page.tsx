@@ -18,6 +18,7 @@ import { useTranslations } from "next-intl";
 import { MultilingualRichTextEditor, MultilingualValue } from "@/components/admin/MultilingualRichTextEditor";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 interface ZoneSettings {
   id: string;
@@ -25,6 +26,9 @@ interface ZoneSettings {
   deposit_value: number;
   cancellation_policy: MultilingualValue;
   house_rules: MultilingualValue;
+  enable_dinner_reminder_email: boolean;
+  enable_single_person_surcharge_alert: boolean;
+  single_person_surcharge_alert_text: MultilingualValue;
 }
 
 export default function ZoneSettingsPage({ params }: { params: Promise<{ zoneId: string }> }) {
@@ -43,6 +47,9 @@ export default function ZoneSettingsPage({ params }: { params: Promise<{ zoneId:
   const [depositValue, setDepositValue] = useState<string>("15");
   const [cancellationPolicy, setCancellationPolicy] = useState<MultilingualValue>({ vi: "", en: "" });
   const [houseRules, setHouseRules] = useState<MultilingualValue>({ vi: "", en: "" });
+  const [enableDinnerReminderEmail, setEnableDinnerReminderEmail] = useState<boolean>(true);
+  const [enableSinglePersonSurchargeAlert, setEnableSinglePersonSurchargeAlert] = useState<boolean>(false);
+  const [singlePersonSurchargeAlertText, setSinglePersonSurchargeAlertText] = useState<MultilingualValue>({ vi: "Số tiền đã bao gồm phụ thu 1 người", en: "Price includes single person surcharge" });
 
   // Validation errors
   const [depositValueError, setDepositValueError] = useState<string>("");
@@ -72,10 +79,13 @@ export default function ZoneSettingsPage({ params }: { params: Promise<{ zoneId:
       depositType !== initialValues.deposit_type ||
       parseFloat(depositValue) !== initialValues.deposit_value ||
       JSON.stringify(cancellationPolicy) !== JSON.stringify(initialValues.cancellation_policy) ||
-      JSON.stringify(houseRules) !== JSON.stringify(initialValues.house_rules);
+      JSON.stringify(houseRules) !== JSON.stringify(initialValues.house_rules) ||
+      enableDinnerReminderEmail !== initialValues.enable_dinner_reminder_email ||
+      enableSinglePersonSurchargeAlert !== initialValues.enable_single_person_surcharge_alert ||
+      JSON.stringify(singlePersonSurchargeAlertText) !== JSON.stringify(initialValues.single_person_surcharge_alert_text);
 
     setHasUnsavedChanges(hasChanges);
-  }, [depositType, depositValue, cancellationPolicy, houseRules, initialValues]);
+  }, [depositType, depositValue, cancellationPolicy, houseRules, enableDinnerReminderEmail, enableSinglePersonSurchargeAlert, singlePersonSurchargeAlertText, initialValues]);
 
   // Warn before leaving with unsaved changes
   useEffect(() => {
@@ -102,6 +112,9 @@ export default function ZoneSettingsPage({ params }: { params: Promise<{ zoneId:
       setDepositValue(String(zone.deposit_value || 15));
       setCancellationPolicy(zone.cancellation_policy || { vi: "", en: "" });
       setHouseRules(zone.house_rules || { vi: "", en: "" });
+      setEnableDinnerReminderEmail(zone.enable_dinner_reminder_email !== false);
+      setEnableSinglePersonSurchargeAlert(zone.enable_single_person_surcharge_alert === true);
+      setSinglePersonSurchargeAlertText(zone.single_person_surcharge_alert_text || { vi: "Số tiền đã bao gồm phụ thu 1 người", en: "Price includes single person surcharge" });
 
       // Save initial values
       setInitialValues({
@@ -110,6 +123,9 @@ export default function ZoneSettingsPage({ params }: { params: Promise<{ zoneId:
         deposit_value: zone.deposit_value || 15,
         cancellation_policy: zone.cancellation_policy || { vi: "", en: "" },
         house_rules: zone.house_rules || { vi: "", en: "" },
+        enable_dinner_reminder_email: zone.enable_dinner_reminder_email !== false,
+        enable_single_person_surcharge_alert: zone.enable_single_person_surcharge_alert === true,
+        single_person_surcharge_alert_text: zone.single_person_surcharge_alert_text || { vi: "Số tiền đã bao gồm phụ thu 1 người", en: "Price includes single person surcharge" },
       });
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -185,6 +201,9 @@ export default function ZoneSettingsPage({ params }: { params: Promise<{ zoneId:
           deposit_value: parseFloat(depositValue),
           cancellation_policy: cancellationPolicy,
           house_rules: houseRules,
+          enable_dinner_reminder_email: enableDinnerReminderEmail,
+          enable_single_person_surcharge_alert: enableSinglePersonSurchargeAlert,
+          single_person_surcharge_alert_text: singlePersonSurchargeAlertText,
         }),
       });
 
@@ -202,6 +221,9 @@ export default function ZoneSettingsPage({ params }: { params: Promise<{ zoneId:
         deposit_value: data.zone.deposit_value,
         cancellation_policy: data.zone.cancellation_policy,
         house_rules: data.zone.house_rules,
+        enable_dinner_reminder_email: data.zone.enable_dinner_reminder_email !== false,
+        enable_single_person_surcharge_alert: data.zone.enable_single_person_surcharge_alert === true,
+        single_person_surcharge_alert_text: data.zone.single_person_surcharge_alert_text || { vi: "Số tiền đã bao gồm phụ thu 1 người", en: "Price includes single person surcharge" },
       });
 
       setHasUnsavedChanges(false);
@@ -335,6 +357,79 @@ export default function ZoneSettingsPage({ params }: { params: Promise<{ zoneId:
               en: t("houseRules.placeholderEn"),
             }}
           />
+        </CardContent>
+      </Card>
+
+      {/* Email Settings Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("email.title")}</CardTitle>
+          <CardDescription>{t("email.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="dinner-reminder-toggle">
+                {t("email.dinnerReminderLabel")}
+              </Label>
+              <p className="text-sm text-gray-500">
+                {t("email.dinnerReminderDescription")}
+              </p>
+            </div>
+            <Switch
+              id="dinner-reminder-toggle"
+              checked={enableDinnerReminderEmail}
+              onCheckedChange={setEnableDinnerReminderEmail}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Single Person Surcharge Alert Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("singlePersonSurcharge.title")}</CardTitle>
+          <CardDescription>{t("singlePersonSurcharge.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="single-person-surcharge-toggle">
+                {t("singlePersonSurcharge.enableLabel")}
+              </Label>
+              <p className="text-sm text-gray-500">
+                {t("singlePersonSurcharge.enableDescription")}
+              </p>
+            </div>
+            <Switch
+              id="single-person-surcharge-toggle"
+              checked={enableSinglePersonSurchargeAlert}
+              onCheckedChange={setEnableSinglePersonSurchargeAlert}
+            />
+          </div>
+
+          {enableSinglePersonSurchargeAlert && (
+            <div className="space-y-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label htmlFor="surcharge-text-vi">{t("singlePersonSurcharge.textViLabel")}</Label>
+                <Input
+                  id="surcharge-text-vi"
+                  value={singlePersonSurchargeAlertText.vi}
+                  onChange={(e) => setSinglePersonSurchargeAlertText(prev => ({ ...prev, vi: e.target.value }))}
+                  placeholder="Số tiền đã bao gồm phụ thu 1 người"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="surcharge-text-en">{t("singlePersonSurcharge.textEnLabel")}</Label>
+                <Input
+                  id="surcharge-text-en"
+                  value={singlePersonSurchargeAlertText.en}
+                  onChange={(e) => setSinglePersonSurchargeAlertText(prev => ({ ...prev, en: e.target.value }))}
+                  placeholder="Price includes single person surcharge"
+                />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

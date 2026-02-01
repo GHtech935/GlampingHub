@@ -65,6 +65,30 @@ export function CartItemInlineEditForm({
   isOpen
 }: CartItemInlineEditFormProps) {
   const [isBookingInfoExpanded, setIsBookingInfoExpanded] = useState(false);
+  const [zoneSettings, setZoneSettings] = useState<{
+    enableSinglePersonSurchargeAlert?: boolean;
+    singlePersonSurchargeAlertText?: { vi: string; en: string };
+  }>({});
+
+  // Fetch zone settings for single person surcharge alert
+  React.useEffect(() => {
+    const fetchZoneSettings = async () => {
+      if (!item.zoneId) return;
+      try {
+        const response = await fetch(`/api/glamping/zones/${item.zoneId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setZoneSettings({
+            enableSinglePersonSurchargeAlert: data.zone?.enable_single_person_surcharge_alert || false,
+            singlePersonSurchargeAlertText: data.zone?.single_person_surcharge_alert_text || { vi: 'Số tiền đã bao gồm phụ thu 1 người', en: 'Price includes single person surcharge' },
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching zone settings:', error);
+      }
+    };
+    fetchZoneSettings();
+  }, [item.zoneId]);
 
   // Use custom hooks
   const formState = useCartItemFormState(item);
@@ -285,6 +309,8 @@ export function CartItemInlineEditForm({
                 overrideParameterPricingModes={pricingData?.parameterPricingModes}
                 overrideNightlyPricing={pricingData?.nightlyPricing}
                 pricingLoading={pricingLoading || (formState.dateRange?.from && formState.dateRange?.to && !pricingData)}
+                enableSinglePersonSurchargeAlert={zoneSettings.enableSinglePersonSurchargeAlert}
+                singlePersonSurchargeAlertText={zoneSettings.singlePersonSurchargeAlertText}
               />
             </div>
           </CollapsibleContent>

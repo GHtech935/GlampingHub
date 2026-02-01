@@ -82,6 +82,8 @@ interface BookingData {
     quantity: number
     counted_for_menu?: boolean
   }>
+  enableSinglePersonSurchargeAlert?: boolean
+  singlePersonSurchargeAlertText?: { vi: string; en: string }
 }
 
 function GlampingBookingFormContent() {
@@ -236,6 +238,8 @@ function GlampingBookingFormContent() {
         let taxEnabled = false
         let taxRate = 0
         let taxName = { vi: 'VAT', en: 'VAT' }
+        let enableSinglePersonSurchargeAlert = false
+        let singlePersonSurchargeAlertText = { vi: 'Số tiền đã bao gồm phụ thu 1 người', en: 'Price includes single person surcharge' }
 
         try {
           const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'
@@ -249,6 +253,8 @@ function GlampingBookingFormContent() {
             province = zoneData.zone?.province
             cancellationPolicy = zoneData.zone?.cancellation_policy
             houseRules = zoneData.zone?.house_rules
+            enableSinglePersonSurchargeAlert = zoneData.zone?.enable_single_person_surcharge_alert || false
+            singlePersonSurchargeAlertText = zoneData.zone?.single_person_surcharge_alert_text || { vi: 'Số tiền đã bao gồm phụ thu 1 người', en: 'Price includes single person surcharge' }
           }
 
           // Fetch tax info from first item
@@ -325,6 +331,8 @@ function GlampingBookingFormContent() {
           taxName,
           parameterQuantities: firstItem.parameterQuantities,
           parameters: firstItem.parameters,
+          enableSinglePersonSurchargeAlert,
+          singlePersonSurchargeAlertText,
         })
 
         return
@@ -371,6 +379,8 @@ function GlampingBookingFormContent() {
       let taxRate = 0
       let taxName = { vi: 'VAT', en: 'VAT' }
       let parameters: Array<{ id: string; name: string; color_code?: string; quantity: number }> = []
+      let enableSinglePersonSurchargeAlert = false
+      let singlePersonSurchargeAlertText = { vi: 'Số tiền đã bao gồm phụ thu 1 người', en: 'Price includes single person surcharge' }
 
       try {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'
@@ -492,6 +502,8 @@ function GlampingBookingFormContent() {
             if (zoneData.zone?.house_rules) {
               houseRules = zoneData.zone.house_rules
             }
+            enableSinglePersonSurchargeAlert = zoneData.zone?.enable_single_person_surcharge_alert || false
+            singlePersonSurchargeAlertText = zoneData.zone?.single_person_surcharge_alert_text || { vi: 'Số tiền đã bao gồm phụ thu 1 người', en: 'Price includes single person surcharge' }
           } catch (error) {
             console.error('Error fetching zone details:', error)
           }
@@ -521,6 +533,8 @@ function GlampingBookingFormContent() {
         taxName,
         parameterQuantities,
         parameters,
+        enableSinglePersonSurchargeAlert,
+        singlePersonSurchargeAlertText,
       })
     }
 
@@ -939,6 +953,8 @@ function GlampingBookingFormContent() {
               menuProductSelections={menuProductSelections}
               cartItems={isCartMode && cart ? cart.items : undefined}
               isCartMode={isCartMode}
+              enableSinglePersonSurchargeAlert={bookingData.enableSinglePersonSurchargeAlert}
+              singlePersonSurchargeAlertText={bookingData.singlePersonSurchargeAlertText}
             />
           </div>
 

@@ -3,12 +3,10 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { MapPin, ChevronLeft, ChevronRight, Heart, Home, Tent } from "lucide-react"
+import { MapPin, ChevronLeft, ChevronRight, Home, Tent } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { type MultilingualText, getLocalizedText } from "@/lib/i18n-utils"
 import { useClientLocale } from "@/components/providers/ClientI18nProvider"
-import { useWishlist } from "@/hooks/useWishlist"
-import { LoginModal } from "@/components/auth/LoginModal"
 
 interface GlampingItem {
   id: string
@@ -61,15 +59,6 @@ export function GlampingZoneCard({
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [isImageHovered, setIsImageHovered] = useState(false)
   const { locale } = useClientLocale()
-  const {
-    isInWishlist,
-    toggleWishlist,
-    loginModalOpen,
-    setLoginModalOpen,
-    handleLoginSuccess,
-  } = useWishlist()
-
-  const isWishlisted = isInWishlist(id)
 
   const displayImages = images.length > 0 ? images : ["https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&q=80"]
   const localizedName = getLocalizedText(name, locale)
@@ -108,24 +97,6 @@ export function GlampingZoneCard({
               className="object-cover"
             />
           </Link>
-
-          {/* Wishlist Heart Button */}
-          <button
-            className="absolute top-3 right-3 p-2 rounded-full bg-white/80 hover:bg-white transition-colors z-10"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              toggleWishlist(id)
-            }}
-          >
-            <Heart
-              className={`h-5 w-5 transition-colors ${
-                isWishlisted
-                  ? 'fill-red-500 text-red-500'
-                  : 'text-gray-700 hover:text-red-500'
-              }`}
-            />
-          </button>
 
           {/* Navigation Arrows */}
           {displayImages.length > 1 && isImageHovered && (
@@ -259,13 +230,6 @@ export function GlampingZoneCard({
           )}
         </div>
       </CardContent>
-
-      {/* Login Modal */}
-      <LoginModal
-        open={loginModalOpen}
-        onOpenChange={setLoginModalOpen}
-        onSuccess={handleLoginSuccess}
-      />
     </Card>
   )
 }

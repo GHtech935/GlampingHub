@@ -23,6 +23,8 @@ interface ItemBookingSectionProps {
   maxGuests: number;
   parameters: ItemParameter[];
   locale: 'vi' | 'en';
+  enableSinglePersonSurchargeAlert?: boolean;
+  singlePersonSurchargeAlertText?: { vi: string; en: string };
 }
 
 export function ItemBookingSection({
@@ -36,6 +38,8 @@ export function ItemBookingSection({
   maxGuests,
   parameters,
   locale,
+  enableSinglePersonSurchargeAlert,
+  singlePersonSurchargeAlertText,
 }: ItemBookingSectionProps) {
   const [selectedStart, setSelectedStart] = useState<string | null>(null);
   const [selectedEnd, setSelectedEnd] = useState<string | null>(null);
@@ -64,6 +68,8 @@ export function ItemBookingSection({
         selectedStart={selectedStart}
         selectedEnd={selectedEnd}
         locale={locale}
+        enableSinglePersonSurchargeAlert={enableSinglePersonSurchargeAlert}
+        singlePersonSurchargeAlertText={singlePersonSurchargeAlertText}
       />
     </div>
   );

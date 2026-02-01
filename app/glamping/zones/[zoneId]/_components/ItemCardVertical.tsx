@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { MapPin, Heart, ChevronLeft, ChevronRight, Tent } from "lucide-react";
 import Image from "next/image";
+import { useWishlist } from "@/hooks/useWishlist";
+import { LoginModal } from "@/components/auth/LoginModal";
 
 interface GlampingItem {
   id: string;
@@ -51,7 +52,15 @@ export function ItemCardVertical({
   onBookClick,
 }: ItemCardVerticalProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isWishlisted, setIsWishlisted] = useState(false);
+  const {
+    isInWishlist,
+    toggleWishlist,
+    loginModalOpen,
+    setLoginModalOpen,
+    handleLoginSuccess,
+  } = useWishlist();
+
+  const isWishlisted = isInWishlist(item.id);
 
   // Get images sorted by display order
   const images = item.media
@@ -129,7 +138,7 @@ export function ItemCardVertical({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setIsWishlisted(!isWishlisted);
+            toggleWishlist(item.id);
           }}
           className="absolute top-3 right-3 bg-white/90 hover:bg-white rounded-full p-2 shadow-lg transition-colors"
           aria-label="Add to wishlist"
@@ -176,6 +185,13 @@ export function ItemCardVertical({
           Đặt Lều
         </Button>
       </div>
+
+      {/* Login Modal for Wishlist */}
+      <LoginModal
+        open={loginModalOpen}
+        onOpenChange={setLoginModalOpen}
+        onSuccess={handleLoginSuccess}
+      />
     </Card>
   );
 }

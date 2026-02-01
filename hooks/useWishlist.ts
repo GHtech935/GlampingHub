@@ -9,7 +9,7 @@ export function useWishlist() {
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [pendingCampsiteId, setPendingCampsiteId] = useState<string | null>(null);
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
 
   // Fetch wishlist when user is authenticated
   const fetchWishlist = useCallback(async () => {
@@ -22,7 +22,9 @@ export function useWishlist() {
       const response = await fetch('/api/wishlist');
       if (response.ok) {
         const data = await response.json();
-        setWishlistIds(data.campsiteIds || []);
+        // Extract item IDs from the wishlist items
+        const itemIds = data.items?.map((item: { itemId: string }) => item.itemId) || [];
+        setWishlistIds(itemIds);
       }
     } catch (error) {
       console.error('Failed to fetch wishlist:', error);
@@ -35,13 +37,13 @@ export function useWishlist() {
     }
   }, [authLoading, fetchWishlist]);
 
-  // Check if campsite is in wishlist
-  const isInWishlist = useCallback((campsiteId: string) => {
-    return wishlistIds.includes(campsiteId);
+  // Check if item is in wishlist
+  const isInWishlist = useCallback((itemId: string) => {
+    return wishlistIds.includes(itemId);
   }, [wishlistIds]);
 
   // Add to wishlist
-  const addToWishlist = useCallback(async (campsiteId: string) => {
+  const addToWishlist = useCallback(async (itemId: string) => {
     if (loading) return;
 
     setLoading(true);
@@ -49,11 +51,11 @@ export function useWishlist() {
       const response = await fetch('/api/wishlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campsiteId }),
+        body: JSON.stringify({ itemId }),
       });
 
       if (response.ok) {
-        setWishlistIds(prev => [...prev, campsiteId]);
+        setWishlistIds(prev => [...prev, itemId]);
         toast.success('Đã thêm vào danh sách yêu thích');
       } else {
         throw new Error('Failed to add');
@@ -67,17 +69,17 @@ export function useWishlist() {
   }, [loading]);
 
   // Remove from wishlist
-  const removeFromWishlist = useCallback(async (campsiteId: string) => {
+  const removeFromWishlist = useCallback(async (itemId: string) => {
     if (loading) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/wishlist/${campsiteId}`, {
+      const response = await fetch(`/api/wishlist/${itemId}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
-        setWishlistIds(prev => prev.filter(id => id !== campsiteId));
+        setWishlistIds(prev => prev.filter(id => id !== itemId));
         toast.success('Đã xóa khỏi danh sách yêu thích');
       } else {
         throw new Error('Failed to remove');
@@ -91,23 +93,23 @@ export function useWishlist() {
   }, [loading]);
 
   // Toggle wishlist - main function to use
-  const toggleWishlist = useCallback((campsiteId: string) => {
+  const toggleWishlist = useCallback((itemId: string) => {
     // If not authenticated, open login modal
     if (!isAuthenticated || !isCustomer) {
-      setPendingCampsiteId(campsiteId);
+      setPendingItemId(itemId);
       setLoginModalOpen(true);
       return;
     }
 
     // Toggle based on current state
-    if (isInWishlist(campsiteId)) {
-      removeFromWishlist(campsiteId);
+    if (isInWishlist(itemId)) {
+      removeFromWishlist(itemId);
     } else {
-      addToWishlist(campsiteId);
+      addToWishlist(itemId);
     }
   }, [isAuthenticated, isCustomer, isInWishlist, addToWishlist, removeFromWishlist]);
 
-  // Handle successful login - add pending campsite to wishlist
+  // Handle successful login - add pending item to wishlist
   const handleLoginSuccess = useCallback(async () => {
     setLoginModalOpen(false);
 
@@ -122,31 +124,32 @@ export function useWishlist() {
       const response = await fetch('/api/wishlist');
       if (response.ok) {
         const data = await response.json();
-        setWishlistIds(data.campsiteIds || []);
+        const itemIds = data.items?.map((item: { itemId: string }) => item.itemId) || [];
+        setWishlistIds(itemIds);
       }
     } catch (error) {
       console.error('Failed to fetch wishlist:', error);
     }
 
-    // Add pending campsite if exists (directly call API, not relying on state)
-    if (pendingCampsiteId) {
+    // Add pending item if exists (directly call API, not relying on state)
+    if (pendingItemId) {
       try {
         const response = await fetch('/api/wishlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ campsiteId: pendingCampsiteId }),
+          body: JSON.stringify({ itemId: pendingItemId }),
         });
 
         if (response.ok) {
-          setWishlistIds(prev => [...prev, pendingCampsiteId]);
+          setWishlistIds(prev => [...prev, pendingItemId]);
           toast.success('Đã thêm vào danh sách yêu thích');
         }
       } catch (error) {
         console.error('Failed to add to wishlist:', error);
       }
-      setPendingCampsiteId(null);
+      setPendingItemId(null);
     }
-  }, [pendingCampsiteId, refetchAuth]);
+  }, [pendingItemId, refetchAuth]);
 
   return {
     wishlistIds,

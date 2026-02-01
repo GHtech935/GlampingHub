@@ -21,7 +21,10 @@ export async function GET(
 
     // Fetch zone settings
     const result = await pool.query(
-      `SELECT id, deposit_type, deposit_value, cancellation_policy, house_rules
+      `SELECT id, deposit_type, deposit_value, cancellation_policy, house_rules,
+              COALESCE(enable_dinner_reminder_email, true) as enable_dinner_reminder_email,
+              COALESCE(enable_single_person_surcharge_alert, false) as enable_single_person_surcharge_alert,
+              COALESCE(single_person_surcharge_alert_text, '{"vi": "Số tiền đã bao gồm phụ thu 1 người", "en": "Price includes single person surcharge"}'::jsonb) as single_person_surcharge_alert_text
        FROM glamping_zones
        WHERE id = $1`,
       [zoneId]
@@ -63,7 +66,7 @@ export async function PUT(
     const body = await request.json();
 
     // Validate request body
-    const { deposit_type, deposit_value, cancellation_policy, house_rules } = body;
+    const { deposit_type, deposit_value, cancellation_policy, house_rules, enable_dinner_reminder_email, enable_single_person_surcharge_alert, single_person_surcharge_alert_text } = body;
 
     // Validate deposit_type
     if (!deposit_type || !["percentage", "fixed_amount"].includes(deposit_type)) {
@@ -133,16 +136,36 @@ export async function PUT(
       );
     }
 
+    // Validate single_person_surcharge_alert_text if provided
+    if (single_person_surcharge_alert_text !== undefined && !validateMultilingualContent(single_person_surcharge_alert_text, "single_person_surcharge_alert_text")) {
+      return NextResponse.json(
+        { error: "single_person_surcharge_alert_text must be an object with 'vi' and 'en' string keys" },
+        { status: 400 }
+      );
+    }
+
     // Update zone settings
     const result = await pool.query(
       `UPDATE glamping_zones
        SET deposit_type = $1,
            deposit_value = $2,
            cancellation_policy = $3,
-           house_rules = $4
-       WHERE id = $5
-       RETURNING id, deposit_type, deposit_value, cancellation_policy, house_rules`,
-      [deposit_type, numValue, JSON.stringify(cancellation_policy), JSON.stringify(house_rules), zoneId]
+           house_rules = $4,
+           enable_dinner_reminder_email = $5,
+           enable_single_person_surcharge_alert = $6,
+           single_person_surcharge_alert_text = $7
+       WHERE id = $8
+       RETURNING id, deposit_type, deposit_value, cancellation_policy, house_rules, enable_dinner_reminder_email, enable_single_person_surcharge_alert, single_person_surcharge_alert_text`,
+      [
+        deposit_type,
+        numValue,
+        JSON.stringify(cancellation_policy),
+        JSON.stringify(house_rules),
+        enable_dinner_reminder_email !== false,
+        enable_single_person_surcharge_alert === true,
+        single_person_surcharge_alert_text ? JSON.stringify(single_person_surcharge_alert_text) : '{"vi": "Số tiền đã bao gồm phụ thu 1 người", "en": "Price includes single person surcharge"}',
+        zoneId
+      ]
     );
 
     if (result.rows.length === 0) {

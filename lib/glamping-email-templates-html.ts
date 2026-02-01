@@ -27,6 +27,35 @@ const emailStyles = {
   divider: 'border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;',
 };
 
+/**
+ * Generate HTML for dinner section in booking confirmation email
+ * Returns empty string if showDinnerButton is false
+ */
+export function generateDinnerSectionHTML(showDinnerButton: boolean, confirmationUrl: string): string {
+  if (!showDinnerButton) {
+    return '';
+  }
+
+  return `
+    <!-- View Booking Button -->
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${confirmationUrl}" style="${emailStyles.button}">
+        Bấm để chọn đồ ăn tối
+      </a>
+    </div>
+
+    <!-- Menu Editing Notice -->
+    <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 4px;">
+      <p style="margin: 0 0 10px 0; color: #065f46; font-size: 15px; font-weight: bold;">
+        💡 Chọn món ăn/đồ uống cho chuyến đi
+      </p>
+      <p style="margin: 0; color: #047857; font-size: 14px; line-height: 1.6;">
+        Sau khi <strong>đặt cọc hoặc thanh toán đầy đủ</strong>, bạn có thể chọn và chỉnh sửa món ăn, đồ uống cho đến <strong>24 giờ trước khi check-in</strong>.
+      </p>
+    </div>
+  `;
+}
+
 export const glampingBookingConfirmationHTML = `
 <!DOCTYPE html>
 <html lang="vi">
@@ -84,22 +113,7 @@ export const glampingBookingConfirmationHTML = `
 
       <hr style="${emailStyles.divider}">
 
-      <!-- View Booking Button -->
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="{confirmation_url}" style="${emailStyles.button}">
-          Bấm để chọn đồ ăn tối
-        </a>
-      </div>
-
-      <!-- Menu Editing Notice -->
-      <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 4px;">
-        <p style="margin: 0 0 10px 0; color: #065f46; font-size: 15px; font-weight: bold;">
-          💡 Chọn món ăn/đồ uống cho chuyến đi
-        </p>
-        <p style="margin: 0; color: #047857; font-size: 14px; line-height: 1.6;">
-          Sau khi <strong>đặt cọc hoặc thanh toán đầy đủ</strong>, bạn có thể chọn và chỉnh sửa món ăn, đồ uống cho đến <strong>24 giờ trước khi check-in</strong>.
-        </p>
-      </div>
+      {dinner_section}
 
       <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin-top: 20px;">
         Chúng tôi rất mong được đón tiếp bạn! Nếu bạn có bất kỳ câu hỏi nào, đừng ngần ngại liên hệ với chúng tôi.
@@ -1693,6 +1707,113 @@ export const glampingMenuSelectionReminderHTML = `
 </html>
 `;
 
+// Admin Email: Failed Email Notification
+export const glampingAdminEmailFailedHTML = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email gửi thất bại - {booking_reference}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">⚠️ Email Gửi Thất Bại</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Xin chào <strong>{admin_name}</strong>,
+              </p>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #333; margin: 0 0 20px 0;">
+                Hệ thống không thể gửi email cho một booking. Vui lòng kiểm tra và xử lý.
+              </p>
+
+              <!-- Error Box -->
+              <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0 0 10px 0; color: #991b1b; font-size: 14px; font-weight: bold;">Chi tiết lỗi:</p>
+                <p style="margin: 0; color: #7f1d1d; font-size: 14px; line-height: 1.6; word-break: break-word;">
+                  {error_message}
+                </p>
+              </div>
+
+              <!-- Booking Info Box -->
+              <div style="background-color: #f8f9fa; border-left: 4px solid #6b7280; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <h3 style="margin: 0 0 15px 0; color: #374151; font-size: 16px;">Thông tin chi tiết:</h3>
+
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr style="border-bottom: 1px solid #e5e7eb;">
+                    <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Mã booking:</td>
+                    <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{booking_reference}</td>
+                  </tr>
+                  <tr style="border-bottom: 1px solid #e5e7eb;">
+                    <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Template email:</td>
+                    <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{template_name}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Email người nhận:</td>
+                    <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{recipient_email}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- Action Required Notice -->
+              <div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #9a3412; font-size: 15px; line-height: 1.6;">
+                  <strong>Hành động cần thực hiện:</strong> Vui lòng kiểm tra cấu hình email và thử gửi lại email thủ công từ trang quản lý booking.
+                </p>
+              </div>
+
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{notification_link}"
+                   style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%); color: white; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.4);">
+                  Đi đến trang quản lý Booking
+                </a>
+              </div>
+
+              <p style="font-size: 14px; line-height: 1.6; color: #666; margin: 20px 0 0 0;">
+                Nếu lỗi tiếp tục xảy ra, vui lòng kiểm tra:
+              </p>
+              <ul style="font-size: 14px; line-height: 1.8; color: #666; margin: 10px 0 0 0; padding-left: 20px;">
+                <li>Cấu hình BREVO_API_KEY trong biến môi trường</li>
+                <li>Hạn mức gửi email của tài khoản Brevo</li>
+                <li>Địa chỉ email người nhận có hợp lệ không</li>
+              </ul>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; font-size: 14px; color: #666;">
+                GlampingHub Admin System
+              </p>
+              <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">
+                Email này được gửi tự động từ hệ thống giám sát.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
 export interface GlampingEmailTemplateDefinition {
   slug: string;
   name: string;
@@ -1913,6 +2034,16 @@ export const GLAMPING_EMAIL_TEMPLATES: Record<string, GlampingEmailTemplateDefin
     type: 'trip_reminder',
     description: 'Email nhắc nhở 24h trước check-in cho khách ĐÃ chọn món ăn',
     availableVariables: ['customer_name', 'booking_code', 'property_name', 'check_in_date', 'check_in_time', 'management_url'],
+    isActive: true,
+  },
+  'glamping-admin-email-failed': {
+    slug: 'glamping-admin-email-failed',
+    name: '[Admin] Email gửi thất bại',
+    subject: '⚠️ Email gửi thất bại - Booking #{booking_reference}',
+    html: glampingAdminEmailFailedHTML,
+    type: 'admin_notification',
+    description: 'Email thông báo cho admin khi gửi email cho khách thất bại',
+    availableVariables: ['admin_name', 'booking_reference', 'template_name', 'recipient_email', 'error_message', 'notification_link'],
     isActive: true,
   },
 };

@@ -19,6 +19,8 @@ export async function GET(
         z.address as zone_address,
         z.city as zone_city,
         z.province as zone_province,
+        COALESCE(z.enable_single_person_surcharge_alert, false) as enable_single_person_surcharge_alert,
+        COALESCE(z.single_person_surcharge_alert_text, '{"vi": "Số tiền đã bao gồm phụ thu 1 người", "en": "Price includes single person surcharge"}'::jsonb) as single_person_surcharge_alert_text,
         c.id as category_id,
         c.name as category_name
       FROM glamping_items i
@@ -114,6 +116,8 @@ export async function GET(
         base_price: parseFloat(itemRow.base_price || 0),
         extra_adult_price: 0, // Add if you have this field
         extra_child_price: 0, // Add if you have this field
+        enable_single_person_surcharge_alert: itemRow.enable_single_person_surcharge_alert || false,
+        single_person_surcharge_alert_text: itemRow.single_person_surcharge_alert_text || { vi: 'Số tiền đã bao gồm phụ thu 1 người', en: 'Price includes single person surcharge' },
       },
       parameters: parametersResult.rows.map((p) => ({
         id: p.parameter_id || '',

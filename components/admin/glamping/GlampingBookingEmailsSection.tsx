@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Mail, Send, Check, X, Clock, ChevronDown, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Mail, Send, Check, X, Clock, ChevronDown, RefreshCw, CheckCircle, AlertCircle, User, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -29,6 +29,7 @@ interface EmailLog {
   template_slug: string | null;
   template_name: string;
   created_at: string;
+  is_customer_email?: boolean;
 }
 
 interface EmailTemplate {
@@ -261,7 +262,20 @@ export default function GlampingBookingEmailsSection({ bookingId }: GlampingBook
               {emails.map((email) => (
                 <tr key={email.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-2 px-2">
-                    <span className="font-medium">{email.template_name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{email.template_name}</span>
+                      {email.is_customer_email ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                          <User className="h-3 w-3 mr-1" />
+                          {locale === 'vi' ? 'Khách hàng' : 'Customer'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                          <Users className="h-3 w-3 mr-1" />
+                          {locale === 'vi' ? 'Nhân viên' : 'Staff'}
+                        </Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="py-2 px-2 text-gray-600">
                     {email.recipient_email}

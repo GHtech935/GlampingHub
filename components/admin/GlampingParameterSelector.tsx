@@ -40,6 +40,10 @@ interface GlampingParameterSelectorProps {
   dateRange?: DateRange  // To check if dates are selected
   nightlyParameterPricing?: NightlyPricing[]  // Per-night pricing breakdown
   pricingLoading?: boolean  // Whether pricing is being loaded
+
+  // Single person surcharge alert props
+  enableSinglePersonSurchargeAlert?: boolean
+  singlePersonSurchargeAlertText?: { vi: string; en: string }
 }
 
 export function GlampingParameterSelector({
@@ -54,6 +58,8 @@ export function GlampingParameterSelector({
   dateRange,
   nightlyParameterPricing = [],
   pricingLoading = false,
+  enableSinglePersonSurchargeAlert,
+  singlePersonSurchargeAlertText,
 }: GlampingParameterSelectorProps) {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
@@ -220,6 +226,13 @@ export function GlampingParameterSelector({
                       {locale === 'vi' ? 'Tối đa:' : 'Max:'} {param.max_quantity || 0}
                     </p>
                   ) : null}
+
+                  {/* Single Person Surcharge Alert - show when quantity = 1 and has pricing */}
+                  {enableSinglePersonSurchargeAlert && singlePersonSurchargeAlertText && quantity === 1 && hasPricing && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800 mt-1">
+                      {locale === 'vi' ? singlePersonSurchargeAlertText.vi : singlePersonSurchargeAlertText.en}
+                    </div>
+                  )}
 
                   {/* Error message */}
                   {hasError && (

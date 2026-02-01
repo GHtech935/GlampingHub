@@ -30,11 +30,13 @@ export async function GET(
         z.house_rules,
         z.deposit_type,
         z.deposit_value,
+        COALESCE(z.enable_single_person_surcharge_alert, false) as enable_single_person_surcharge_alert,
+        COALESCE(z.single_person_surcharge_alert_text, '{"vi": "Số tiền đã bao gồm phụ thu 1 người", "en": "Price includes single person surcharge"}'::jsonb) as single_person_surcharge_alert_text,
         COUNT(DISTINCT i.id) as items_count
       FROM glamping_zones z
       LEFT JOIN glamping_items i ON i.zone_id = z.id
       WHERE z.id = $1 AND z.is_active = true
-      GROUP BY z.id, z.cancellation_policy, z.house_rules, z.deposit_type, z.deposit_value
+      GROUP BY z.id, z.cancellation_policy, z.house_rules, z.deposit_type, z.deposit_value, z.enable_single_person_surcharge_alert, z.single_person_surcharge_alert_text
     `;
 
     const { rows: zoneRows } = await pool.query(zoneQuery, [id]);
