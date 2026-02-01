@@ -85,21 +85,6 @@ export function ParameterForm({ onSubmit, onCancel, loading = false, showCard = 
         </p>
       </div>
 
-      {/* 3. Display Order Field */}
-      <div className="space-y-2">
-        <Label htmlFor="display_order">{t('displayOrder')}</Label>
-        <Input
-          id="display_order"
-          type="number"
-          min="0"
-          value={formData.display_order}
-          onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
-        />
-        <p className="text-sm text-gray-500">
-          {t('displayOrderHint')}
-        </p>
-      </div>
-
       {/* 4. Guest Section */}
       <div className="flex items-start space-x-2">
         <Checkbox

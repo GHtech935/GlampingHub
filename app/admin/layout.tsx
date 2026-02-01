@@ -167,7 +167,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     if (pathname.includes('/bookings')) {
       setExpandedMenus(prev => new Set([...prev, 'bookings']));
     }
-    if (pathname.includes('/booking-calendar')) {
+    if (pathname.includes('/booking-calendar') || pathname.includes('/customer-calendar')) {
       setExpandedMenus(prev => new Set([...prev, 'calendar']));
     }
   }, [pathname]);
@@ -227,6 +227,12 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               name: t('calendarBooking'),
               href: `${zonePrefix}/booking-calendar`,
               icon: CalendarDays,
+              roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
+            },
+            {
+              name: t('calendarCustomer'),
+              href: `${zonePrefix}/customer-calendar`,
+              icon: Users2,
               roles: ['admin', 'sale', 'operations', 'owner', 'glamping_owner'],
             },
           ],

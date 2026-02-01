@@ -48,6 +48,11 @@ interface AdminGlampingBookingFormModalProps {
   onSuccess: () => void
   zoneId: string
   locale?: string
+  initialData?: {
+    itemId?: string
+    checkIn?: string
+    checkOut?: string
+  } | null
 }
 
 interface Customer {
@@ -74,7 +79,8 @@ export function AdminGlampingBookingFormModal({
   onClose,
   onSuccess,
   zoneId,
-  locale = 'vi'
+  locale = 'vi',
+  initialData,
 }: AdminGlampingBookingFormModalProps) {
   const { toast } = useToast()
 
@@ -117,6 +123,12 @@ export function AdminGlampingBookingFormModal({
   // ========== LOAD DRAFT FROM LOCALSTORAGE ==========
   useEffect(() => {
     if (!open) return // Only load when modal opens
+
+    // If initialData is provided, skip draft restoration
+    if (initialData?.itemId || initialData?.checkIn || initialData?.checkOut) {
+      setIsInitialized(true)
+      return
+    }
 
     try {
       const storedDraft = localStorage.getItem(ADMIN_BOOKING_DRAFT_KEY)
@@ -181,7 +193,41 @@ export function AdminGlampingBookingFormModal({
       localStorage.removeItem(ADMIN_BOOKING_DRAFT_KEY)
     }
     setIsInitialized(true)
-  }, [open, zoneId])
+  }, [open, zoneId, initialData])
+
+  // ========== APPLY INITIAL DATA FROM PROPS ==========
+  useEffect(() => {
+    if (!open || !initialData) return
+    if (!initialData.itemId && !initialData.checkIn && !initialData.checkOut) return
+
+    // Apply initialData to the first tent
+    setTents(prev => {
+      const firstTent = prev[0] || createEmptyTent()
+      const updatedTent = { ...firstTent }
+
+      // Set item ID if provided - the item details will be loaded by AdminTentTabContent
+      if (initialData.itemId) {
+        updatedTent.itemId = initialData.itemId
+      }
+
+      // Set dates if provided
+      if (initialData.checkIn && initialData.checkOut) {
+        const checkInDate = parseISO(initialData.checkIn)
+        const checkOutDate = parseISO(initialData.checkOut)
+        updatedTent.dateRange = {
+          from: checkInDate,
+          to: checkOutDate,
+        }
+        updatedTent.checkIn = initialData.checkIn
+        updatedTent.checkOut = initialData.checkOut
+        // Calculate nights
+        const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24))
+        updatedTent.nights = nights
+      }
+
+      return [updatedTent, ...prev.slice(1)]
+    })
+  }, [open, initialData])
 
   // ========== SAVE DRAFT TO LOCALSTORAGE ==========
   useEffect(() => {

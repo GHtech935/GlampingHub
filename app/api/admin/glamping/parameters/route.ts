@@ -122,6 +122,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid visibility value' }, { status: 400 });
     }
 
+    // Get max display_order for this zone and add 1
+    const maxOrderResult = await pool.query(
+      `SELECT COALESCE(MAX(display_order), -1) + 1 as next_order
+       FROM glamping_parameters
+       WHERE zone_id = $1`,
+      [zone_id]
+    );
+    const nextDisplayOrder = maxOrderResult.rows[0]?.next_order ?? 0;
+
     const result = await pool.query(
       `INSERT INTO glamping_parameters (
         name,
@@ -144,7 +153,7 @@ export async function POST(request: NextRequest) {
         zone_id,
         color_code || null,
         default_value !== undefined ? default_value : 1,
-        display_order !== undefined ? display_order : 0,
+        nextDisplayOrder,
         link_to_guests || false,
         controls_inventory || false,
         sets_pricing !== undefined ? sets_pricing : true,

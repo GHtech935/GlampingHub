@@ -437,6 +437,18 @@
         "bookingNotes": "Ghi Chú",
         "calendar": "Lịch",
         "calendarBooking": "Booking",
+        "calendarCustomer": "Khách hàng",
+        "customerCalendar": {
+            "title": "Customer Calendar",
+            "viewWeeks": "Xem",
+            "showEmptyItems": "Hiển thị mục trống",
+            "groupItems": "Nhóm mục trong booking",
+            "help": "Trợ giúp",
+            "print": "In",
+            "noData": "Không có dữ liệu",
+            "noItems": "Không có lều/phòng nào",
+            "tentRoom": "Lều/Phòng"
+        },
         "bookingNotesPage": {
             "title": "Ghi Chú Booking",
             "subtitle": "Tổng cộng {count} booking có ghi chú",

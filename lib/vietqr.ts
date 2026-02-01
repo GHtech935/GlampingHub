@@ -210,8 +210,8 @@ export function generateBalanceQRCode(
   const accountNumber = bankAccount?.account_number || process.env.SEPAY_BANK_ACCOUNT || '';
   const accountName = bankAccount?.account_holder || process.env.SEPAY_ACCOUNT_HOLDER || 'GlampingHub';
 
-  // Nội dung chuyển khoản: booking_reference + _balance suffix
-  const description = `${bookingReference}_balance`;
+  // Nội dung chuyển khoản: booking_reference + balance suffix (không dùng _ vì một số ngân hàng không hỗ trợ)
+  const description = `${bookingReference}balance`;
 
   return generateVietQRUrl({
     bankId,
@@ -240,7 +240,7 @@ export function getBalancePaymentInfo(
   const accountNumber = bankAccount?.account_number || process.env.SEPAY_BANK_ACCOUNT || '';
   const accountName = bankAccount?.account_holder || process.env.SEPAY_ACCOUNT_HOLDER || 'GlampingHub';
 
-  const description = `${bookingReference}_balance`;
+  const description = `${bookingReference}balance`;
   const qrCodeUrl = generateBalanceQRCode(bookingReference, amount, bankAccount);
 
   return {

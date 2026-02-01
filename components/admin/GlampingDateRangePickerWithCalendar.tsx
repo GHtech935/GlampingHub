@@ -460,11 +460,14 @@ export function GlampingDateRangePickerWithCalendar({
     }
   }
 
+  // For hotel bookings, the visual range is [check-in, check-out) - exclusive of check-out date
+  // Because check-out is when you leave, not when you stay
   const isDateInRange = (date: string) => {
     if (!dateRange?.from) return false
     const checkDate = new Date(date)
     if (!dateRange.to) return checkDate.getTime() === dateRange.from.getTime()
-    return checkDate >= dateRange.from && checkDate <= dateRange.to
+    // Exclusive of check-out date
+    return checkDate >= dateRange.from && checkDate < dateRange.to
   }
 
   const isRangeStart = (date: string) => {
@@ -473,16 +476,22 @@ export function GlampingDateRangePickerWithCalendar({
     return checkDate.getTime() === dateRange.from.getTime()
   }
 
+  // Check if date is the last NIGHT in range (day before check-out)
   const isRangeEnd = (date: string) => {
     if (!dateRange?.from || !dateRange?.to) return false
     const checkDate = new Date(date)
-    return checkDate.getTime() === dateRange.to.getTime()
+    // The visual "end" is the day before check-out (last night of stay)
+    const lastNight = new Date(dateRange.to)
+    lastNight.setDate(lastNight.getDate() - 1)
+    return checkDate.getTime() === lastNight.getTime()
   }
 
   const isRangeMiddle = (date: string) => {
     if (!dateRange?.from || !dateRange?.to) return false
     const checkDate = new Date(date)
-    return checkDate > dateRange.from && checkDate < dateRange.to
+    const lastNight = new Date(dateRange.to)
+    lastNight.setDate(lastNight.getDate() - 1)
+    return checkDate > dateRange.from && checkDate < lastNight
   }
 
   const calculateTotalPrice = () => {
@@ -700,7 +709,9 @@ export function GlampingDateRangePickerWithCalendar({
                       // Determine border radius
                       let roundedClass = 'rounded-md'
                       if (hasRange && isSelected) {
-                        if (isStartDate) roundedClass = 'rounded-l-lg'
+                        // For 1-night stay, start and end are the same day
+                        if (isStartDate && isEndDate) roundedClass = 'rounded-lg'
+                        else if (isStartDate) roundedClass = 'rounded-l-lg'
                         else if (isEndDate) roundedClass = 'rounded-r-lg'
                         else roundedClass = 'rounded-none'
                       }
@@ -728,10 +739,13 @@ export function GlampingDateRangePickerWithCalendar({
                         bgColorClass = 'bg-gray-100'
                       }
 
-                      // Negative margin for cells in range
+                      // Negative margin for cells in range (to make continuous look)
                       let marginClass = ''
                       if (hasRange && isSelected) {
-                        if (isStartDate) {
+                        // For 1-night stay, no margin needed (single cell)
+                        if (isStartDate && isEndDate) {
+                          marginClass = ''
+                        } else if (isStartDate) {
                           marginClass = '-mr-[0.05rem]'
                         } else if (isEndDate) {
                           marginClass = '-ml-[0.05rem]'

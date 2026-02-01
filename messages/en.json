@@ -437,6 +437,18 @@
         "bookingNotes": "Notes",
         "calendar": "Calendar",
         "calendarBooking": "Booking",
+        "calendarCustomer": "Customer",
+        "customerCalendar": {
+            "title": "Customer Calendar",
+            "viewWeeks": "View",
+            "showEmptyItems": "Show empty items",
+            "groupItems": "Group items in booking",
+            "help": "Help",
+            "print": "Print",
+            "noData": "No data available",
+            "noItems": "No tents/rooms available",
+            "tentRoom": "Tent/Room"
+        },
         "bookingNotesPage": {
             "title": "Booking Notes",
             "subtitle": "{count} bookings with notes",

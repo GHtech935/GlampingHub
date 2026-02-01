@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useGlampingCart } from '@/components/providers/GlampingCartProvider';
 
 /**
  * Format date to YYYY-MM-DD string in LOCAL timezone (not UTC)
@@ -43,11 +44,14 @@ export function ItemAvailabilityCalendar({ itemId, onDateSelect }: ItemAvailabil
   const [selectedEnd, setSelectedEnd] = useState<string | null>(null);
   const { toast } = useToast();
   const prevItemIdRef = useRef<string>(itemId);
+  const hasPreselectedFromCartRef = useRef<boolean>(false);
+  const { cart, isInitialized: cartInitialized } = useGlampingCart();
 
   // Reset calendar when itemId changes
   useEffect(() => {
     if (prevItemIdRef.current !== itemId) {
       setCalendar([]);
+      hasPreselectedFromCartRef.current = false;
       prevItemIdRef.current = itemId;
     }
   }, [itemId]);
@@ -55,6 +59,114 @@ export function ItemAvailabilityCalendar({ itemId, onDateSelect }: ItemAvailabil
   useEffect(() => {
     fetchAvailability();
   }, [itemId, currentMonth]);
+
+  // Pre-select dates from cart if available
+  useEffect(() => {
+    // Don't run if already preselected, still loading, cart not initialized, or dates already selected by user
+    if (
+      hasPreselectedFromCartRef.current ||
+      loading ||
+      !cartInitialized ||
+      selectedStart ||
+      selectedEnd
+    ) {
+      return;
+    }
+
+    // Check if cart has items (not the current item)
+    if (!cart || cart.items.length === 0) {
+      hasPreselectedFromCartRef.current = true;
+      return;
+    }
+
+    // Get dates from the first cart item
+    const firstCartItem = cart.items[0];
+
+    // Skip if this is the same item that's already in cart
+    if (firstCartItem.itemId === itemId) {
+      hasPreselectedFromCartRef.current = true;
+      return;
+    }
+
+    const cartCheckIn = firstCartItem.checkIn;
+    const cartCheckOut = firstCartItem.checkOut;
+
+    if (!cartCheckIn || !cartCheckOut) {
+      hasPreselectedFromCartRef.current = true;
+      return;
+    }
+
+    // Need calendar data to check availability
+    if (calendar.length === 0) {
+      return;
+    }
+
+    // Check if we have calendar data for the cart dates
+    const hasCalendarDataForDates = (startDate: string, endDate: string): boolean => {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+        const dateStr = formatDateToYMD(d);
+        const dayData = calendar.find(day => day.date === dateStr);
+        if (!dayData) return false;
+      }
+      return true;
+    };
+
+    // Check if the dates are available for this item
+    const checkDatesAvailable = (startDate: string, endDate: string): boolean => {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+        const dateStr = formatDateToYMD(d);
+
+        // Check if date is in the past
+        const checkDate = new Date(dateStr);
+        checkDate.setHours(0, 0, 0, 0);
+        if (checkDate < today) return false;
+
+        // Check if date is available in calendar data
+        const dayData = calendar.find(day => day.date === dateStr);
+        if (!dayData || !dayData.isAvailable) return false;
+      }
+      return true;
+    };
+
+    // If we don't have calendar data for cart dates, navigate to that month and wait
+    if (!hasCalendarDataForDates(cartCheckIn, cartCheckOut)) {
+      const checkInDate = new Date(cartCheckIn);
+      if (
+        checkInDate.getMonth() !== currentMonth.getMonth() ||
+        checkInDate.getFullYear() !== currentMonth.getFullYear()
+      ) {
+        setCurrentMonth(new Date(checkInDate.getFullYear(), checkInDate.getMonth(), 1));
+      }
+      // Don't mark as preselected yet - wait for data to load
+      return;
+    }
+
+    // Now we have the calendar data - check availability and pre-select if available
+    if (checkDatesAvailable(cartCheckIn, cartCheckOut)) {
+      setSelectedStart(cartCheckIn);
+      setSelectedEnd(cartCheckOut);
+      onDateSelect?.(cartCheckIn, cartCheckOut);
+
+      // Navigate to the check-in month if it's different
+      const checkInDate = new Date(cartCheckIn);
+      if (
+        checkInDate.getMonth() !== currentMonth.getMonth() ||
+        checkInDate.getFullYear() !== currentMonth.getFullYear()
+      ) {
+        setCurrentMonth(new Date(checkInDate.getFullYear(), checkInDate.getMonth(), 1));
+      }
+    }
+
+    // Mark as done (whether we preselected or not - dates not available)
+    hasPreselectedFromCartRef.current = true;
+  }, [calendar, loading, cartInitialized, cart, itemId, selectedStart, selectedEnd, onDateSelect, currentMonth]);
 
   const fetchAvailability = async () => {
     try {

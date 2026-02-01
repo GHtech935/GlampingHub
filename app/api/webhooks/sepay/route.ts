@@ -279,11 +279,11 @@ export async function POST(request: NextRequest) {
     let foundBooking = null;
     let isExpiredBooking = false;
     let bookingType: 'camping' | 'glamping' | null = null;
-    let isBalancePayment = false; // Flag for balance payment (GH{8}_balance)
+    let isBalancePayment = false; // Flag for balance payment (GH{8}balance)
 
     if (description) {
-      // First check: Balance payment pattern (GH\d{8}_balance)
-      const balanceMatch = description.match(/(GH\d{8})_balance/i);
+      // First check: Balance payment pattern (GH\d{8}balance) - không dùng _ vì một số ngân hàng không hỗ trợ
+      const balanceMatch = description.match(/(GH\d{8})balance/i);
 
       if (balanceMatch) {
         // Balance payment for glamping booking
@@ -351,7 +351,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Case 0: Balance Payment (GH{8}_balance) - Only for glamping bookings with deposit_paid status
+    // Case 0: Balance Payment (GH{8}balance) - Only for glamping bookings with deposit_paid status
     if (isBalancePayment && foundBooking && foundBooking.payment_status === 'deposit_paid' && bookingType === 'glamping') {
       console.log(`✅ Processing balance payment for glamping booking:`, bookingReference);
 

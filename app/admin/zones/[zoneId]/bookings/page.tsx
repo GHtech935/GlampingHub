@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { Search, RotateCcw, ChevronLeft, ChevronRight, RefreshCw, Eye, Mail, Phone, Calendar, Users, MapPin, Plus, BookOpen, CheckCircle, Clock, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,6 +146,8 @@ const getPaymentStatusLabel = (status: PaymentStatus, locale: string): string =>
 
 export default function GlampingBookingsPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const zoneId = params.zoneId as string;
   const t = useTranslations('admin.bookingsPage');
   const tFilter = useTranslations('admin.bookingsFilter');
@@ -171,6 +173,12 @@ export default function GlampingBookingsPage() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [showCreateBookingModal, setShowCreateBookingModal] = useState(false);
+  const [initialBookingData, setInitialBookingData] = useState<{
+    itemId?: string;
+    checkIn?: string;
+    checkOut?: string;
+  } | null>(null);
+  const hasHandledQueryParams = useRef(false);
   const [stats, setStats] = useState<{
     totalBookings: number;
     confirmedBookings: number;
@@ -182,6 +190,29 @@ export default function GlampingBookingsPage() {
     fetchBookings();
     fetchStats();
   }, [filters, pagination.currentPage, zoneId]);
+
+  // Handle query params for auto-opening create modal
+  useEffect(() => {
+    if (hasHandledQueryParams.current) return;
+
+    const action = searchParams.get('action');
+    if (action === 'create') {
+      hasHandledQueryParams.current = true;
+      const itemId = searchParams.get('itemId');
+      const checkIn = searchParams.get('checkIn');
+      const checkOut = searchParams.get('checkOut');
+
+      setInitialBookingData({
+        itemId: itemId || undefined,
+        checkIn: checkIn || undefined,
+        checkOut: checkOut || undefined,
+      });
+      setShowCreateBookingModal(true);
+
+      // Clean up URL params
+      router.replace(`/admin/zones/${zoneId}/bookings`, { scroll: false });
+    }
+  }, [searchParams, zoneId, router]);
 
   const fetchBookings = async () => {
     try {
@@ -771,14 +802,19 @@ export default function GlampingBookingsPage() {
       {/* Create Booking Modal */}
       <AdminGlampingBookingFormModal
         open={showCreateBookingModal}
-        onClose={() => setShowCreateBookingModal(false)}
+        onClose={() => {
+          setShowCreateBookingModal(false);
+          setInitialBookingData(null);
+        }}
         onSuccess={() => {
           setShowCreateBookingModal(false);
+          setInitialBookingData(null);
           fetchBookings();
           toast.success(locale === 'vi' ? 'Tạo booking thành công' : 'Booking created successfully');
         }}
         zoneId={zoneId}
         locale={locale}
+        initialData={initialBookingData}
       />
     </div>
   );
