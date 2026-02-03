@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
+// Types for tents data
+interface TentParameter {
+  id: string;
+  parameterId: string;
+  label: string;
+  bookedQuantity: number;
+  colorCode?: string;
+  visibility?: string;
+  countedForMenu?: boolean;
+}
+
+interface TentMenuProduct {
+  id: string;
+  menuItemId: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  servingDate?: string;
+  name: any;
+  description?: any;
+  unit?: any;
+  imageUrl?: string;
+  minGuests?: number | null;
+  maxGuests?: number | null;
+  categoryId?: string;
+  categoryName?: any;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -31,7 +59,7 @@ export async function GET(
 
     const booking = bookingResult.rows[0];
 
-    // Query 2: Accommodation details
+    // Query 2: Accommodation details (legacy, kept for backward compatibility)
     const accommodationResult = await query(`
       SELECT i.name as item_name, z.name as zone_name, z.id as zone_id
       FROM glamping_booking_items bi
@@ -42,7 +70,129 @@ export async function GET(
 
     const accommodation = accommodationResult.rows[0] || {};
 
-    // Query 3: Parameters
+    // Query 3: Tents from glamping_booking_tents
+    const tentsResult = await query(`
+      SELECT
+        bt.id,
+        bt.item_id,
+        bt.check_in_date,
+        bt.check_out_date,
+        bt.nights,
+        bt.subtotal,
+        bt.special_requests,
+        bt.display_order,
+        i.name as item_name,
+        z.id as zone_id,
+        z.name as zone_name
+      FROM glamping_booking_tents bt
+      LEFT JOIN glamping_items i ON bt.item_id = i.id
+      LEFT JOIN glamping_zones z ON i.zone_id = z.id
+      WHERE bt.booking_id = $1
+      ORDER BY bt.display_order
+    `, [bookingId]);
+
+    // Query 4: Parameters per tent from glamping_booking_parameters
+    const paramsResult = await query(`
+      SELECT
+        bp.id,
+        bp.booking_tent_id,
+        bp.parameter_id,
+        bp.label,
+        bp.booked_quantity,
+        p.color_code,
+        p.visibility,
+        p.counted_for_menu
+      FROM glamping_booking_parameters bp
+      LEFT JOIN glamping_parameters p ON bp.parameter_id = p.id
+      WHERE bp.booking_id = $1
+    `, [bookingId]);
+
+    // Query 5: Menu products per tent from glamping_booking_menu_products
+    const menuResult = await query(`
+      SELECT
+        bmp.id,
+        bmp.booking_tent_id,
+        bmp.menu_item_id,
+        bmp.quantity,
+        bmp.unit_price,
+        bmp.total_price,
+        bmp.serving_date,
+        mi.name,
+        mi.description,
+        mi.unit,
+        mi.image_url,
+        mi.min_guests,
+        mi.max_guests,
+        mc.id as category_id,
+        mc.name as category_name
+      FROM glamping_booking_menu_products bmp
+      LEFT JOIN glamping_menu_items mi ON bmp.menu_item_id = mi.id
+      LEFT JOIN glamping_menu_categories mc ON mi.category_id = mc.id
+      WHERE bmp.booking_id = $1
+      ORDER BY bmp.serving_date NULLS LAST, mc.weight, mi.sort_order
+    `, [bookingId]);
+
+    // Group parameters by tent_id
+    const paramsByTentId = new Map<string, TentParameter[]>();
+    for (const row of paramsResult.rows) {
+      const tentId = row.booking_tent_id || 'shared';
+      if (!paramsByTentId.has(tentId)) {
+        paramsByTentId.set(tentId, []);
+      }
+      paramsByTentId.get(tentId)!.push({
+        id: row.id,
+        parameterId: row.parameter_id,
+        label: row.label,
+        bookedQuantity: row.booked_quantity,
+        colorCode: row.color_code,
+        visibility: row.visibility,
+        countedForMenu: row.counted_for_menu,
+      });
+    }
+
+    // Group menu products by tent_id
+    const menuByTentId = new Map<string, TentMenuProduct[]>();
+    for (const row of menuResult.rows) {
+      const tentId = row.booking_tent_id || 'shared';
+      if (!menuByTentId.has(tentId)) {
+        menuByTentId.set(tentId, []);
+      }
+      menuByTentId.get(tentId)!.push({
+        id: row.id,
+        menuItemId: row.menu_item_id,
+        quantity: row.quantity,
+        unitPrice: parseFloat(row.unit_price),
+        totalPrice: parseFloat(row.total_price),
+        servingDate: row.serving_date,
+        name: row.name,
+        description: row.description,
+        unit: row.unit,
+        imageUrl: row.image_url,
+        minGuests: row.min_guests,
+        maxGuests: row.max_guests,
+        categoryId: row.category_id,
+        categoryName: row.category_name,
+      });
+    }
+
+    // Map tents with their parameters and menu products
+    const tents = tentsResult.rows.map((tent) => ({
+      id: tent.id,
+      itemId: tent.item_id,
+      itemName: tent.item_name,
+      zoneName: tent.zone_name,
+      zoneId: tent.zone_id,
+      checkInDate: tent.check_in_date,
+      checkOutDate: tent.check_out_date,
+      nights: tent.nights,
+      subtotal: parseFloat(tent.subtotal || 0),
+      specialRequests: tent.special_requests,
+      displayOrder: tent.display_order,
+      parameters: paramsByTentId.get(tent.id) || [],
+      menuProducts: menuByTentId.get(tent.id) || [],
+    }));
+
+    // Legacy: Parameters (flat list for backward compatibility)
     const parametersResult = await query(`
       SELECT bp.label, bp.booked_quantity, p.color_code
       FROM glamping_booking_parameters bp
@@ -50,7 +200,7 @@ export async function GET(
       WHERE bp.booking_id = $1
     `, [bookingId]);
 
-    // Query 4: Menu products
+    // Legacy: Menu products (flat list for backward compatibility)
     const menuProductsResult = await query(`
       SELECT
         mp.id, mp.menu_item_id, mp.quantity, mp.unit_price, mp.total_price,
@@ -68,7 +218,7 @@ export async function GET(
     const now = new Date();
     const msUntilCheckIn = checkInDate.getTime() - now.getTime();
     const hoursUntilCheckIn = msUntilCheckIn / (1000 * 60 * 60);
-    const canEditMenu = hoursUntilCheckIn >= 24 && booking.status === 'confirmed';
+    const canEditMenu = hoursUntilCheckIn >= 24 && booking.status === 'confirmed' && ['deposit_paid', 'fully_paid'].includes(booking.payment_status);
 
     // Build response
     return NextResponse.json({
@@ -85,6 +235,7 @@ export async function GET(
           address_line1: booking.address_line1,
         }
       },
+      tents, // At root level to match frontend interface
       parameters: parametersResult.rows,
       menuProducts: menuProductsResult.rows,
       canEditMenu,

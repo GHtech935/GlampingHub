@@ -1113,6 +1113,12 @@ export function ItemFormWizard({
             const result = await response.json();
             if (result.category?.id) {
               categoryTempToRealIdMap[category.id] = result.category.id;
+
+              // FIX: Cập nhật form value với real UUID ngay sau khi tạo
+              // Điều này đảm bảo lần submit tiếp theo sẽ có real UUID thay vì temp ID
+              if (data.category_id === category.id) {
+                form.setValue('category_id', result.category.id);
+              }
             }
           } else {
             const errorResult = await response.json();
@@ -1221,6 +1227,7 @@ export function ItemFormWizard({
         timeslots: transformedTimeslots,
         // Taxes (Step 6)
         taxes: taxes.filter(tax => tax.enabled), // Only send enabled taxes
+        // Note: is_tent is set at Step 1 (incremental create) based on URL/page, no need to send again
       };
 
       // DETERMINE ENDPOINT AND METHOD
@@ -1450,6 +1457,8 @@ export function ItemFormWizard({
           }
         }
         const mappedTags = selectedTags.map(tagId => tagTempToRealIdMap[tagId] || tagId);
+        // Update selectedTags state with real UUIDs so subsequent saves use correct IDs
+        setSelectedTags(mappedTags);
 
         // 6. Map category_id: use original value and check mapping
         let finalCategoryId: string | null = originalCategoryId || null;
@@ -1466,6 +1475,8 @@ export function ItemFormWizard({
           }
           // else: already a real UUID, use as-is
         }
+        // Update form with real category ID so subsequent step saves use correct UUID
+        form.setValue('category_id', finalCategoryId || '');
 
         // 6. POST Step 1 data with defaults for required fields
         const step1Data = {
@@ -1481,6 +1492,8 @@ export function ItemFormWizard({
           allocation_type: 'per_night',
           visibility: 'everyone',
           default_calendar_status: 'available',
+          // is_tent flag for filtering (true for Items page, false for Common Items page)
+          is_tent: isTentCategory,
         };
 
         const response = await fetch('/api/admin/glamping/items', {

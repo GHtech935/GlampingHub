@@ -2634,7 +2634,8 @@
                 "noLogin": "Chưa đăng nhập",
                 "edit": "Chỉnh sửa",
                 "delete": "Xóa",
-                "loginAs": "Đăng nhập với tư cách"
+                "loginAs": "Đăng nhập với tư cách",
+                "activate": "Kích hoạt lại"
             },
             "activityLogs": {
                 "time": "Thời gian",
@@ -2681,7 +2682,9 @@
                 "deleteConfirm": "Bạn có chắc muốn xóa user này?",
                 "impersonateConfirm": "Bạn có chắc muốn đăng nhập với tư cách {name}?",
                 "impersonateSuccess": "Đã đăng nhập với tư cách {name}",
-                "impersonateError": "Không thể đăng nhập với tư cách user này"
+                "impersonateError": "Không thể đăng nhập với tư cách user này",
+                "activateConfirm": "Bạn có chắc muốn kích hoạt lại tài khoản này?",
+                "activateError": "Không thể kích hoạt tài khoản"
             }
         },
         "emailsPage": {
@@ -3108,9 +3111,11 @@
                 "search": "Tìm kiếm mặt hàng...",
                 "filters": {
                     "all": "Tất cả",
+                    "allCategories": "Tất cả danh mục",
                     "category": "Danh mục",
                     "visibility": "Hiển thị",
-                    "status": "Trạng thái"
+                    "status": "Trạng thái",
+                    "noCategory": "Xem lều không có danh mục"
                 },
                 "table": {
                     "name": "Tên",
@@ -4399,6 +4404,7 @@
             },
             "allZonesStats": {
                 "totalItems": "Tổng Lều",
+                "totalCommonItems": "Tổng Item Chung",
                 "available": "Có Sẵn",
                 "zones": "Khu Vực",
                 "categories": "Danh Mục",
@@ -4425,6 +4431,11 @@
             "commonItems": {
                 "title": "Item chung",
                 "subtitle": "Quản lý các item dùng chung",
+                "allItems": "Tất cả Item chung",
+                "allItemsDesc": "Xem và quản lý item chung từ tất cả các khu",
+                "filterByZone": "Lọc theo khu",
+                "allZones": "Tất cả khu",
+                "zone": "Khu",
                 "addNew": "Thêm item mới",
                 "search": "Tìm kiếm item...",
                 "categoryButton": "Danh mục",
@@ -4452,7 +4463,9 @@
                     "allCategories": "Tất cả danh mục"
                 },
                 "filters": {
-                    "all": "Tất cả"
+                    "all": "Tất cả",
+                    "allCategories": "Tất cả danh mục",
+                    "noCategory": "Xem item không có danh mục"
                 },
                 "status": {
                     "active": "Hoạt động",
@@ -5331,5 +5344,43 @@
         "contactSupport": "Liên hệ hỗ trợ",
         "qrCodeAlt": "QR Code thanh toán",
         "currency": "VNĐ"
+    },
+    "glampingConfirmation": {
+        "title": "Chi tiết đặt phòng và món ăn",
+        "loading": "Đang tải...",
+        "bookingNotFound": "Không tìm thấy booking",
+        "errorLoadingBooking": "Lỗi khi tải thông tin booking",
+        "canEditMenuAlert": "Bạn có thể chỉnh sửa món ăn cho từng lều. Nhấn nút \"Chỉnh sửa\" bên cạnh mỗi lều để thay đổi.",
+        "payDepositToEditAlert": "Vui lòng thanh toán đặt cọc để có thể chỉnh sửa món ăn.",
+        "cannotEditMenuDeadline": "Không thể chỉnh sửa món ăn. Chỉ có thể sửa trước 24 giờ so với ngày check-in.",
+        "customerInfo": "Thông tin khách hàng",
+        "fullName": "Họ tên",
+        "email": "Email",
+        "phone": "Số điện thoại",
+        "specialRequirements": "Yêu cầu đặc biệt",
+        "accommodationDetails": "Chi tiết lưu trú",
+        "zone": "Khu vực",
+        "accommodationType": "Loại chỗ ở",
+        "checkIn": "Check-in",
+        "checkOut": "Check-out",
+        "paymentSummary": "Tổng thanh toán",
+        "subtotal": "Tạm tính:",
+        "tax": "Thuế:",
+        "discount": "Giảm giá:",
+        "total": "Tổng cộng:",
+        "deposit": "Tiền cọc:",
+        "balanceDue": "Còn thiếu:",
+        "paymentStatus": {
+            "pending": "Chờ thanh toán",
+            "deposit_paid": "Đã đặt cọc",
+            "fully_paid": "Đã thanh toán đủ",
+            "paid": "Đã thanh toán"
+        },
+        "bookingStatus": {
+            "pending": "Đang chờ xác nhận",
+            "confirmed": "Đã xác nhận",
+            "cancelled": "Đã hủy",
+            "completed": "Hoàn thành"
+        }
     }
 }

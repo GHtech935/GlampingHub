@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { getSession, getAccessibleGlampingZoneIds } from '@/lib/auth';
+import { getSession, getAccessibleGlampingZoneIdsFromDB } from '@/lib/auth';
 
 // GET - List all glamping zones
 export async function GET(req: NextRequest) {
@@ -10,14 +10,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Role check: admin, sale, glamping_owner
+    // Role check: admin, sale, glamping_owner, operations
     // NOTE: 'owner' (camping) should NOT have access to glamping zones
-    if (!['admin', 'sale', 'glamping_owner'].includes(session.role)) {
+    if (!['admin', 'sale', 'glamping_owner', 'operations'].includes(session.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get accessible zone IDs (null = all, [] = none)
-    const accessibleZoneIds = getAccessibleGlampingZoneIds(session);
+    const accessibleZoneIds = await getAccessibleGlampingZoneIdsFromDB(session);
 
     // If no zones assigned, return empty result
     if (accessibleZoneIds !== null && accessibleZoneIds.length === 0) {

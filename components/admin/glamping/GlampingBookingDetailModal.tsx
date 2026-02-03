@@ -32,6 +32,7 @@ import {
   DollarSign,
   History,
   Home,
+  ExternalLink,
 } from "lucide-react";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { toast } from "react-hot-toast";
@@ -881,10 +882,21 @@ export function GlampingBookingDetailModal({
                   {locale === 'vi' ? 'Thông tin khách hàng' : 'Customer Information'}
                 </h3>
                 {!isEditingGuest ? (
-                  <Button variant="ghost" size="sm" onClick={startEditingGuest}>
-                    <Pencil className="h-4 w-4 mr-1" />
-                    {locale === 'vi' ? 'Sửa' : 'Edit'}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => window.open(`/glamping/booking/confirmation/${bookingId}`, '_blank')}
+                      title={locale === 'vi' ? 'Xem trang xác nhận' : 'View confirmation page'}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={startEditingGuest}>
+                      <Pencil className="h-4 w-4 mr-1" />
+                      {locale === 'vi' ? 'Sửa' : 'Edit'}
+                    </Button>
+                  </div>
                 ) : (
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => setIsEditingGuest(false)} disabled={updating}>

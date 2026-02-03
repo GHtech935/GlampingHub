@@ -5,6 +5,14 @@ import { Plus, Search, Edit, Tent, ImageOff, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
@@ -12,6 +20,7 @@ interface Item {
   id: string;
   name: string;
   sku: string;
+  category_id: string;
   category_name: string;
   inventory_quantity: number;
   status: string;
@@ -22,6 +31,12 @@ interface Item {
   deposit_type: string;
   deposit_value: number;
   is_active: boolean;
+  display_order: number;
+}
+
+interface Category {
+  id: string;
+  name: string;
 }
 
 const formatCurrency = (amount: number) => {
@@ -40,9 +55,12 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
   const t = useTranslations("admin.glamping.items");
   const tc = useTranslations("admin.glamping.common");
   const [items, setItems] = useState<Item[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [showNoCategory, setShowNoCategory] = useState(false);
 
   useEffect(() => {
     if (zoneId === "all") {
@@ -53,13 +71,34 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
   useEffect(() => {
     if (zoneId !== "all") {
       fetchItems();
+      fetchCategories();
     }
-  }, [zoneId]);
+  }, [zoneId, showNoCategory]);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(`/api/admin/glamping/categories?zone_id=${zoneId}&is_tent=true`);
+      const data = await response.json();
+      if (data.categories) {
+        setCategories(data.categories);
+      }
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+    }
+  };
 
   const fetchItems = async () => {
     try {
-      // Filter by is_tent_category=true for tent items only
-      const response = await fetch(`/api/admin/glamping/items?zone_id=${zoneId}&is_tent_category=true`);
+      // Build query params based on filter
+      let url = `/api/admin/glamping/items?zone_id=${zoneId}`;
+      if (showNoCategory) {
+        // Fetch items without category (no_category=true), only tents
+        url += '&no_category=true&is_tent=true';
+      } else {
+        // Filter by is_tent_category=true for tent items only
+        url += '&is_tent_category=true';
+      }
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data.items) {
@@ -84,7 +123,17 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
       (statusFilter === 'active' && item.is_active) ||
       (statusFilter === 'inactive' && !item.is_active);
 
-    return matchesSearch && matchesStatus;
+    // Filter by category
+    let matchesCategory = true;
+    if (showNoCategory) {
+      // When checkbox is checked, only show items without category
+      matchesCategory = !item.category_id || item.category_id === '';
+    } else if (categoryFilter !== 'all') {
+      // When a specific category is selected
+      matchesCategory = item.category_id === categoryFilter;
+    }
+
+    return matchesSearch && matchesStatus && matchesCategory;
   });
 
   const getStatusVariant = (status: string) => {
@@ -124,6 +173,43 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
           />
+        </div>
+        {/* Category Filter */}
+        <Select
+          value={categoryFilter}
+          onValueChange={setCategoryFilter}
+          disabled={showNoCategory}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder={t("filters.allCategories")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("filters.allCategories")}</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* No Category Checkbox */}
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="noCategory"
+            checked={showNoCategory}
+            onCheckedChange={(checked) => {
+              setShowNoCategory(checked === true);
+              if (checked) {
+                setCategoryFilter('all');
+              }
+            }}
+          />
+          <label
+            htmlFor="noCategory"
+            className="text-sm text-gray-700 cursor-pointer whitespace-nowrap"
+          >
+            {t("filters.noCategory")}
+          </label>
         </div>
         {/* Status Filter */}
         <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
@@ -220,10 +306,15 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
 
               {/* Content */}
               <div className="p-4 space-y-3">
-                {/* Name */}
-                <h3 className="font-semibold text-lg text-gray-900 leading-tight line-clamp-1">
-                  {item.name}
-                </h3>
+                {/* Name with display order */}
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold text-lg text-gray-900 leading-tight line-clamp-1">
+                    {item.name}
+                  </h3>
+                  <span className="flex-shrink-0 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                    #{item.display_order}
+                  </span>
+                </div>
 
                 {/* SKU */}
                 {item.sku && (

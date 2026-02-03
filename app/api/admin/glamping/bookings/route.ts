@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
-import { getSession, isStaffSession, getAccessibleGlampingZoneIds } from "@/lib/auth";
+import { getSession, isStaffSession, getAccessibleGlampingZoneIdsFromDB } from "@/lib/auth";
 
 // Disable caching - admin needs real-time data
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get accessible zone IDs (null = all, [] = none)
-    const accessibleZoneIds = getAccessibleGlampingZoneIds(session);
+    const accessibleZoneIds = await getAccessibleGlampingZoneIdsFromDB(session);
 
     const searchParams = request.nextUrl.searchParams;
 
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       // glamping_owner: filter by accessible zones
       if (accessibleZoneIds.length === 0) {
         // No zones assigned - return empty
-        return NextResponse.json({ bookings: [], total: 0 });
+        return NextResponse.json({ bookings: [], pagination: { currentPage: 1, totalPages: 0, totalBookings: 0, limit, hasNextPage: false, hasPreviousPage: false } });
       }
 
       if (zoneId && zoneId !== "all") {

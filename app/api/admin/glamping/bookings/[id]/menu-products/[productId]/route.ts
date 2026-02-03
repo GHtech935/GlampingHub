@@ -122,6 +122,8 @@ export async function PUT(
     }
 
     // Update product row (total_price is a generated column — do not set it)
+    // subtotal_override allows manual price override
+    const newSubtotalOverride = subtotalOverride !== undefined ? subtotalOverride : oldProduct.subtotal_override;
     await client.query(
       `UPDATE glamping_booking_menu_products SET
          menu_item_id = $3,
@@ -132,7 +134,8 @@ export async function PUT(
          voucher_id = $8,
          discount_type = $9,
          discount_value = $10,
-         discount_amount = $11
+         discount_amount = $11,
+         subtotal_override = $12
        WHERE id = $1 AND booking_id = $2`,
       [
         productId,
@@ -146,6 +149,7 @@ export async function PUT(
         discountType,
         discountValue,
         discountAmount,
+        newSubtotalOverride,
       ]
     );
 

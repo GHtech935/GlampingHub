@@ -275,10 +275,11 @@ export async function PUT(
 
     // Handle glamping zone assignments if provided
     const hasUserGlampingZones = await tableExists('user_glamping_zones');
+    const multiZoneRoles = ['glamping_owner', 'sale', 'operations'];
     if (glampingZoneIds !== undefined && Array.isArray(glampingZoneIds)) {
       let userRole = effectiveRole;
 
-      if (userRole === 'glamping_owner') {
+      if (multiZoneRoles.includes(userRole)) {
         if (hasUserGlampingZones) {
           // Delete existing assignments for this user
           await pool.query(
@@ -295,7 +296,7 @@ export async function PUT(
             await pool.query(
               `INSERT INTO user_glamping_zones (user_id, zone_id, role, assigned_at, assigned_by)
                VALUES ${values}`,
-              [id, ...glampingZoneIds, 'glamping_owner', session.id]
+              [id, ...glampingZoneIds, userRole, session.id]
             );
           }
         }

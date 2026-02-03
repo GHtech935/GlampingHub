@@ -38,6 +38,7 @@ import {
   Unlock,
   Key,
   Eye,
+  EyeOff,
   AlertCircle,
   LogIn,
   CheckCircle,
@@ -55,8 +56,10 @@ interface User {
   role: string;
   campsite_id: string;              // DEPRECATED: for backward compatibility
   campsite_name: string;            // DEPRECATED: for backward compatibility
-  glamping_zone_id: string | null;  // NEW: glamping zone ID
-  glamping_zone_name: string | null; // NEW: glamping zone name
+  glamping_zone_id: string | null;  // DEPRECATED: use assigned_zone_ids
+  glamping_zone_name: string | null; // DEPRECATED: use assigned_zone_names
+  assigned_zone_ids: string[] | null;  // NEW: array of zone IDs from user_glamping_zones
+  assigned_zone_names: string[] | null; // NEW: array of zone names from user_glamping_zones
   role_description: string;
   is_active: boolean;
   phone: string;
@@ -103,6 +106,15 @@ export default function UsersPage() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [usersLoading, setUsersLoading] = useState(true);
 
+  // Change password modal state
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+  const [passwordChangeUser, setPasswordChangeUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
   // Activity logs state
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [activityLogsLoading, setActivityLogsLoading] = useState(false);
@@ -123,9 +135,9 @@ export default function UsersPage() {
 
   const [formRole, setFormRole] = useState<string>('operations');
 
-  // Zone state for single select
+  // Zone state for multi-select (glamping_owner, sale, operations)
   const [zones, setZones] = useState<Array<{id: string, name: string}>>([]);
-  const [selectedZoneId, setSelectedZoneId] = useState<string>('');
+  const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([]);
 
   // User role state
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -220,7 +232,8 @@ useEffect(() => {
   useEffect(() => {
     if (selectedUser?.role) {
       setFormRole(normalizeRoleValue(selectedUser.role));
-      setSelectedZoneId(selectedUser.glamping_zone_id || '');
+      // Load assigned zones from user_glamping_zones table
+      setSelectedZoneIds(selectedUser.assigned_zone_ids || []);
     }
   }, [selectedUser]);
 
@@ -264,13 +277,16 @@ useEffect(() => {
   }, [activeTab]);
 
 
+  // Roles that support multi-zone assignment
+  const multiZoneRoles = ['glamping_owner', 'sale', 'operations'];
+
   // Handle save user
   const handleSaveUser = async (formData: any) => {
     try {
       const normalizedRole = normalizeRoleValue(formRole);
 
       // Validate: glamping_owner must have a zone assigned
-      if (normalizedRole === 'glamping_owner' && !selectedZoneId) {
+      if (normalizedRole === 'glamping_owner' && selectedZoneIds.length === 0) {
         toast({
           title: t('toast.error'),
           description: 'Chủ Glamping phải được gán vào ít nhất một zone',
@@ -291,12 +307,9 @@ useEffect(() => {
         role: normalizedRole
       };
 
-      // For glamping_owner role, send glampingZoneIds array
-      if (normalizedRole === 'glamping_owner' && selectedZoneId) {
-        requestBody.glampingZoneIds = [selectedZoneId];
-      } else if (selectedZoneId) {
-        // For backward compatibility with other roles
-        requestBody.glamping_zone_id = selectedZoneId;
+      // For glamping_owner, sale, operations roles - send glampingZoneIds array
+      if (multiZoneRoles.includes(normalizedRole) && selectedZoneIds.length > 0) {
+        requestBody.glampingZoneIds = selectedZoneIds;
       }
 
       const response = await fetch(url, {
@@ -315,7 +328,7 @@ useEffect(() => {
         setIsUserModalOpen(false);
         setFormRole('operations');
         // Keep zone selection if viewing specific zone, reset if "all"
-        setSelectedZoneId(zoneId !== 'all' ? zoneId : '');
+        setSelectedZoneIds(zoneId !== 'all' ? [zoneId] : []);
         fetchUsers();
       } else {
         toast({
@@ -357,6 +370,94 @@ useEffect(() => {
         description: t('toast.deleteError'),
         variant: 'destructive'
       });
+    }
+  };
+
+  // Handle activate user (reactivate deactivated account)
+  const handleActivateUser = async (userId: string) => {
+    if (!confirm(t('toast.activateConfirm'))) return;
+
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH'
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: t('toast.success'),
+          description: data.message
+        });
+        fetchUsers();
+      }
+    } catch (error) {
+      toast({
+        title: t('toast.error'),
+        description: t('toast.activateError'),
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle change password
+  const handleChangePassword = async () => {
+    if (!passwordChangeUser) return;
+
+    // Validate passwords
+    if (newPassword.length < 8) {
+      toast({
+        title: t('toast.error'),
+        description: 'Mật khẩu phải có ít nhất 8 ký tự',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: t('toast.error'),
+        description: 'Mật khẩu xác nhận không khớp',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const response = await fetch(`/api/admin/users/${passwordChangeUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: t('toast.success'),
+          description: 'Đổi mật khẩu thành công'
+        });
+        setIsChangePasswordModalOpen(false);
+        setPasswordChangeUser(null);
+        setNewPassword('');
+        setConfirmPassword('');
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
+      } else {
+        toast({
+          title: t('toast.error'),
+          description: data.error || 'Không thể đổi mật khẩu',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: t('toast.error'),
+        description: 'Đã xảy ra lỗi khi đổi mật khẩu',
+        variant: 'destructive'
+      });
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -464,7 +565,7 @@ useEffect(() => {
               setSelectedUser(null);
               setFormRole('operations');
               // Auto-assign current zone if viewing specific zone page
-              setSelectedZoneId(zoneId !== 'all' ? zoneId : '');
+              setSelectedZoneIds(zoneId !== 'all' ? [zoneId] : []);
               setIsUserModalOpen(true);
             }}>
               <Plus className="w-4 h-4 mr-2" />
@@ -497,7 +598,7 @@ useEffect(() => {
           />
           <StatCard
             title={t('stats.zones')}
-            value={new Set(users.map((u) => u.glamping_zone_id).filter(Boolean)).size}
+            value={new Set(users.flatMap((u) => u.assigned_zone_ids || []).filter(Boolean)).size}
             icon={MapPin}
             color="orange"
           />
@@ -535,6 +636,7 @@ useEffect(() => {
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
                       className="pl-10"
+                      autoComplete="off"
                     />
                   </div>
                 </div>
@@ -610,12 +712,14 @@ useEffect(() => {
                               {user.phone && (
                                 <p className="text-sm text-gray-500">{user.phone}</p>
                               )}
-                              {/* Show glamping zone */}
-                              {user.glamping_zone_name && (
-                                <div className="mt-1">
-                                  <Badge variant="outline" className="text-xs">
-                                    📍 {user.glamping_zone_name}
-                                  </Badge>
+                              {/* Show all assigned glamping zones */}
+                              {user.assigned_zone_names && user.assigned_zone_names.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {user.assigned_zone_names.map((zoneName, index) => (
+                                    <Badge key={index} variant="outline" className="text-xs">
+                                      📍 {zoneName}
+                                    </Badge>
+                                  ))}
                                 </div>
                               )}
                             </div>
@@ -642,7 +746,7 @@ useEffect(() => {
                                   onClick={() => {
                                     setSelectedUser(user);
                                     setFormRole(normalizeRoleValue(user.role));
-                                    setSelectedZoneId(user.glamping_zone_id || '');  // Load assigned zone
+                                    setSelectedZoneIds(user.assigned_zone_ids || []);  // Load assigned zones
                                     setIsUserModalOpen(true);
                                   }}
                                   title={t('table.edit')}
@@ -661,11 +765,39 @@ useEffect(() => {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleDeleteUser(user.id)}
-                                  title={t('table.delete')}
+                                  className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                                  onClick={() => {
+                                    setPasswordChangeUser(user);
+                                    setNewPassword('');
+                                    setConfirmPassword('');
+                                    setShowNewPassword(false);
+                                    setShowConfirmPassword(false);
+                                    setIsChangePasswordModalOpen(true);
+                                  }}
+                                  title="Đổi mật khẩu"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Key className="w-4 h-4" />
                                 </Button>
+                                {user.is_active ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDeleteUser(user.id)}
+                                    title={t('table.delete')}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    onClick={() => handleActivateUser(user.id)}
+                                    title={t('table.activate')}
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </Button>
+                                )}
                               </div>
                             )}
                           </td>
@@ -860,7 +992,10 @@ useEffect(() => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">{t('roles.admin')}</SelectItem>
+                      {/* Only show admin option when viewing all zones page */}
+                      {zoneId === 'all' && (
+                        <SelectItem value="admin">{t('roles.admin')}</SelectItem>
+                      )}
                       <SelectItem value="sale">{t('roles.sale')}</SelectItem>
                       <SelectItem value="operations">{t('roles.operationsDetail')}</SelectItem>
                       <SelectItem value="glamping_owner">Chủ Glamping</SelectItem>
@@ -869,26 +1004,48 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Zone selector - only show if viewing "all zones" page */}
-              {zoneId === 'all' && (
+              {/* Zone selector - show for roles that support multi-zone */}
+              {zoneId === 'all' && multiZoneRoles.includes(formRole) && (
                 <div>
-                  <Label htmlFor="glamping_zone_id">Glamping Zone</Label>
-                  <Select
-                    name="glamping_zone_id"
-                    value={selectedZoneId}
-                    onValueChange={setSelectedZoneId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a zone (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {zones.map((zone) => (
-                        <SelectItem key={zone.id} value={zone.id}>
-                          {zone.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Glamping Zones {formRole === 'glamping_owner' ? '(Bắt buộc)' : '(Tùy chọn)'}</Label>
+                  <div className="mt-2 border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                    {zones.map((zone) => (
+                      <label key={zone.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                        <input
+                          type="checkbox"
+                          checked={selectedZoneIds.includes(zone.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedZoneIds([...selectedZoneIds, zone.id]);
+                            } else {
+                              setSelectedZoneIds(selectedZoneIds.filter(id => id !== zone.id));
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm">{zone.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {selectedZoneIds.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {selectedZoneIds.map(zoneId => {
+                        const zone = zones.find(z => z.id === zoneId);
+                        return zone ? (
+                          <Badge key={zoneId} variant="secondary" className="text-xs">
+                            {zone.name}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedZoneIds(selectedZoneIds.filter(id => id !== zoneId))}
+                              className="ml-1 hover:text-red-500"
+                            >
+                              ×
+                            </button>
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -903,6 +1060,122 @@ useEffect(() => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Modal */}
+      <Dialog open={isChangePasswordModalOpen} onOpenChange={setIsChangePasswordModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5" />
+              Đổi mật khẩu
+            </DialogTitle>
+            <DialogDescription>
+              Đổi mật khẩu cho: <strong>{passwordChangeUser?.first_name} {passwordChangeUser?.last_name}</strong> ({passwordChangeUser?.email})
+            </DialogDescription>
+          </DialogHeader>
+
+          <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
+          {/* Hidden inputs to trap browser autofill */}
+          <input type="text" name="trap-username" autoComplete="username" style={{ display: 'none' }} tabIndex={-1} />
+          <input type="password" name="trap-password" autoComplete="current-password" style={{ display: 'none' }} tabIndex={-1} />
+
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="newPassword">Mật khẩu mới</Label>
+              <div className="relative mt-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-4 w-4 text-gray-400" />
+                </div>
+                <Input
+                  id="newPassword"
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="pl-10 pr-10"
+                  placeholder="Nhập mật khẩu mới (ít nhất 8 ký tự)"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
+              <div className="relative mt-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-4 w-4 text-gray-400" />
+                </div>
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="pl-10 pr-10"
+                  placeholder="Nhập lại mật khẩu mới"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {newPassword && confirmPassword && newPassword !== confirmPassword && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                Mật khẩu xác nhận không khớp
+              </p>
+            )}
+
+            {newPassword && newPassword.length < 8 && (
+              <p className="text-sm text-yellow-600 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                Mật khẩu phải có ít nhất 8 ký tự
+              </p>
+            )}
+          </div>
+          </form>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsChangePasswordModalOpen(false);
+                setPasswordChangeUser(null);
+                setNewPassword('');
+                setConfirmPassword('');
+              }}
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={handleChangePassword}
+              disabled={passwordLoading || !newPassword || !confirmPassword || newPassword !== confirmPassword || newPassword.length < 8}
+            >
+              {passwordLoading ? 'Đang xử lý...' : 'Đổi mật khẩu'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

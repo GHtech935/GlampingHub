@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard,
   Calendar,
@@ -68,7 +68,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as HotToaster } from "react-hot-toast";
+import { Toaster as HotToaster, toast } from "react-hot-toast";
 import { AdminI18nProvider, useAdminLocale } from "@/components/providers/AdminI18nProvider";
 import { useTranslations } from "next-intl";
 import { NotificationBell } from "@/components/notifications";
@@ -86,6 +86,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [glampingZoneIds, setGlampingZoneIds] = useState<string[]>([]);
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
+  const hasShownNoZonesToast = useRef(false);
   const t = useTranslations('admin');
   const tHeader = useTranslations('header');
   const { locale, changeLocale } = useAdminLocale();
@@ -150,14 +151,21 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     localStorage.setItem('last_admin_system', 'glamping');
   }, []);
 
-  // Redirect glamping_owner from "all" zones to their specific zone
+  // Redirect glamping_owner/operations from "all" zones to their specific zone
+  const isZoneRestrictedRole = !loading && (userRole === 'glamping_owner' || userRole === 'operations') && currentZoneId === 'all';
+  const needsZoneRedirect = isZoneRestrictedRole && glampingZoneIds.length > 0;
+  const hasNoAssignedZones = isZoneRestrictedRole && glampingZoneIds.length === 0;
   useEffect(() => {
-    if (!loading && userRole === 'glamping_owner' && currentZoneId === 'all' && glampingZoneIds.length > 0) {
+    if (needsZoneRedirect) {
       // Replace /admin/zones/all/* with /admin/zones/{firstZoneId}/*
       const newPath = pathname.replace('/admin/zones/all', `/admin/zones/${glampingZoneIds[0]}`);
       router.replace(newPath);
+    } else if (hasNoAssignedZones && !hasShownNoZonesToast.current) {
+      hasShownNoZonesToast.current = true;
+      toast.error(locale === 'vi' ? 'Bạn chưa được phân công khu glamping nào. Vui lòng liên hệ quản trị viên.' : 'You are not assigned to any glamping zone. Please contact admin.');
+      router.replace('/login-admin');
     }
-  }, [loading, userRole, currentZoneId, glampingZoneIds, pathname, router]);
+  }, [needsZoneRedirect, hasNoAssignedZones, glampingZoneIds, pathname, router, locale]);
 
   // Auto-expand reports menu when on a reports page
   useEffect(() => {
@@ -603,8 +611,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             </header>
           )}
 
-          {/* Page content */}
-          <main className={shouldHideSidebar ? "p-0" : "p-4 sm:p-6 lg:p-8"}>{children}</main>
+          {/* Page content - don't render while zone redirect is pending */}
+          <main className={shouldHideSidebar ? "p-0" : "p-4 sm:p-6 lg:p-8"}>{(needsZoneRedirect || hasNoAssignedZones) ? null : children}</main>
         </div>
       </div>
       <Toaster />

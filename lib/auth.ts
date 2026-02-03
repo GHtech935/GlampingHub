@@ -138,15 +138,15 @@ export async function authenticateAdmin(
       }
     }
 
-    // NEW: Fetch glamping zone assignments for glamping_owner
+    // NEW: Fetch glamping zone assignments for glamping_owner and operations
     let glampingZoneIds: string[] | undefined;
-    if (user.role === 'glamping_owner') {
+    if (user.role === 'glamping_owner' || user.role === 'operations') {
       try {
         const hasGlampingZonesTable = await tableExists('user_glamping_zones');
         if (hasGlampingZonesTable) {
           const zonesResult = await pool.query(
             'SELECT zone_id FROM user_glamping_zones WHERE user_id = $1 AND role = $2 ORDER BY assigned_at',
-            [user.id, 'glamping_owner']
+            [user.id, user.role]
           );
           glampingZoneIds = zonesResult.rows.map(row => row.zone_id);
         }
@@ -175,7 +175,7 @@ export async function authenticateAdmin(
         ? campsiteIds[0]
         : user.campsite_id,
       campsiteIds, // Populated for both operations and owner roles
-      glampingZoneIds, // NEW - only for glamping_owner role
+      glampingZoneIds, // NEW - for glamping_owner and operations roles
     };
   } catch (error) {
     console.error('Admin authentication error:', error);
@@ -561,8 +561,8 @@ export function canAccessGlampingZone(
     return true;
   }
 
-  // glamping_owner can only access assigned zones
-  if (session.role === 'glamping_owner') {
+  // glamping_owner and operations can only access assigned zones
+  if (session.role === 'glamping_owner' || session.role === 'operations') {
     if (!session.glampingZoneIds || session.glampingZoneIds.length === 0) {
       return false;
     }
@@ -570,7 +570,6 @@ export function canAccessGlampingZone(
   }
 
   // owner role (camping) has NO access to glamping zones
-  // operations role: not used for glamping zones (only camping)
   return false;
 }
 
@@ -589,11 +588,62 @@ export function getAccessibleGlampingZoneIds(
     return null;
   }
 
-  // glamping_owner: return their assigned zones
-  if (session.role === 'glamping_owner') {
+  // glamping_owner and operations: return their assigned zones
+  if (session.role === 'glamping_owner' || session.role === 'operations') {
     return session.glampingZoneIds || [];
   }
 
-  // owner (camping) and operations: no glamping zones access
+  // owner (camping): no glamping zones access
+  return [];
+}
+
+/**
+ * Async DB-backed version of getAccessibleGlampingZoneIds.
+ * Falls back to querying user_glamping_zones table when JWT cache is empty.
+ * Use this in API routes where DB access is available.
+ */
+export async function getAccessibleGlampingZoneIdsFromDB(
+  session: SessionUser | null
+): Promise<string[] | null> {
+  if (!session || !isStaffSession(session)) return [];
+
+  // Admin and sale can access all zones (return null = no filter)
+  if (session.role === 'admin' || session.role === 'sale') return null;
+
+  // glamping_owner and operations: try JWT cache first
+  if (session.role === 'glamping_owner' || session.role === 'operations') {
+    if (session.glampingZoneIds && session.glampingZoneIds.length > 0) {
+      return session.glampingZoneIds;
+    }
+
+    // JWT cache empty — query DB directly
+    try {
+      const hasTable = await tableExists('user_glamping_zones');
+      if (hasTable) {
+        const result = await pool.query(
+          'SELECT zone_id FROM user_glamping_zones WHERE user_id = $1 AND role = $2 ORDER BY assigned_at',
+          [session.id, session.role]
+        );
+        if (result.rows.length > 0) {
+          return result.rows.map(row => row.zone_id);
+        }
+      }
+
+      // Fallback: check users.glamping_zone_id (single legacy field)
+      const userResult = await pool.query(
+        'SELECT glamping_zone_id FROM users WHERE id = $1',
+        [session.id]
+      );
+      if (userResult.rows.length > 0 && userResult.rows[0].glamping_zone_id) {
+        return [userResult.rows[0].glamping_zone_id];
+      }
+    } catch (error) {
+      console.error('Failed to fetch glamping zone assignments from DB:', error);
+    }
+
+    return [];
+  }
+
+  // owner (camping): no glamping zones access
   return [];
 }

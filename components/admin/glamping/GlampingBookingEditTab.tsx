@@ -60,6 +60,7 @@ interface MenuProductItem {
   bookingTentId?: string | null;
   voucherCode?: string | null;
   discountAmount: number;
+  subtotalOverride?: number | null;
 }
 
 interface AdditionalCostItem {
@@ -304,6 +305,7 @@ export function GlampingBookingEditTab({
       bookingTentId: product.bookingTentId,
       voucherCode: product.voucherCode,
       discountAmount: product.discountAmount,
+      subtotalOverride: product.subtotalOverride,
     });
   };
 

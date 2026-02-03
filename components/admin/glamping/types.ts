@@ -359,6 +359,7 @@ export interface ProductEditData {
   bookingTentId?: string | null;
   voucherCode?: string | null;
   discountAmount?: number;
+  subtotalOverride?: number | null;
 }
 
 /**

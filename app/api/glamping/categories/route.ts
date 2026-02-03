@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
       SELECT c.id, c.name, c.zone_id, c.weight, c.status
       FROM glamping_categories c
       JOIN glamping_zones z ON z.id = c.zone_id
-      WHERE z.is_active = true AND c.status = 'active'
+      WHERE z.is_active = true AND c.status = 'active' AND c.is_tent_category = true
     `;
 
     const params: any[] = [];

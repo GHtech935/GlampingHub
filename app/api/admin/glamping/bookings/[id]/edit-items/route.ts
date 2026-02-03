@@ -135,6 +135,7 @@ export async function GET(
         mp.quantity,
         mp.unit_price,
         mp.total_price,
+        mp.subtotal_override,
         mp.serving_date,
         mp.voucher_code,
         mp.discount_type,
@@ -152,7 +153,9 @@ export async function GET(
     );
 
     const menuProducts = menuResult.rows.map(mp => {
-      const totalPrice = parseFloat(mp.total_price || '0');
+      // Use subtotal_override if set, otherwise use generated total_price
+      const subtotalOverride = mp.subtotal_override ? parseFloat(mp.subtotal_override) : null;
+      const totalPrice = subtotalOverride !== null ? subtotalOverride : parseFloat(mp.total_price || '0');
       const discountAmount = parseFloat(mp.discount_amount || '0');
       const afterDiscount = totalPrice - discountAmount;
       const taxAmount = taxEnabled ? Math.round(afterDiscount * (taxRate / 100)) : 0;
@@ -172,6 +175,7 @@ export async function GET(
         discountType: mp.discount_type || null,
         discountValue: parseFloat(mp.discount_value || '0'),
         discountAmount,
+        subtotalOverride,
       };
     });
 

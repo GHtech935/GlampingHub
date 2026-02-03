@@ -100,8 +100,12 @@ export function GlampingEditMenuProductModal({
   const [originalPrice, setOriginalPrice] = useState<number | null>(null);
   const [loadingPrice, setLoadingPrice] = useState(true);
   const [servingDate, setServingDate] = useState(() => toDateInputValue(product.servingDate));
-  const [subtotalOverride, setSubtotalOverride] = useState<number | undefined>(undefined);
-  const [showSubtotalOverride, setShowSubtotalOverride] = useState(false);
+  const [subtotalOverride, setSubtotalOverride] = useState<number | undefined>(
+    product.subtotalOverride ?? undefined
+  );
+  const [showSubtotalOverride, setShowSubtotalOverride] = useState(
+    product.subtotalOverride !== null && product.subtotalOverride !== undefined
+  );
   const [voucherCode, setVoucherCode] = useState<string | null>(product.voucherCode || null);
   const [newVoucherCode, setNewVoucherCode] = useState('');
   const [voucherRemoved, setVoucherRemoved] = useState(false);

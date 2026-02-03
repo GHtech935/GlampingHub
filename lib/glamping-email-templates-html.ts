@@ -1886,6 +1886,84 @@ export const GLAMPING_EMAIL_TEMPLATES: Record<string, GlampingEmailTemplateDefin
     availableVariables: ['customer_name', 'customer_email', 'reset_url'],
     isActive: true,
   },
+  'admin-password-reset': {
+    slug: 'admin-password-reset',
+    name: 'Đặt lại mật khẩu (Admin/Staff)',
+    subject: 'Yêu cầu đặt lại mật khẩu - GlampingHub Admin',
+    html: `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đặt lại mật khẩu Admin</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f9fafb;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <!-- Header -->
+    <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 30px 20px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 28px; font-weight: bold;">GlampingHub</h1>
+      <p style="color: white; margin: 10px 0 0 0; font-size: 16px;">Admin Portal - Đặt lại mật khẩu</p>
+    </div>
+
+    <!-- Content -->
+    <div style="padding: 30px 25px;">
+      <p style="color: #1f2937; font-size: 16px; margin: 0 0 20px 0;">Xin chào <strong>{user_name}</strong>,</p>
+
+      <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">
+        Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản admin/staff của bạn tại <strong>GlampingHub</strong>.
+      </p>
+
+      <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">
+        Nếu bạn đã gửi yêu cầu này, hãy nhấn vào nút bên dưới để đặt lại mật khẩu của bạn:
+      </p>
+
+      <!-- Reset Button -->
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{reset_url}" style="display: inline-block; padding: 14px 35px; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 14px rgba(30, 58, 95, 0.3);">
+          Đặt lại mật khẩu
+        </a>
+      </div>
+
+      <!-- Security Notice -->
+      <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0 0 10px 0; color: #92400e; font-size: 14px; line-height: 1.6;">
+          <strong>Lưu ý bảo mật:</strong>
+        </p>
+        <ul style="margin: 0; padding-left: 20px; color: #92400e; font-size: 13px; line-height: 1.8;">
+          <li>Link đặt lại mật khẩu có hiệu lực trong <strong>1 giờ</strong></li>
+          <li>Link này chỉ sử dụng được <strong>một lần duy nhất</strong></li>
+          <li>Không chia sẻ link này với bất kỳ ai</li>
+        </ul>
+      </div>
+
+      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;">
+
+      <!-- Not Requested Notice -->
+      <div style="background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; color: #991b1b; font-size: 14px; line-height: 1.6;">
+          <strong>Không phải bạn yêu cầu?</strong><br>
+          Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này hoặc liên hệ admin hệ thống ngay lập tức.
+        </p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="background-color: #f3f4f6; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+      <p style="color: #6b7280; font-size: 12px; margin: 0;">
+        © 2024 GlampingHub. All rights reserved.<br>
+        Email này được gửi tự động, vui lòng không trả lời.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+    `,
+    type: 'security',
+    description: 'Email gửi khi admin/staff yêu cầu đặt lại mật khẩu',
+    availableVariables: ['user_name', 'user_email', 'reset_url'],
+    isActive: true,
+  },
   'glamping-admin-new-booking-created': {
     slug: 'glamping-admin-new-booking-created',
     name: '[Admin] Đơn đặt chỗ mới',

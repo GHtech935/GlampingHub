@@ -96,8 +96,8 @@ export function ZoneSelector({ currentZoneId, locale, variant = "sidebar" }: Zon
           <SelectValue placeholder="Select Zone" />
         </SelectTrigger>
         <SelectContent>
-          {/* All Zones option - only for admin/sale/operations/owner */}
-          {userRole !== 'glamping_owner' && (
+          {/* All Zones option - only for admin/sale/owner */}
+          {userRole !== 'glamping_owner' && userRole !== 'operations' && (
             <SelectItem value="all">
               <div className="flex items-center gap-2">
                 <Grid3x3 className="w-4 h-4" />

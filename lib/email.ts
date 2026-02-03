@@ -1367,3 +1367,33 @@ export async function sendGlampingAdminFailedEmailNotification({
     console.error('Error sending admin notification about failed email:', error);
   }
 }
+
+// =============================================================================
+// ADMIN/STAFF PASSWORD RESET EMAIL
+// =============================================================================
+
+/**
+ * Send password reset email to admin/staff user
+ */
+export async function sendAdminPasswordResetEmail({
+  userEmail,
+  userName,
+  resetToken,
+}: {
+  userEmail: string;
+  userName: string;
+  resetToken: string;
+}) {
+  const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
+  const resetUrl = `${appUrl}/reset-password-admin/${resetToken}`;
+
+  return sendGlampingTemplateEmail({
+    templateSlug: 'admin-password-reset',
+    to: [{ email: userEmail, name: userName }],
+    variables: {
+      user_name: userName,
+      user_email: userEmail,
+      reset_url: resetUrl,
+    },
+  });
+}

@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
     const categoryId = searchParams.get('category_id');
     const sku = searchParams.get('sku');
     const isTentCategory = searchParams.get('is_tent_category');
+    const isTent = searchParams.get('is_tent');
+    const noCategory = searchParams.get('no_category');
 
     let query = `
       SELECT
@@ -91,9 +93,20 @@ export async function GET(request: NextRequest) {
 
     // Filter by is_tent_category (via category)
     if (isTentCategory !== null) {
-      const isTent = isTentCategory === 'true';
+      const isTentVal = isTentCategory === 'true';
       conditions.push(`c.is_tent_category = $${params.length + 1}`);
-      params.push(isTent);
+      params.push(isTentVal);
+    }
+
+    // Filter by is_tent (on item itself)
+    if (isTent !== null) {
+      conditions.push(`i.is_tent = $${params.length + 1}`);
+      params.push(isTent === 'true');
+    }
+
+    // Filter items without category
+    if (noCategory === 'true') {
+      conditions.push(`i.category_id IS NULL`);
     }
 
     if (conditions.length > 0) {
@@ -197,12 +210,15 @@ export async function POST(request: NextRequest) {
         validCategoryId = null;
       }
 
+      // Determine is_tent value - default to true (tent) unless explicitly set to false
+      const isTent = body.is_tent !== undefined ? body.is_tent : true;
+
       // Insert item
       const itemResult = await client.query(
-        `INSERT INTO glamping_items (name, sku, zone_id, category_id, summary, display_order)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO glamping_items (name, sku, zone_id, category_id, summary, display_order, is_tent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
-        [name, sku || null, zone_id, validCategoryId, summary || null, nextDisplayOrder]
+        [name, sku || null, zone_id, validCategoryId, summary || null, nextDisplayOrder, isTent]
       );
 
       const itemId = itemResult.rows[0].id;

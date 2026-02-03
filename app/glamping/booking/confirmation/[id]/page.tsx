@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useTranslations, useLocale } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -71,42 +72,52 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-function getPaymentStatusLabel(status: string): { label: string; color: string } {
-  switch (status) {
-    case 'pending':
-      return { label: 'Chờ thanh toán', color: 'bg-orange-500 hover:bg-orange-600' };
-    case 'deposit_paid':
-      return { label: 'Đã đặt cọc', color: 'bg-blue-500 hover:bg-blue-600' };
-    case 'fully_paid':
-      return { label: 'Đã thanh toán đủ', color: 'bg-green-600 hover:bg-green-700' };
-    case 'paid':
-      return { label: 'Đã thanh toán', color: 'bg-green-600 hover:bg-green-700' };
-    default:
-      return { label: status, color: 'bg-gray-500' };
-  }
-}
-
-function getBookingStatusLabel(status: string): { label: string; color: string } {
-  switch (status) {
-    case 'pending':
-      return { label: 'Đang chờ xác nhận', color: '' };
-    case 'confirmed':
-      return { label: 'Đã xác nhận', color: 'bg-green-600 hover:bg-green-700' };
-    case 'cancelled':
-      return { label: 'Đã hủy', color: 'bg-red-600 hover:bg-red-700' };
-    case 'completed':
-      return { label: 'Hoàn thành', color: 'bg-purple-600 hover:bg-purple-700' };
-    default:
-      return { label: status, color: '' };
-  }
-}
-
 export default function BookingConfirmationPage() {
   const params = useParams();
   const bookingId = params.id as string;
+  const t = useTranslations('glampingConfirmation');
+  const locale = useLocale();
 
   const [booking, setBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const getPaymentStatusLabel = (status: string): { label: string; color: string } => {
+    const colors: Record<string, string> = {
+      pending: 'bg-orange-500 hover:bg-orange-600',
+      deposit_paid: 'bg-blue-500 hover:bg-blue-600',
+      fully_paid: 'bg-green-600 hover:bg-green-700',
+      paid: 'bg-green-600 hover:bg-green-700',
+    };
+
+    const validStatuses = ['pending', 'deposit_paid', 'fully_paid', 'paid'];
+    if (validStatuses.includes(status)) {
+      return { label: t(`paymentStatus.${status}`), color: colors[status] || 'bg-gray-500' };
+    }
+    return { label: status, color: 'bg-gray-500' };
+  };
+
+  const getBookingStatusLabel = (status: string): { label: string; color: string } => {
+    const colors: Record<string, string> = {
+      pending: '',
+      confirmed: 'bg-green-600 hover:bg-green-700',
+      cancelled: 'bg-red-600 hover:bg-red-700',
+      completed: 'bg-purple-600 hover:bg-purple-700',
+    };
+
+    const validStatuses = ['pending', 'confirmed', 'cancelled', 'completed'];
+    if (validStatuses.includes(status)) {
+      return { label: t(`bookingStatus.${status}`), color: colors[status] || '' };
+    }
+    return { label: status, color: '' };
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString(locale === 'vi' ? 'vi-VN' : 'en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
 
   // Fetch booking details
   useEffect(() => {
@@ -122,10 +133,10 @@ export default function BookingConfirmationPage() {
       if (data.success) {
         setBooking(data);
       } else {
-        toast.error('Không tìm thấy booking');
+        toast.error(t('bookingNotFound'));
       }
     } catch (error) {
-      toast.error('Lỗi khi tải thông tin booking');
+      toast.error(t('errorLoadingBooking'));
     } finally {
       setLoading(false);
     }
@@ -136,7 +147,7 @@ export default function BookingConfirmationPage() {
       <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-          <span className="ml-3 text-gray-600">Đang tải...</span>
+          <span className="ml-3 text-gray-600">{t('loading')}</span>
         </div>
       </div>
     );
@@ -147,7 +158,7 @@ export default function BookingConfirmationPage() {
       <div className="max-w-4xl mx-auto p-6">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Không tìm thấy booking</AlertDescription>
+          <AlertDescription>{t('bookingNotFound')}</AlertDescription>
         </Alert>
       </div>
     );
@@ -160,7 +171,7 @@ export default function BookingConfirmationPage() {
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Chi tiết đặt phòng</h1>
+        <h1 className="text-3xl font-bold mb-2">{t('title')}</h1>
         <div className="flex items-center gap-3 flex-wrap">
           <p className="text-gray-600 text-lg">#{booking.booking.booking_code}</p>
           <Badge
@@ -180,14 +191,21 @@ export default function BookingConfirmationPage() {
         <Alert className="bg-green-50 border-green-200">
           <CheckCircle2 className="h-4 w-4 text-green-600" />
           <AlertDescription className="text-green-800">
-            Bạn có thể chỉnh sửa món ăn cho từng lều. Nhấn nút &quot;Chỉnh sửa&quot; bên cạnh mỗi lều để thay đổi.
+            {t('canEditMenuAlert')}
           </AlertDescription>
         </Alert>
       ) : booking.booking.status === 'confirmed' && booking.booking.payment_status === 'pending' ? (
         <Alert className="bg-amber-50 border-amber-200">
           <AlertCircle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-amber-800">
-            Vui lòng thanh toán đặt cọc để có thể chỉnh sửa món ăn.
+            {t('payDepositToEditAlert')}
+          </AlertDescription>
+        </Alert>
+      ) : booking.booking.status === 'confirmed' ? (
+        <Alert className="bg-amber-50 border-amber-200">
+          <Clock className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            {t('cannotEditMenuDeadline')}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -195,28 +213,28 @@ export default function BookingConfirmationPage() {
       {/* Guest Information */}
       <Card>
         <CardHeader>
-          <CardTitle>Thông tin khách hàng</CardTitle>
+          <CardTitle>{t('customerInfo')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-sm text-gray-500">Họ tên</p>
+              <p className="text-sm text-gray-500">{t('fullName')}</p>
               <p className="font-medium">
                 {booking.booking.customer.first_name} {booking.booking.customer.last_name}
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Email</p>
+              <p className="text-sm text-gray-500">{t('email')}</p>
               <p className="font-medium">{booking.booking.customer.email}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Số điện thoại</p>
+              <p className="text-sm text-gray-500">{t('phone')}</p>
               <p className="font-medium">{booking.booking.customer.phone || 'N/A'}</p>
             </div>
           </div>
           {booking.booking.special_requirements && (
             <div className="mt-4 pt-4 border-t">
-              <p className="text-sm text-gray-500">Yêu cầu đặc biệt</p>
+              <p className="text-sm text-gray-500">{t('specialRequirements')}</p>
               <p className="font-medium">{booking.booking.special_requirements}</p>
             </div>
           )}
@@ -235,41 +253,33 @@ export default function BookingConfirmationPage() {
         /* Fallback: Old single accommodation view for legacy bookings */
         <Card>
           <CardHeader>
-            <CardTitle>Chi tiết lưu trú</CardTitle>
+            <CardTitle>{t('accommodationDetails')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-gray-500">Khu vực</p>
+                <p className="text-sm text-gray-500">{t('zone')}</p>
                 <p className="font-medium">
                   {typeof booking.booking.accommodation?.zone_name === 'object'
-                    ? booking.booking.accommodation.zone_name.vi || booking.booking.accommodation.zone_name.en
+                    ? booking.booking.accommodation.zone_name[locale] || booking.booking.accommodation.zone_name.vi || booking.booking.accommodation.zone_name.en
                     : booking.booking.accommodation?.zone_name || 'N/A'}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Loại chỗ ở</p>
+                <p className="text-sm text-gray-500">{t('accommodationType')}</p>
                 <p className="font-medium">
                   {typeof booking.booking.accommodation?.item_name === 'object'
-                    ? booking.booking.accommodation.item_name.vi || booking.booking.accommodation.item_name.en
+                    ? booking.booking.accommodation.item_name[locale] || booking.booking.accommodation.item_name.vi || booking.booking.accommodation.item_name.en
                     : booking.booking.accommodation?.item_name || 'N/A'}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Check-in</p>
-                <p className="font-medium">
-                  {new Date(booking.booking.check_in_date).toLocaleDateString('vi-VN', {
-                    year: 'numeric', month: 'long', day: 'numeric',
-                  })}
-                </p>
+                <p className="text-sm text-gray-500">{t('checkIn')}</p>
+                <p className="font-medium">{formatDate(booking.booking.check_in_date)}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Check-out</p>
-                <p className="font-medium">
-                  {new Date(booking.booking.check_out_date).toLocaleDateString('vi-VN', {
-                    year: 'numeric', month: 'long', day: 'numeric',
-                  })}
-                </p>
+                <p className="text-sm text-gray-500">{t('checkOut')}</p>
+                <p className="font-medium">{formatDate(booking.booking.check_out_date)}</p>
               </div>
             </div>
           </CardContent>
@@ -279,38 +289,38 @@ export default function BookingConfirmationPage() {
       {/* Payment Summary */}
       <Card>
         <CardHeader>
-          <CardTitle>Tổng thanh toán</CardTitle>
+          <CardTitle>{t('paymentSummary')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="flex justify-between text-gray-600">
-            <span>Tạm tính:</span>
+            <span>{t('subtotal')}</span>
             <span>{formatCurrency(booking.booking.subtotal_amount)}</span>
           </div>
           {booking.booking.tax_amount > 0 && (
             <div className="flex justify-between text-gray-600">
-              <span>Thuế:</span>
+              <span>{t('tax')}</span>
               <span>{formatCurrency(booking.booking.tax_amount)}</span>
             </div>
           )}
           {booking.booking.discount_amount > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Giảm giá:</span>
+              <span>{t('discount')}</span>
               <span>-{formatCurrency(booking.booking.discount_amount)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-lg border-t pt-2">
-            <span>Tổng cộng:</span>
+            <span>{t('total')}</span>
             <span className="text-purple-600">{formatCurrency(booking.booking.total_amount)}</span>
           </div>
           {booking.booking.deposit_due > 0 && booking.booking.deposit_due !== booking.booking.total_amount && (
             <div className="flex justify-between text-blue-600">
-              <span>Tiền cọc:</span>
+              <span>{t('deposit')}</span>
               <span>{formatCurrency(booking.booking.deposit_due)}</span>
             </div>
           )}
           {booking.booking.balance_due > 0 && (
             <div className="flex justify-between text-orange-600 font-medium">
-              <span>Còn thiếu:</span>
+              <span>{t('balanceDue')}</span>
               <span>{formatCurrency(booking.booking.balance_due)}</span>
             </div>
           )}

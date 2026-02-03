@@ -241,8 +241,11 @@ export async function recalculateGlampingBookingTotals(
   const accommodationTotal = parseFloat(accomResult.rows[0].accommodation_total);
 
   // Sum menu products (from glamping_booking_menu_products)
+  // Use subtotal_override if set, otherwise calculate unit_price * quantity
   const menuResult = await client.query(
-    `SELECT COALESCE(SUM(unit_price * quantity), 0) as menu_total
+    `SELECT COALESCE(SUM(
+       COALESCE(subtotal_override, unit_price * quantity)
+     ), 0) as menu_total
      FROM glamping_booking_menu_products
      WHERE booking_id = $1`,
     [bookingId]

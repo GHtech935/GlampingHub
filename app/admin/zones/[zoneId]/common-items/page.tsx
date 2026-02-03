@@ -5,6 +5,7 @@ import { Plus, Search, Edit, Package, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -51,23 +52,26 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  const [showNoCategory, setShowNoCategory] = useState(false);
 
   useEffect(() => {
     if (zoneId === "all") {
-      router.replace("/admin/zones/all/dashboard");
+      router.replace("/admin/zones/all/common-items");
+      return;
     }
-  }, [zoneId, router]);
-
-  useEffect(() => {
-    if (zoneId !== "all") {
-      fetchItems();
-    }
-  }, [zoneId]);
+    fetchItems();
+  }, [zoneId, showNoCategory]);
 
   const fetchItems = async () => {
     try {
-      // Filter by is_tent_category=false for common items
-      const response = await fetch(`/api/admin/glamping/items?zone_id=${zoneId}&is_tent_category=false`);
+      setLoading(true);
+      let url = `/api/admin/glamping/items?zone_id=${zoneId}`;
+      if (showNoCategory) {
+        url += '&no_category=true&is_tent=false';
+      } else {
+        url += '&is_tent_category=false';
+      }
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data.items) {
@@ -119,6 +123,20 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
           />
+        </div>
+        {/* No Category Checkbox */}
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="noCategory"
+            checked={showNoCategory}
+            onCheckedChange={(checked) => setShowNoCategory(checked === true)}
+          />
+          <label
+            htmlFor="noCategory"
+            className="text-sm text-gray-700 cursor-pointer whitespace-nowrap"
+          >
+            {t("filters.noCategory")}
+          </label>
         </div>
         {/* Status Filter */}
         <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">

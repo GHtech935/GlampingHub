@@ -517,12 +517,6 @@ export default function GlampingPricingSummary({
               {formatCurrency(grandTotal)}
             </span>
           </div>
-          {/* Tax info note */}
-          <div className="mt-3 pt-2 border-t border-green-300">
-            <p className="text-xs text-gray-600 text-center">
-              ℹ️ {labels.vatNote.replace('{taxRate}', String(taxRate))}
-            </p>
-          </div>
         </div>
 
       </div>

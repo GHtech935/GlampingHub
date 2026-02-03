@@ -335,7 +335,7 @@ export function ConfirmationItemsList({
                           </span>
                         </button>
 
-                        {canEditMenu && (
+                        {canEditMenu ? (
                           <Button
                             variant="outline"
                             size="sm"
@@ -349,6 +349,10 @@ export function ConfirmationItemsList({
                             )}
                             Chỉnh sửa
                           </Button>
+                        ) : (
+                          <span className="text-xs text-amber-600">
+                            Không thể sửa (còn dưới 24h trước check-in)
+                          </span>
                         )}
                       </div>
 
@@ -443,7 +447,7 @@ export function ConfirmationItemsList({
                       locale={locale}
                     />
 
-                    <div className="flex gap-4 mt-6">
+                    <div className="flex gap-4 mt-6 justify-end">
                       <Button onClick={() => handleSaveMenu(tent)} disabled={saving}>
                         {saving ? (
                           <>

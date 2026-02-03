@@ -38,7 +38,8 @@ import {
   Key,
   Eye,
   AlertCircle,
-  LogIn
+  LogIn,
+  CheckCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -341,6 +342,32 @@ useEffect(() => {
     }
   };
 
+  // Handle activate user (reactivate deactivated account)
+  const handleActivateUser = async (userId: string) => {
+    if (!confirm(t('toast.activateConfirm'))) return;
+
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH'
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: t('toast.success'),
+          description: data.message
+        });
+        fetchUsers();
+      }
+    } catch (error) {
+      toast({
+        title: t('toast.error'),
+        description: t('toast.activateError'),
+        variant: 'destructive'
+      });
+    }
+  };
+
   // Handle impersonate user (login as)
   const handleImpersonateUser = async (userId: string, userName: string) => {
     if (!confirm(t('toast.impersonateConfirm', { name: userName }))) return;
@@ -599,14 +626,26 @@ useEffect(() => {
                                 >
                                   <LogIn className="w-4 h-4" />
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleDeleteUser(user.id)}
-                                  title={t('table.delete')}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                {user.is_active ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDeleteUser(user.id)}
+                                    title={t('table.delete')}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    onClick={() => handleActivateUser(user.id)}
+                                    title={t('table.activate')}
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </Button>
+                                )}
                               </div>
                             )}
                           </td>

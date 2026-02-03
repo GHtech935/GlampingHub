@@ -2634,7 +2634,8 @@
                 "noLogin": "Never logged in",
                 "edit": "Edit",
                 "delete": "Delete",
-                "loginAs": "Login as"
+                "loginAs": "Login as",
+                "activate": "Reactivate"
             },
             "activityLogs": {
                 "time": "Time",
@@ -2681,7 +2682,9 @@
                 "deleteConfirm": "Are you sure you want to delete this user?",
                 "impersonateConfirm": "Are you sure you want to login as {name}?",
                 "impersonateSuccess": "Logged in as {name}",
-                "impersonateError": "Failed to impersonate this user"
+                "impersonateError": "Failed to impersonate this user",
+                "activateConfirm": "Are you sure you want to reactivate this account?",
+                "activateError": "Unable to activate account"
             }
         },
         "emailsPage": {
@@ -3108,9 +3111,11 @@
                 "search": "Search items...",
                 "filters": {
                     "all": "All",
+                    "allCategories": "All categories",
                     "category": "Category",
                     "visibility": "Visibility",
-                    "status": "Status"
+                    "status": "Status",
+                    "noCategory": "Show items without category"
                 },
                 "table": {
                     "name": "Name",
@@ -4329,6 +4334,7 @@
             },
             "allZonesStats": {
                 "totalItems": "Total Items",
+                "totalCommonItems": "Total Common Items",
                 "available": "Available",
                 "zones": "Zones",
                 "categories": "Categories",
@@ -4355,6 +4361,11 @@
             "commonItems": {
                 "title": "Common Items",
                 "subtitle": "Manage shared items",
+                "allItems": "All Common Items",
+                "allItemsDesc": "View and manage common items from all zones",
+                "filterByZone": "Filter by zone",
+                "allZones": "All Zones",
+                "zone": "Zone",
                 "addNew": "Add new item",
                 "search": "Search items...",
                 "categoryButton": "Categories",
@@ -4382,7 +4393,9 @@
                     "allCategories": "All categories"
                 },
                 "filters": {
-                    "all": "All"
+                    "all": "All",
+                    "allCategories": "All categories",
+                    "noCategory": "Show items without category"
                 },
                 "status": {
                     "active": "Active",
@@ -5261,5 +5274,43 @@
         "contactSupport": "Contact support",
         "qrCodeAlt": "Payment QR Code",
         "currency": "VND"
+    },
+    "glampingConfirmation": {
+        "title": "Booking and Menu Details",
+        "loading": "Loading...",
+        "bookingNotFound": "Booking not found",
+        "errorLoadingBooking": "Error loading booking information",
+        "canEditMenuAlert": "You can edit menu items for each tent. Click the \"Edit\" button next to each tent to make changes.",
+        "payDepositToEditAlert": "Please pay the deposit to edit menu items.",
+        "cannotEditMenuDeadline": "Cannot edit menu items. Menu can only be edited at least 24 hours before check-in.",
+        "customerInfo": "Customer Information",
+        "fullName": "Full Name",
+        "email": "Email",
+        "phone": "Phone Number",
+        "specialRequirements": "Special Requirements",
+        "accommodationDetails": "Accommodation Details",
+        "zone": "Zone",
+        "accommodationType": "Accommodation Type",
+        "checkIn": "Check-in",
+        "checkOut": "Check-out",
+        "paymentSummary": "Payment Summary",
+        "subtotal": "Subtotal:",
+        "tax": "Tax:",
+        "discount": "Discount:",
+        "total": "Total:",
+        "deposit": "Deposit:",
+        "balanceDue": "Balance Due:",
+        "paymentStatus": {
+            "pending": "Pending Payment",
+            "deposit_paid": "Deposit Paid",
+            "fully_paid": "Fully Paid",
+            "paid": "Paid"
+        },
+        "bookingStatus": {
+            "pending": "Pending Confirmation",
+            "confirmed": "Confirmed",
+            "cancelled": "Cancelled",
+            "completed": "Completed"
+        }
     }
 }

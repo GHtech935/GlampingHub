@@ -284,11 +284,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // NEW: For glamping_owner role, insert into user_glamping_zones junction table
+    // NEW: For glamping_owner, sale, operations roles, insert into user_glamping_zones junction table
     const hasUserGlampingZones = await tableExists('user_glamping_zones');
+    const multiZoneRoles = ['glamping_owner', 'sale', 'operations'];
     if (
       hasUserGlampingZones &&
-      role === 'glamping_owner' &&
+      multiZoneRoles.includes(role) &&
       glampingZoneIds &&
       Array.isArray(glampingZoneIds) &&
       glampingZoneIds.length > 0
@@ -301,7 +302,7 @@ export async function POST(request: NextRequest) {
       await pool.query(
         `INSERT INTO user_glamping_zones (user_id, zone_id, role, assigned_at, assigned_by)
          VALUES ${values}`,
-        [newUserId, ...glampingZoneIds, 'glamping_owner', session.id]
+        [newUserId, ...glampingZoneIds, role, session.id]
       );
     }
 
@@ -320,7 +321,7 @@ export async function POST(request: NextRequest) {
           email,
           role,
           campsite_ids: role === 'owner' ? campsite_ids : undefined,
-          glampingZoneIds: role === 'glamping_owner' ? glampingZoneIds : undefined
+          glampingZoneIds: ['glamping_owner', 'sale', 'operations'].includes(role) ? glampingZoneIds : undefined
         })
       ]
     );
