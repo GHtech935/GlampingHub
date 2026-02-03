@@ -17,6 +17,7 @@ interface GlampingItem {
   unlimited_inventory: boolean;
   status: string;
   zone_id: string;
+  display_order?: number;
   pricing?: {
     base_price: number;
     rate_type: string;
@@ -171,7 +172,8 @@ function ZoneDetailContent() {
             }
           })
         );
-        setItems(itemsWithDetails);
+        const categorizedItems = itemsWithDetails.filter((item: any) => item.category_id);
+        setItems(categorizedItems);
       }
     } catch (error) {
       console.error('Failed to fetch items:', error);
@@ -220,21 +222,27 @@ function ZoneDetailContent() {
 
   // Filter items
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      // Category filter - skip if "All" is selected (empty string)
-      if (selectedCategory !== '' && item.category_id !== selectedCategory) {
-        return false;
-      }
-
-      // Date filter - only filter if dates are selected AND availability is checked
-      if (dateRange.checkIn && dateRange.checkOut && item.availability) {
-        if (!item.availability.is_available) {
+    return items
+      .filter((item) => {
+        // Category filter - skip if "All" is selected (empty string)
+        if (selectedCategory !== '' && item.category_id !== selectedCategory) {
           return false;
         }
-      }
 
-      return true;
-    });
+        // Date filter - only filter if dates are selected AND availability is checked
+        if (dateRange.checkIn && dateRange.checkOut && item.availability) {
+          if (!item.availability.is_available) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const orderA = a.display_order ?? 999999;
+        const orderB = b.display_order ?? 999999;
+        return orderA - orderB;
+      });
   }, [items, selectedCategory, dateRange]);
 
   // Handle date range change with URL update
