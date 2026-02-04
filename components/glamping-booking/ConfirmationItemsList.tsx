@@ -136,6 +136,10 @@ export function ConfirmationItemsList({
     loading: boolean;
   }>>({});
 
+  // Use ref flag to prevent circular dependency between pricing fetch and sync effects.
+  // Without this, syncing pricing back into addonSelections triggers another fetch.
+  const isSyncingPricingRef = React.useRef(false);
+
   // Fetch addons for the tent being edited
   const editingAddonTent = tents.find(t => t.id === editingAddonTentId);
   const { addons, loading: addonsLoading } = useItemAddons(editingAddonTent?.itemId || null);
@@ -486,6 +490,13 @@ export function ConfirmationItemsList({
 
   // Fetch addon pricing when selections change
   React.useEffect(() => {
+    // Skip API call if this addonSelections update is from pricing sync (not user action).
+    // This breaks the circular dependency: fetch → sync → fetch → sync → ...
+    if (isSyncingPricingRef.current) {
+      isSyncingPricingRef.current = false;
+      return;
+    }
+
     if (!addons || addons.length === 0 || !editingAddonTentId) return;
 
     const selectedAddons = addons.filter(
@@ -578,7 +589,7 @@ export function ConfirmationItemsList({
       setAddonPricingMap({ ...newMap });
     };
 
-    const timer = setTimeout(fetchAllAddonPricing, 600);
+    const timer = setTimeout(fetchAllAddonPricing, 800);
     return () => clearTimeout(timer);
   }, [addons, addonSelections, editingAddonTentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -635,9 +646,15 @@ export function ConfirmationItemsList({
     }
 
     if (hasChanges) {
+      isSyncingPricingRef.current = true;  // Set flag before update
       setAddonSelections(updatedSelections);
     }
   }, [addonPricingMap, addons]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup effect to reset flag after render cycle
+  React.useEffect(() => {
+    isSyncingPricingRef.current = false;
+  }, [addonSelections]);
 
   // Initialize required addons when addons load
   React.useEffect(() => {
@@ -915,7 +932,7 @@ export function ConfirmationItemsList({
                             <Package className="h-3.5 w-3.5 inline mr-1" />
                             Dịch vụ chung
                             {hasCommonItems && (
-                              <span className="ml-1 text-purple-600">
+                              <span className="ml-1 text-blue-600">
                                 ({formatCurrency(commonItemsTotal)})
                               </span>
                             )}
@@ -961,8 +978,8 @@ export function ConfirmationItemsList({
                               const finalTotal = Math.max(0, addonTotal - voucherDiscount);
 
                               return (
-                                <div key={addonItemId} className="border-l-2 border-purple-200 pl-3 mb-2">
-                                  <div className="font-medium text-sm text-purple-700 mb-1">
+                                <div key={addonItemId} className="border-l-2 border-blue-200 pl-3 mb-2">
+                                  <div className="font-medium text-sm text-blue-700 mb-1">
                                     {getLocalizedString(items[0].itemName, locale)}
                                   </div>
                                   {items.map((ci, idx) => (
@@ -981,7 +998,7 @@ export function ConfirmationItemsList({
                                       <span>-{formatCurrency(voucherDiscount)}</span>
                                     </div>
                                   )}
-                                  <div className="flex justify-between text-sm font-medium text-purple-700 pt-1">
+                                  <div className="flex justify-between text-sm font-medium text-blue-700 pt-1">
                                     <span>Tổng</span>
                                     <span>{formatCurrency(finalTotal)}</span>
                                   </div>
@@ -1059,15 +1076,15 @@ export function ConfirmationItemsList({
               {/* Inline Addon Edit Form - Collapsible */}
               <Collapsible open={isEditingAddons}>
                 <CollapsibleContent>
-                  <div className="mt-4 p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
                     <div className="flex items-center gap-2 mb-4">
-                      <Package className="h-4 w-4 text-purple-600" />
+                      <Package className="h-4 w-4 text-blue-600" />
                       <h4 className="font-semibold">Chỉnh sửa dịch vụ chung</h4>
                     </div>
 
                     {addonsLoading ? (
                       <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+                        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
                         <span className="ml-2 text-sm text-gray-600">Đang tải dịch vụ...</span>
                       </div>
                     ) : addons.length > 0 ? (
@@ -1080,7 +1097,7 @@ export function ConfirmationItemsList({
                             <div
                               key={addon.addon_item_id}
                               className={`rounded-lg border p-3 transition-colors ${
-                                isSelected ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-white'
+                                isSelected ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'
                               }`}
                             >
                               {/* Addon Header */}
@@ -1232,9 +1249,9 @@ export function ConfirmationItemsList({
                                       return (
                                         <>
                                           {addonTotal > 0 && (
-                                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-purple-200">
+                                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-blue-200">
                                               <span className="text-xs text-gray-600">Tổng dịch vụ</span>
-                                              <span className="text-sm font-semibold text-purple-700">
+                                              <span className="text-sm font-semibold text-blue-700">
                                                 {formatCurrency(addonTotal)}
                                               </span>
                                             </div>
@@ -1268,9 +1285,9 @@ export function ConfirmationItemsList({
 
                                           {/* Final total after voucher */}
                                           {voucherDiscount > 0 && addonTotal > 0 && (
-                                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-purple-200">
+                                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-blue-200">
                                               <span className="text-xs font-semibold text-gray-700">Tổng cộng</span>
-                                              <span className="text-sm font-bold text-purple-700">
+                                              <span className="text-sm font-bold text-blue-700">
                                                 {formatCurrency(addonFinalTotal)}
                                               </span>
                                             </div>

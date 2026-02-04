@@ -165,9 +165,10 @@ export async function PUT(
 
     const { id: bookingId } = await params;
     const body = await request.json();
-    const { itemId, bookingTentId, addonDates, parameters } = body;
+    const { itemId, bookingTentId, addonDates, parameters, voucher } = body;
     // parameters: Array<{ parameterId, quantity }>
     // addonDates: { from, to } | undefined
+    // voucher: { code, id, discountAmount, discountType, discountValue } | undefined
 
     if (!itemId || !parameters || !Array.isArray(parameters)) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -180,9 +181,9 @@ export async function PUT(
       `SELECT bi.id, bi.parameter_id, bi.quantity, bi.unit_price, bi.metadata,
               i.name as item_name
        FROM glamping_booking_items bi
-       LEFT JOIN glamping_items i ON bi.item_id = i.id
+       LEFT JOIN glamping_items i ON bi.addon_item_id = i.id
        WHERE bi.booking_id = $1
-         AND bi.item_id = $2
+         AND bi.addon_item_id = $2
          AND bi.metadata->>'type' = 'addon'
          AND ${bookingTentId ? `bi.booking_tent_id = $3` : `bi.booking_tent_id IS NULL`}`,
       bookingTentId ? [bookingId, itemId, bookingTentId] : [bookingId, itemId]
@@ -208,23 +209,54 @@ export async function PUT(
         changes.push(`${param.parameterId}: ${oldQty} → ${newQty}`);
       }
 
-      // Note: total_price is a generated column, so we only update quantity
-      // Also update metadata.dates if addonDates was provided
+      // Build updated metadata
+      const currentMetadata = existingRow.metadata || {};
+      const updatedMetadata = {
+        ...currentMetadata,
+        type: 'addon',
+        pricingMode: currentMetadata.pricingMode || 'per_person',
+      };
+
+      // Update dates if provided
       if (addonDates !== undefined) {
-        await client.query(
-          `UPDATE glamping_booking_items
-           SET quantity = $2,
-               metadata = jsonb_set(COALESCE(metadata, '{}'), '{dates}', $3::jsonb)
-           WHERE id = $1`,
-          [existingRow.id, newQty, JSON.stringify(addonDates || null)]
-        );
-      } else {
-        await client.query(
-          `UPDATE glamping_booking_items
-           SET quantity = $2
-           WHERE id = $1`,
-          [existingRow.id, newQty]
-        );
+        updatedMetadata.dates = addonDates;
+      }
+
+      // Update voucher if provided
+      if (voucher !== undefined) {
+        if (voucher) {
+          updatedMetadata.voucher = {
+            code: voucher.code,
+            id: voucher.id,
+            discountAmount: voucher.discountAmount,
+            discountType: voucher.discountType,
+            discountValue: voucher.discountValue,
+          };
+        } else {
+          // Remove voucher if explicitly set to null/undefined
+          delete updatedMetadata.voucher;
+        }
+      }
+
+      // Update the row
+      await client.query(
+        `UPDATE glamping_booking_items
+         SET quantity = $2,
+             metadata = $3
+         WHERE id = $1`,
+        [existingRow.id, newQty, JSON.stringify(updatedMetadata)]
+      );
+    }
+
+    // Track voucher changes
+    if (voucher !== undefined) {
+      const oldVoucher = existingRows.rows[0]?.metadata?.voucher;
+      if (voucher && !oldVoucher) {
+        changes.push(`Added voucher: ${voucher.code}`);
+      } else if (!voucher && oldVoucher) {
+        changes.push(`Removed voucher: ${oldVoucher.code}`);
+      } else if (voucher && oldVoucher && voucher.code !== oldVoucher.code) {
+        changes.push(`Changed voucher: ${oldVoucher.code} → ${voucher.code}`);
       }
     }
 
@@ -282,9 +314,9 @@ export async function DELETE(
     const itemResult = await client.query(
       `SELECT i.name as item_name
        FROM glamping_booking_items bi
-       LEFT JOIN glamping_items i ON bi.item_id = i.id
+       LEFT JOIN glamping_items i ON bi.addon_item_id = i.id
        WHERE bi.booking_id = $1
-         AND bi.item_id = $2
+         AND bi.addon_item_id = $2
          AND bi.metadata->>'type' = 'addon'
        LIMIT 1`,
       [bookingId, itemId]
@@ -294,11 +326,11 @@ export async function DELETE(
       ? getLocalizedString(itemResult.rows[0].item_name)
       : 'Unknown';
 
-    // Delete all addon rows matching booking_id + item_id + booking_tent_id
+    // Delete all addon rows matching booking_id + addon_item_id + booking_tent_id
     const deleteResult = await client.query(
       `DELETE FROM glamping_booking_items
        WHERE booking_id = $1
-         AND item_id = $2
+         AND addon_item_id = $2
          AND metadata->>'type' = 'addon'
          AND ${bookingTentId ? `booking_tent_id = $3` : `booking_tent_id IS NULL`}`,
       bookingTentId ? [bookingId, itemId, bookingTentId] : [bookingId, itemId]

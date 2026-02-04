@@ -207,8 +207,19 @@ export function CartItemInlineEditForm({
     loading: boolean;
   }>>({});
 
+  // Use ref flag to prevent circular dependency between pricing fetch and sync effects.
+  // Without this, syncing pricing back into addonSelections triggers another fetch.
+  const isSyncingPricingRef = React.useRef(false);
+
   // Fetch pricing for selected addons
   React.useEffect(() => {
+    // Skip API call if this addonSelections update is from pricing sync (not user action).
+    // This breaks the circular dependency: fetch → sync → fetch → sync → ...
+    if (isSyncingPricingRef.current) {
+      isSyncingPricingRef.current = false;
+      return;
+    }
+
     if (!addons || addons.length === 0) return;
 
     const selectedAddons = addons.filter(
@@ -306,7 +317,7 @@ export function CartItemInlineEditForm({
       setAddonPricingMap({ ...newMap });
     };
 
-    const timer = setTimeout(fetchAllAddonPricing, 600);
+    const timer = setTimeout(fetchAllAddonPricing, 800);
     return () => clearTimeout(timer);
   }, [addons, formState.addonSelections, formState.dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -368,9 +379,15 @@ export function CartItemInlineEditForm({
     }
 
     if (hasChanges) {
+      isSyncingPricingRef.current = true;  // Set flag before update
       formState.setAddonSelections(updatedSelections);
     }
   }, [addonPricingMap, addons]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup effect to reset flag after render cycle
+  React.useEffect(() => {
+    isSyncingPricingRef.current = false;
+  }, [formState.addonSelections]);
 
   // Helper: build default dates for an addon based on its dates_setting and parent range
   // For inherit_parent: user picks a single date within parent range.

@@ -1151,6 +1151,171 @@ export async function sendGlampingMenuUpdateNotificationToStaff({
 }
 
 /**
+ * Send common items update confirmation email to customer
+ */
+export async function sendGlampingCommonItemsUpdateConfirmation({
+  customerEmail,
+  customerName,
+  bookingCode,
+  oldTotal,
+  newTotal,
+  priceDifference,
+  glampingBookingId,
+}: {
+  customerEmail: string;
+  customerName: string;
+  bookingCode: string;
+  oldTotal: number;
+  newTotal: number;
+  priceDifference: number;
+  glampingBookingId: string;
+}) {
+  const confirmationUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/glamping/booking/confirmation/${glampingBookingId}`;
+
+  // Build conditional sections
+  let priceIncreasedSection = '';
+  let paymentRequiredSection = '';
+
+  if (priceDifference > 0) {
+    priceIncreasedSection = `
+      <tr>
+        <td style="padding: 10px 0; color: #ea580c; font-size: 14px; font-weight: 600;">Tăng thêm:</td>
+        <td style="padding: 10px 0; color: #ea580c; font-size: 14px; font-weight: 600; text-align: right;">+${formatCurrency(priceDifference)}</td>
+      </tr>
+    `;
+
+    paymentRequiredSection = `
+      <div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 15px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; color: #9a3412; font-size: 14px; line-height: 1.6;">
+          <strong>Lưu ý:</strong> Tổng tiền đã tăng. Vui lòng thanh toán số tiền còn thiếu để hoàn tất đặt phòng.
+        </p>
+      </div>
+    `;
+  } else if (priceDifference < 0) {
+    priceIncreasedSection = `
+      <tr>
+        <td style="padding: 10px 0; color: #16a34a; font-size: 14px; font-weight: 600;">Giảm:</td>
+        <td style="padding: 10px 0; color: #16a34a; font-size: 14px; font-weight: 600; text-align: right;">-${formatCurrency(Math.abs(priceDifference))}</td>
+      </tr>
+    `;
+  }
+
+  const variables = {
+    customer_name: customerName,
+    booking_reference: bookingCode,
+    old_total: formatCurrency(oldTotal),
+    new_total: formatCurrency(newTotal),
+    price_difference: formatCurrency(Math.abs(priceDifference)),
+    price_increased: priceDifference > 0 ? 'true' : 'false',
+    price_increased_section: priceIncreasedSection,
+    payment_required_section: paymentRequiredSection,
+    confirmation_url: confirmationUrl,
+  };
+
+  return sendGlampingTemplateEmail({
+    to: [{ email: customerEmail, name: customerName }],
+    templateSlug: 'glamping-common-items-updated-customer',
+    variables,
+    glampingBookingId,
+  });
+}
+
+/**
+ * Send common items update notification email to all staff
+ */
+export async function sendGlampingCommonItemsUpdateNotificationToStaff({
+  bookingCode,
+  customerName,
+  oldTotal,
+  newTotal,
+  priceDifference,
+  requiresPayment,
+  glampingBookingId,
+}: {
+  bookingCode: string;
+  customerName: string;
+  oldTotal: number;
+  newTotal: number;
+  priceDifference: number;
+  requiresPayment: boolean;
+  glampingBookingId: string;
+}): Promise<void> {
+  try {
+    // Get all staff with roles: admin, sale, operations
+    const result = await query<{ email: string; first_name: string; last_name: string }>(
+      `SELECT email, first_name, last_name
+       FROM users
+       WHERE role IN ('admin', 'sale', 'operations')
+         AND email IS NOT NULL`,
+      []
+    );
+
+    if (result.rows.length === 0) {
+      console.log('No staff found to notify for common items update');
+      return;
+    }
+
+    const adminUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/admin/zones/all/bookings`;
+
+    // Build conditional sections
+    let paymentRequiredSection = '';
+    let priceColor = '#6b7280';
+    let priceChangeText = 'Không thay đổi';
+
+    if (priceDifference > 0) {
+      priceColor = '#ea580c';
+      priceChangeText = `+${formatCurrency(priceDifference)}`;
+
+      if (requiresPayment) {
+        paymentRequiredSection = `
+          <div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #9a3412; font-size: 14px; line-height: 1.6; font-weight: bold;">
+              ⚠️ Cần thanh toán thêm ${formatCurrency(priceDifference)}
+            </p>
+          </div>
+        `;
+      }
+    } else if (priceDifference < 0) {
+      priceColor = '#16a34a';
+      priceChangeText = `-${formatCurrency(Math.abs(priceDifference))}`;
+    }
+
+    const variables = {
+      booking_reference: bookingCode,
+      customer_name: customerName,
+      old_total: formatCurrency(oldTotal),
+      new_total: formatCurrency(newTotal),
+      price_difference: formatCurrency(Math.abs(priceDifference)),
+      price_increased: priceDifference > 0 ? 'true' : 'false',
+      requires_payment: requiresPayment ? 'true' : 'false',
+      price_color: priceColor,
+      price_change_text: priceChangeText,
+      payment_required_section: paymentRequiredSection,
+      notification_link: adminUrl,
+    };
+
+    // Send email to each staff member
+    for (const staff of result.rows) {
+      try {
+        await sendGlampingTemplateEmail({
+          to: [{ email: staff.email, name: `${staff.first_name} ${staff.last_name}`.trim() }],
+          templateSlug: 'glamping-common-items-updated-staff',
+          variables,
+          glampingBookingId,
+        });
+        console.log(`✅ Common items update notification sent to ${staff.email}`);
+      } catch (emailError) {
+        console.error(`⚠️ Failed to send common items update notification to ${staff.email}:`, emailError);
+      }
+    }
+
+    console.log(`✅ Notified ${result.rows.length} staff member(s) of common items update for ${bookingCode}`);
+  } catch (error) {
+    console.error('❌ Error sending common items update notifications to staff:', error);
+  }
+}
+
+/**
  * Send glamping pre-arrival reminder email (2 days before check-in)
  */
 export async function sendGlampingPreArrivalReminder({

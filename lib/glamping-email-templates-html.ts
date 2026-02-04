@@ -10,6 +10,10 @@ import {
   glampingMenuUpdatedCustomerHTML,
   glampingMenuUpdatedStaffHTML,
 } from './glamping-menu-email-templates';
+import {
+  glampingCommonItemsUpdatedCustomerHTML,
+  glampingCommonItemsUpdatedStaffHTML,
+} from './glamping-common-items-email-templates';
 
 const emailStyles = {
   container: 'max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; background-color: #f9fafb;',
@@ -2041,6 +2045,26 @@ export const GLAMPING_EMAIL_TEMPLATES: Record<string, GlampingEmailTemplateDefin
     html: glampingMenuUpdatedStaffHTML,
     type: 'admin_notification',
     description: 'Email thông báo cho admin khi khách cập nhật món ăn',
+    availableVariables: ['booking_reference', 'customer_name', 'old_total', 'new_total', 'price_difference', 'price_increased', 'requires_payment', 'notification_link'],
+    isActive: true,
+  },
+  'glamping-common-items-updated-customer': {
+    slug: 'glamping-common-items-updated-customer',
+    name: 'Cập nhật dịch vụ chung (Khách)',
+    subject: 'Đã cập nhật dịch vụ chung - Booking #{booking_reference}',
+    html: glampingCommonItemsUpdatedCustomerHTML,
+    type: 'common_items_update',
+    description: 'Email xác nhận gửi cho khách khi cập nhật dịch vụ chung thành công',
+    availableVariables: ['customer_name', 'booking_reference', 'old_total', 'new_total', 'price_difference', 'price_increased', 'confirmation_url'],
+    isActive: true,
+  },
+  'glamping-common-items-updated-staff': {
+    slug: 'glamping-common-items-updated-staff',
+    name: '[Admin] Khách cập nhật dịch vụ chung',
+    subject: 'Khách cập nhật dịch vụ chung - #{booking_reference}',
+    html: glampingCommonItemsUpdatedStaffHTML,
+    type: 'admin_notification',
+    description: 'Email thông báo cho admin khi khách cập nhật dịch vụ chung',
     availableVariables: ['booking_reference', 'customer_name', 'old_total', 'new_total', 'price_difference', 'price_increased', 'requires_payment', 'notification_link'],
     isActive: true,
   },

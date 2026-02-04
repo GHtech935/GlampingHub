@@ -228,7 +228,7 @@ export async function GET(
       `SELECT
         bi.id,
         bi.booking_tent_id,
-        bi.item_id,
+        bi.addon_item_id,
         bi.parameter_id,
         bi.quantity,
         bi.unit_price,
@@ -237,11 +237,11 @@ export async function GET(
         i.name as item_name,
         p.name as parameter_name
       FROM glamping_booking_items bi
-      LEFT JOIN glamping_items i ON bi.item_id = i.id
+      LEFT JOIN glamping_items i ON bi.addon_item_id = i.id
       LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
       WHERE bi.booking_id = $1
         AND bi.metadata->>'type' = 'addon'
-      ORDER BY bi.booking_tent_id, bi.item_id, bi.created_at`,
+      ORDER BY bi.booking_tent_id, bi.addon_item_id, bi.created_at`,
       [id]
     );
 
@@ -259,11 +259,11 @@ export async function GET(
     }>();
 
     for (const row of commonItemsResult.rows) {
-      const key = `${row.booking_tent_id || 'none'}_${row.item_id}`;
+      const key = `${row.booking_tent_id || 'none'}_${row.addon_item_id}`;
       if (!commonItemsMap.has(key)) {
         const metadata = row.metadata || {};
         commonItemsMap.set(key, {
-          itemId: row.item_id,
+          itemId: row.addon_item_id,
           itemName: getLocalizedString(row.item_name),
           bookingTentId: row.booking_tent_id || null,
           ids: [],

@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "react-hot-toast";
+import VoucherInput, { type AppliedVoucher } from '@/components/booking/VoucherInput';
 import type { Locale } from "@/lib/i18n-utils";
 import type { CommonItemEditData } from "./types";
 
@@ -105,6 +106,21 @@ export function GlampingEditCommonItemModal({
   // Pricing state
   const [pricingLoading, setPricingLoading] = useState(false);
 
+  // Voucher state
+  const [voucher, setVoucher] = useState<{
+    code: string;
+    id: string;
+    discountAmount: number;
+    discountType: 'percentage' | 'fixed';
+    discountValue: number;
+  } | null>(item.voucherCode ? {
+    code: item.voucherCode,
+    id: '', // We don't have the ID in edit mode, but it's not critical
+    discountAmount: item.discountAmount || 0,
+    discountType: 'fixed', // Default, actual type not stored
+    discountValue: item.discountAmount || 0,
+  } : null);
+
   // Fetch addon config on mount
   useEffect(() => {
     if (!item.tentItemId) return;
@@ -188,12 +204,31 @@ export function GlampingEditCommonItemModal({
     [parameters]
   );
 
+  const finalTotal = useMemo(() => {
+    const discount = voucher?.discountAmount || 0;
+    return Math.max(0, calculatedTotal - discount);
+  }, [calculatedTotal, voucher]);
+
   const updateParameterQuantity = (index: number, value: number) => {
     setParameters(prev => {
       const updated = [...prev];
       updated[index] = { ...updated[index], quantity: value };
       return updated;
     });
+  };
+
+  const handleVoucherApplied = (appliedVoucher: AppliedVoucher) => {
+    setVoucher({
+      code: appliedVoucher.code,
+      id: appliedVoucher.id,
+      discountAmount: appliedVoucher.discountAmount,
+      discountType: appliedVoucher.discountType as 'percentage' | 'fixed',
+      discountValue: appliedVoucher.discountValue,
+    });
+  };
+
+  const handleVoucherRemoved = () => {
+    setVoucher(null);
   };
 
   const handleSave = async () => {
@@ -209,6 +244,7 @@ export function GlampingEditCommonItemModal({
             itemId: item.itemId,
             bookingTentId: item.bookingTentId,
             addonDates: addonDates || undefined,
+            voucher: voucher || undefined,
             parameters: parameters.map(p => ({
               parameterId: p.parameterId,
               quantity: p.quantity,
@@ -350,15 +386,55 @@ export function GlampingEditCommonItemModal({
             </div>
           )}
 
-          {/* Total */}
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">{t.total}</span>
-              <span className="font-medium">
-                {pricingLoading ? t.loadingPricing : formatCurrency(calculatedTotal)}
-              </span>
+          {/* Subtotal */}
+          {calculatedTotal > 0 && (
+            <div className="bg-blue-50 rounded-lg p-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Tạm tính</span>
+                <span className="font-medium">
+                  {pricingLoading ? t.loadingPricing : formatCurrency(calculatedTotal)}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Voucher Input */}
+          {calculatedTotal > 0 && (
+            <div>
+              <VoucherInput
+                itemId={item.itemId}
+                zoneId={item.zoneId || ''}
+                totalAmount={calculatedTotal}
+                applicationType="common_item"
+                validationEndpoint="/api/glamping/validate-voucher"
+                locale={locale}
+                appliedVoucher={voucher ? {
+                  id: voucher.id,
+                  code: voucher.code,
+                  name: '',
+                  description: '',
+                  discountType: voucher.discountType,
+                  discountValue: voucher.discountValue,
+                  discountAmount: voucher.discountAmount,
+                  isStackable: false
+                } : null}
+                onVoucherApplied={handleVoucherApplied}
+                onVoucherRemoved={handleVoucherRemoved}
+              />
+            </div>
+          )}
+
+          {/* Final Total */}
+          {voucher && voucher.discountAmount > 0 && (
+            <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+              <div className="flex justify-between text-sm font-semibold">
+                <span className="text-gray-700">{t.total}</span>
+                <span className="text-green-700">
+                  {pricingLoading ? t.loadingPricing : formatCurrency(finalTotal)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="mt-4">

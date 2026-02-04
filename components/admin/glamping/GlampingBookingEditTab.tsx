@@ -346,6 +346,9 @@ export function GlampingBookingEditTab({
       tentItemId: tent?.itemId || '',
       tentCheckInDate: tent?.checkInDate || '',
       tentCheckOutDate: tent?.checkOutDate || '',
+      voucherCode: item.voucherCode,
+      discountAmount: item.discountAmount,
+      zoneId: zoneId,
     });
   };
 
@@ -516,10 +519,10 @@ export function GlampingBookingEditTab({
               <thead>
                 <tr className="border-b bg-gray-50/50">
                   <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
-                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.qty}</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-600">{t.date}</th>
-                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.total}</th>
-                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.actions}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">{t.qty}</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600 w-56">{t.date}</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600 w-36">{t.total}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600 w-44">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -536,21 +539,21 @@ export function GlampingBookingEditTab({
                         </Badge>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-center">
+                    <td className="px-3 py-3 text-center w-24">
                       <span className="text-gray-900">
                         {tent.totalGuests} {t.guests}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 w-56">
                       <div className="text-gray-900">
                         {formatDate(tent.checkInDate)} - {formatDate(tent.checkOutDate)}
                       </div>
                       <div className="text-xs text-gray-500">{tent.nights} {t.nights}</div>
                     </td>
-                    <td className="px-3 py-3 text-right font-medium text-gray-900">
+                    <td className="px-3 py-3 text-right font-medium text-gray-900 w-36">
                       {formatCurrency(tent.subtotal - tent.discountAmount)}
                     </td>
-                    <td className="px-3 py-3 text-center">
+                    <td className="px-3 py-3 text-center w-44">
                       <div className="flex items-center justify-center gap-1">
                         <Button
                           variant="outline"
@@ -656,13 +659,16 @@ export function GlampingBookingEditTab({
                       </Badge>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-center text-gray-900 w-16">
+                  <td className="px-3 py-2.5 text-center text-gray-900 w-24">
                     {product.quantity}
                   </td>
-                  <td className="px-3 py-2.5 text-right font-medium text-gray-900 w-28">
+                  <td className="px-3 py-2.5 text-gray-900 w-56">
+                    {product.servingDate ? formatDate(product.servingDate) : '-'}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-medium text-gray-900 w-36">
                     {formatCurrency(product.totalPrice - product.discountAmount)}
                   </td>
-                  <td className="px-3 py-2.5 text-center w-32">
+                  <td className="px-3 py-2.5 text-center w-44">
                     <div className="flex items-center justify-center gap-1">
                       <Button
                         variant="outline"
@@ -693,9 +699,10 @@ export function GlampingBookingEditTab({
                   <thead>
                     <tr className="border-b bg-gray-50/50">
                       <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-16">{t.qty}</th>
-                      <th className="text-right px-3 py-2 font-medium text-gray-600 w-28">{t.total}</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-32">{t.actions}</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">{t.qty}</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600 w-56">{t.date}</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600 w-36">{t.total}</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-44">{t.actions}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -708,7 +715,7 @@ export function GlampingBookingEditTab({
                           {/* Tent Header */}
                           {data.tents.length > 1 && (
                             <tr className="bg-blue-50 border-b border-blue-100">
-                              <td colSpan={4} className="px-4 py-2">
+                              <td colSpan={5} className="px-4 py-2">
                                 <span className="font-medium text-sm text-blue-800">
                                   {locale === 'vi' ? 'Lều' : 'Tent'} {tentIdx + 1}: {tent?.itemName || '-'}
                                 </span>
@@ -724,7 +731,7 @@ export function GlampingBookingEditTab({
                             <React.Fragment key={`${tentId}-${dateKey}`}>
                               {/* Date Header */}
                               <tr className="bg-gray-50/70 border-b">
-                                <td colSpan={4} className="px-4 py-1.5">
+                                <td colSpan={5} className="px-4 py-1.5">
                                   <span className="text-xs font-medium text-gray-600">
                                     {dateKey === 'no-date'
                                       ? (locale === 'vi' ? 'Chưa xác định ngày' : 'No date specified')
@@ -743,7 +750,7 @@ export function GlampingBookingEditTab({
                     {productsWithoutTent.length > 0 && (
                       <>
                         <tr className="bg-gray-100 border-b">
-                          <td colSpan={4} className="px-4 py-2">
+                          <td colSpan={5} className="px-4 py-2">
                             <span className="font-medium text-sm text-gray-700">
                               {locale === 'vi' ? 'Sản phẩm chung' : 'General Products'}
                             </span>
@@ -752,7 +759,7 @@ export function GlampingBookingEditTab({
                         {groupByDate(productsWithoutTent).map(([dateKey, dateProducts]) => (
                           <React.Fragment key={`no-tent-${dateKey}`}>
                             <tr className="bg-gray-50/70 border-b">
-                              <td colSpan={4} className="px-4 py-1.5">
+                              <td colSpan={5} className="px-4 py-1.5">
                                 <span className="text-xs font-medium text-gray-600">
                                   {dateKey === 'no-date'
                                     ? (locale === 'vi' ? 'Chưa xác định ngày' : 'No date specified')
@@ -779,15 +786,15 @@ export function GlampingBookingEditTab({
 
       {/* Common Items Section */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="px-4 py-3 bg-purple-50 border-b flex items-center justify-between">
-          <h3 className="font-semibold text-purple-700">{t.commonItems}</h3>
+        <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">{t.commonItems}</h3>
           {data.tents.length > 0 && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowAddCommonItemModal(true)}
               disabled={isUpdating}
-              className="h-7 px-2 text-xs border-purple-300 text-purple-600 hover:bg-purple-100"
+              className="h-7 px-2 text-xs"
             >
               <Plus className="h-3 w-3 mr-1" />
               {t.addCommonItem}
@@ -800,59 +807,42 @@ export function GlampingBookingEditTab({
               <thead>
                 <tr className="border-b bg-gray-50/50">
                   <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
-                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.qty}</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-600">{t.date}</th>
-                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.total}</th>
-                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.actions}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600 w-24">{t.qty}</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600 w-56">{t.date}</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600 w-36">{t.total}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600 w-44">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
-                {data.commonItems.map((item, idx) => {
-                  const afterDiscount = item.totalPrice - item.discountAmount;
+                {data.commonItems.flatMap((item, itemIdx) => {
                   const tent = item.bookingTentId ? data.tents.find(t => t.id === item.bookingTentId) : null;
-                  return (
-                    <tr key={`${item.itemId}-${item.bookingTentId}-${idx}`} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{item.itemName}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          {item.parameters.map(p => `${p.parameterName}: ${p.quantity}`).join(', ')}
+                  const afterDiscount = item.totalPrice - item.discountAmount;
+
+                  // Create array with header row + parameter rows
+                  const rows = [];
+
+                  // Header row for the item
+                  rows.push(
+                    <tr key={`${item.itemId}-${item.bookingTentId}-${itemIdx}-header`} className="border-b bg-gray-50">
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold text-gray-900">{item.itemName}</div>
+                          {tent && data.tents.length > 1 && (
+                            <div className="text-sm text-gray-600">({tent.itemName})</div>
+                          )}
+                          {item.voucherCode && (
+                            <Badge variant="secondary" className="text-xs">
+                              {t.voucher}: {item.voucherCode} (-{formatCurrency(item.discountAmount)})
+                            </Badge>
+                          )}
                         </div>
-                        {tent && data.tents.length > 1 && (
-                          <div className="text-xs text-purple-600 mt-0.5">{tent.itemName}</div>
-                        )}
-                        {item.voucherCode && (
-                          <Badge variant="secondary" className="mt-1 text-xs">
-                            {t.voucher}: {item.voucherCode} (-{formatCurrency(item.discountAmount)})
-                          </Badge>
-                        )}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className="text-gray-900">
-                          {item.parameters.reduce((sum, p) => sum + p.quantity, 0)}
-                        </span>
+                      <td className="px-3 py-2 w-24"></td>
+                      <td className="px-3 py-2 w-56"></td>
+                      <td className="px-3 py-2 text-right w-36">
+                        <span className="font-medium text-gray-900">{formatCurrency(afterDiscount)}</span>
                       </td>
-                      <td className="px-3 py-3">
-                        {item.dates ? (
-                          <>
-                            <div className="text-gray-900">
-                              {formatDate(item.dates.from)} - {formatDate(item.dates.to)}
-                            </div>
-                          </>
-                        ) : tent ? (
-                          <>
-                            <div className="text-gray-900">
-                              {formatDate(tent.checkInDate)} - {formatDate(tent.checkOutDate)}
-                            </div>
-                            <div className="text-xs text-gray-500">{tent.nights} {t.nights}</div>
-                          </>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-right font-medium text-gray-900">
-                        {formatCurrency(afterDiscount)}
-                      </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-3 py-2 text-center w-44">
                         <div className="flex items-center justify-center gap-1">
                           <Button
                             variant="outline"
@@ -883,6 +873,64 @@ export function GlampingBookingEditTab({
                       </td>
                     </tr>
                   );
+
+                  // Parameter rows
+                  item.parameters.forEach((param, paramIdx) => {
+                    const isPerGroup = param.pricingMode === 'per_group';
+                    const paramTotal = isPerGroup ? param.unitPrice : param.quantity * param.unitPrice;
+
+                    rows.push(
+                      <tr key={`${item.itemId}-${item.bookingTentId}-${itemIdx}-${param.parameterId}-${paramIdx}`} className="border-b hover:bg-gray-50">
+                        <td className="px-4 py-2 pl-8">
+                          <div className="text-sm text-gray-700">{param.parameterName}</div>
+                        </td>
+                        <td className="px-3 py-2 text-center w-24">
+                          <span className="text-sm text-gray-900">
+                            {isPerGroup ? '-' : param.quantity}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 w-56">
+                          {item.dates ? (() => {
+                            // Check if it's a single-day service (to = from + 1 day)
+                            const fromDate = new Date(item.dates.from);
+                            const toDate = new Date(item.dates.to);
+                            const daysDiff = Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
+
+                            if (daysDiff === 1) {
+                              // Single day service - show only the service date
+                              return (
+                                <div className="text-sm text-gray-900">
+                                  {formatDate(item.dates.from)}
+                                </div>
+                              );
+                            } else {
+                              // Multi-day service - show range
+                              return (
+                                <div className="text-sm text-gray-900">
+                                  {formatDate(item.dates.from)} - {formatDate(item.dates.to)}
+                                </div>
+                              );
+                            }
+                          })() : tent ? (
+                            <>
+                              <div className="text-sm text-gray-900">
+                                {formatDate(tent.checkInDate)} - {formatDate(tent.checkOutDate)}
+                              </div>
+                              <div className="text-xs text-gray-500">{tent.nights} {t.nights}</div>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm text-gray-900 w-36">
+                          {formatCurrency(paramTotal)}
+                        </td>
+                        <td className="px-3 py-2 w-44"></td>
+                      </tr>
+                    );
+                  });
+
+                  return rows;
                 })}
               </tbody>
             </table>

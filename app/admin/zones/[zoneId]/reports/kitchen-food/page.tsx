@@ -790,7 +790,7 @@ export default function KitchenFoodReportPage() {
                       <td className="px-4 py-2 text-sm text-center font-semibold text-orange-700">
                         {item.totalQuantity}
                       </td>
-                      <td className="px-4 py-2 text-sm text-center text-gray-600">
+                      <td className="px-4 py-2 text-sm text-center text-gray-600 whitespace-nowrap">
                         {item.minGuests && item.minGuests > 0 ? "combo 1 khách" : item.menuItemUnit}
                       </td>
                     </tr>
@@ -960,7 +960,7 @@ export default function KitchenFoodReportPage() {
                       </td>
 
                       {/* Unit - display "combo 1 khách" if minGuests > 0 */}
-                      <td className="px-4 py-3 text-sm text-gray-600 text-center">
+                      <td className="px-4 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
                         {row.minGuests && row.minGuests > 0 ? "combo 1 khách" : row.menuItemUnit}
                       </td>
 

@@ -365,6 +365,9 @@ export interface CommonItemEditData {
   tentItemId: string;
   tentCheckInDate: string;
   tentCheckOutDate: string;
+  voucherCode?: string | null;
+  discountAmount?: number;
+  zoneId?: string;
 }
 
 /**

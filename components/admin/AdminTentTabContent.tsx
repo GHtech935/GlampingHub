@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
 import { AlertTriangle, Loader2, Package, Minus, Plus } from 'lucide-react'
@@ -297,6 +297,10 @@ export function AdminTentTabContent({
     loading: boolean
   }>>({})
 
+  // Use ref flag to prevent circular dependency between pricing fetch and sync effects.
+  // Without this, syncing pricing back into addonSelections triggers another fetch.
+  const isSyncingPricingRef = useRef(false)
+
   // Helper: get localized name for addon/param
   const getAddonName = useCallback((obj: any) => {
     if (!obj) return ''
@@ -356,6 +360,13 @@ export function AdminTentTabContent({
 
   // Fetch addon pricing — call calculate-pricing for each selected addon
   useEffect(() => {
+    // Skip API call if this addonSelections update is from pricing sync (not user action).
+    // This breaks the circular dependency: fetch → sync → fetch → sync → ...
+    if (isSyncingPricingRef.current) {
+      isSyncingPricingRef.current = false
+      return
+    }
+
     if (!addons || addons.length === 0) return
 
     const selectedAddons = addons.filter(
@@ -448,7 +459,7 @@ export function AdminTentTabContent({
       setAddonPricingMap({ ...newMap })
     }
 
-    const timer = setTimeout(fetchAllAddonPricing, 600)
+    const timer = setTimeout(fetchAllAddonPricing, 800)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addons, tent.addonSelections, tent.dateRange])
@@ -507,10 +518,16 @@ export function AdminTentTabContent({
     }
 
     if (hasChanges) {
+      isSyncingPricingRef.current = true  // Set flag before update
       onTentChange({ ...tent, addonSelections: updatedSelections })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addonPricingMap, addons])
+
+  // Cleanup effect to reset flag after render cycle
+  useEffect(() => {
+    isSyncingPricingRef.current = false
+  }, [tent.addonSelections])
 
   // Addon event handlers
   const handleAddonToggle = useCallback((addonItemId: string, selected: boolean, addon: ItemAddon) => {

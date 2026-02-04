@@ -5,6 +5,10 @@ import {
   broadcastToAllowedRoles,
   notifyGlampingOwnersOfZone,
 } from '@/lib/notifications';
+import {
+  sendGlampingCommonItemsUpdateConfirmation,
+  sendGlampingCommonItemsUpdateNotificationToStaff,
+} from '@/lib/email';
 
 interface AddonSelectionPayload {
   addonItemId: string;
@@ -172,11 +176,39 @@ export async function PUT(
 
     await client.query('COMMIT');
 
-    // 7. Send notifications (outside transaction)
+    // 7. Send email notifications (outside transaction)
     const oldTotal = parseFloat(booking.old_total);
     const priceDifference = newTotal - oldTotal;
     const customerName = `${booking.first_name} ${booking.last_name}`.trim();
 
+    try {
+      // Email to customer
+      await sendGlampingCommonItemsUpdateConfirmation({
+        customerEmail: booking.customer_email,
+        customerName,
+        bookingCode: booking.booking_code,
+        oldTotal,
+        newTotal,
+        priceDifference,
+        glampingBookingId: bookingId,
+      });
+
+      // Email to staff
+      await sendGlampingCommonItemsUpdateNotificationToStaff({
+        bookingCode: booking.booking_code,
+        customerName,
+        oldTotal,
+        newTotal,
+        priceDifference,
+        requiresPayment: newBalanceDue > 0,
+        glampingBookingId: bookingId,
+      });
+    } catch (emailError) {
+      console.error('Failed to send common items update emails:', emailError);
+      // Don't fail the request if email fails
+    }
+
+    // 8. Send in-app notifications (outside transaction)
     try {
       const notificationData = {
         booking_id: bookingId,
@@ -193,7 +225,7 @@ export async function PUT(
         await notifyGlampingOwnersOfZone(booking.zone_id, 'glamping_menu_updated', notificationData);
       }
     } catch (notificationError) {
-      console.error('Failed to send common items update notifications:', notificationError);
+      console.error('Failed to send common items update in-app notifications:', notificationError);
     }
 
     return NextResponse.json({
