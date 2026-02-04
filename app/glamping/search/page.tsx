@@ -39,6 +39,7 @@ interface GlampingZone {
   basePrice: number
   features?: string[]
   items?: GlampingItem[]
+  tentCount?: number
   distance?: string
   latitude: number
   longitude: number

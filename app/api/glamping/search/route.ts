@@ -34,9 +34,14 @@ export async function GET(request: NextRequest) {
         (
           SELECT MIN(p.amount)
           FROM glamping_items i
-          LEFT JOIN glamping_pricing p ON p.item_id = i.id AND p.event_id IS NULL
+          INNER JOIN glamping_categories c ON c.id = i.category_id
+          LEFT JOIN glamping_pricing p ON p.item_id = i.id
+            AND p.event_id IS NULL
+            AND p.amount > 0
           LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
           WHERE i.zone_id = z.id
+            AND i.is_tent = true
+            AND c.is_tent_category = true
             AND COALESCE(a.is_active, true) = true
             AND a.default_calendar_status = 'available'
         ) as base_price,
@@ -71,20 +76,23 @@ export async function GET(request: NextRequest) {
             SELECT
               i.id,
               i.name,
-              COALESCE(c.name, 'N/A') as category_name,
+              c.name as category_name,
               COALESCE(
                 (SELECT MIN(p.amount)
                  FROM glamping_pricing p
-                 WHERE p.item_id = i.id AND p.event_id IS NULL),
+                 WHERE p.item_id = i.id
+                   AND p.event_id IS NULL
+                   AND p.amount > 0),
                 0
               ) as base_price,
               i.sku,
               i.summary
             FROM glamping_items i
-            LEFT JOIN glamping_categories c ON c.id = i.category_id
+            INNER JOIN glamping_categories c ON c.id = i.category_id
             LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
             WHERE i.zone_id = z.id
               AND i.is_tent = true
+              AND c.is_tent_category = true
               AND COALESCE(a.is_active, true) = true
               AND a.default_calendar_status = 'available'
             ORDER BY i.created_at DESC
@@ -95,9 +103,11 @@ export async function GET(request: NextRequest) {
         (
           SELECT COUNT(*)
           FROM glamping_items i
+          INNER JOIN glamping_categories c ON c.id = i.category_id
           LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
           WHERE i.zone_id = z.id
             AND i.is_tent = true
+            AND c.is_tent_category = true
             AND COALESCE(a.is_active, true) = true
             AND a.default_calendar_status = 'available'
         ) as tent_count
@@ -120,8 +130,11 @@ export async function GET(request: NextRequest) {
     if (checkIn && checkOut) {
       query += ` AND EXISTS (
         SELECT 1 FROM glamping_items i
+        INNER JOIN glamping_categories c ON c.id = i.category_id
         LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
         WHERE i.zone_id = z.id
+          AND i.is_tent = true
+          AND c.is_tent_category = true
           AND COALESCE(a.is_active, true) = true
           AND a.default_calendar_status = 'available'
           AND NOT EXISTS (
@@ -199,8 +212,11 @@ export async function GET(request: NextRequest) {
     if (checkIn && checkOut) {
       countQuery += ` AND EXISTS (
         SELECT 1 FROM glamping_items i
+        INNER JOIN glamping_categories c ON c.id = i.category_id
         LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
         WHERE i.zone_id = z.id
+          AND i.is_tent = true
+          AND c.is_tent_category = true
           AND COALESCE(a.is_active, true) = true
           AND a.default_calendar_status = 'available'
           AND NOT EXISTS (

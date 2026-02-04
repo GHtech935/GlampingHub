@@ -25,6 +25,7 @@ import { MenuFormModal } from "@/components/admin/glamping/MenuFormModal";
 import { MenuCategoryModal } from "@/components/admin/glamping/MenuCategoryModal";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
+import { useAuth } from "@/hooks/useAuth";
 
 interface MenuItem {
   id: string;
@@ -49,6 +50,7 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
   const { zoneId } = use(params);
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useAuth();
   const t = useTranslations("admin.glamping.menu");
   const tc = useTranslations("admin.glamping.common");
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -59,6 +61,9 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<'name' | 'price' | 'weight'>('weight');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Check if user is operations role (read-only)
+  const isOperations = user?.type === 'staff' && (user as any).role === 'operations';
 
   // Modal state
   const [showFormModal, setShowFormModal] = useState(false);
@@ -212,16 +217,18 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
           <h1 className="text-2xl font-bold text-gray-900">{t("title")}</h1>
           <p className="text-gray-600 mt-1">{t("subtitle")}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowCategoryModal(true)}>
-            <FolderOpen className="w-4 h-4 mr-2" />
-            {t("categoryButton")}
-          </Button>
-          <Button onClick={handleCreate}>
-            <Plus className="w-4 h-4 mr-2" />
-            {t("addNew")}
-          </Button>
-        </div>
+        {!isOperations && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowCategoryModal(true)}>
+              <FolderOpen className="w-4 h-4 mr-2" />
+              {t("categoryButton")}
+            </Button>
+            <Button onClick={handleCreate}>
+              <Plus className="w-4 h-4 mr-2" />
+              {t("addNew")}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -347,22 +354,24 @@ export default function MenuPage({ params }: { params: Promise<{ zoneId: string 
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(item)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(item.id)}
-                      >
-                        <Trash className="w-4 h-4 text-red-500" />
-                      </Button>
-                    </div>
+                    {!isOperations && (
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(item)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(item.id)}
+                        >
+                          <Trash className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

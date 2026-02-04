@@ -3177,7 +3177,13 @@
                     "basePrice": "Base price",
                     "deposit": "Deposit",
                     "manage": "Manage item",
-                    "noImage": "No image"
+                    "noImage": "No image",
+                    "copy": "Copy tent",
+                    "confirmCopy": "Are you sure you want to copy tent \"{name}\"?",
+                    "confirmCopyBtn": "Copy",
+                    "cancelBtn": "Cancel",
+                    "copySuccess": "Tent copied successfully!",
+                    "copyError": "Failed to copy tent. Please try again."
                 },
                 "actions": {
                     "edit": "Edit",
@@ -3337,8 +3343,8 @@
                     "main": "Main",
                     "setAsMain": "Set as main",
                     "multiSelectNote": "Multi-select tags will be implemented in next iteration",
-                    "maxImagesError": "Maximum 5 images allowed",
-                    "imageUploadHint": "Max 5 photos (PNG, JPG, GIF, 10MB each). First photo becomes main thumbnail.",
+                    "maxImagesError": "Maximum 10 images allowed",
+                    "imageUploadHint": "Max 10 photos (PNG, JPG, GIF). Images will be automatically compressed to around 400-500KB for optimal loading speed. First photo becomes main thumbnail.",
                     "captionPlaceholder": "Caption (optional)",
                     "youtubeHint": "Add a YouTube video by pasting the full URL or Video ID.",
                     "youtubeStartTime": "Start Time",

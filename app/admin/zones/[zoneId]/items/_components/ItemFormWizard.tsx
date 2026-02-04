@@ -930,10 +930,96 @@ export function ItemFormWizard({
     }).format(amount);
   };
 
+  // Compress image to target size (400-500KB)
+  const compressImage = async (file: File, targetSizeKB: number = 450): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+
+          // Calculate new dimensions (max width/height: 1920px)
+          let width = img.width;
+          let height = img.height;
+          const maxDimension = 1920;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = (height / width) * maxDimension;
+              width = maxDimension;
+            } else {
+              width = (width / height) * maxDimension;
+              height = maxDimension;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          // Draw image on canvas
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Function to convert canvas to blob with quality adjustment
+          const tryCompress = (quality: number) => {
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  reject(new Error('Failed to compress image'));
+                  return;
+                }
+
+                const sizeKB = blob.size / 1024;
+
+                // If size is within target range (400-500KB) or quality is too low, accept it
+                if (sizeKB <= targetSizeKB + 50 || quality <= 0.3) {
+                  const compressedFile = new File([blob], file.name, {
+                    type: 'image/jpeg',
+                    lastModified: Date.now(),
+                  });
+                  resolve(compressedFile);
+                } else {
+                  // Try with lower quality
+                  tryCompress(quality - 0.1);
+                }
+              },
+              'image/jpeg',
+              quality
+            );
+          };
+
+          // Start with quality 0.9
+          tryCompress(0.9);
+        };
+
+        img.onerror = () => {
+          reject(new Error('Failed to load image'));
+        };
+      };
+
+      reader.onerror = () => {
+        reject(new Error('Failed to read file'));
+      };
+    });
+  };
+
   // Upload image to Cloudinary
   const uploadToCloudinary = async (file: File): Promise<string> => {
+    // Compress image before uploading
+    const compressedFile = await compressImage(file);
+
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', compressedFile);
 
     const response = await fetch('/api/upload', {
       method: 'POST',
@@ -2893,7 +2979,7 @@ export function ItemFormWizard({
                           className="hidden"
                           onChange={(e) => {
                             const files = Array.from(e.target.files || []);
-                            if (images.length + files.length > 5) {
+                            if (images.length + files.length > 10) {
                               toast({
                                 title: tc("error"),
                                 description: t("maxImagesError"),
@@ -2914,7 +3000,7 @@ export function ItemFormWizard({
                           type="button"
                           variant="outline"
                           onClick={() => document.getElementById('image-upload')?.click()}
-                          disabled={images.length >= 5}
+                          disabled={images.length >= 10}
                         >
                           <Upload className="w-4 h-4 mr-2" />
                           {t('uploadImages')}

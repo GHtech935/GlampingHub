@@ -1,10 +1,11 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { Plus, Search, Edit, Tent, ImageOff, DollarSign } from "lucide-react";
+import { Plus, Search, Edit, Tent, ImageOff, DollarSign, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import Swal from "sweetalert2";
 import {
   Select,
   SelectContent,
@@ -15,6 +16,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Item {
   id: string;
@@ -30,6 +32,8 @@ interface Item {
   active_bookings: number;
   deposit_type: string;
   deposit_value: number;
+  zone_deposit_type: string;
+  zone_deposit_value: number;
   is_active: boolean;
   display_order: number;
 }
@@ -49,9 +53,34 @@ const formatCurrency = (amount: number) => {
   return amount.toLocaleString("vi-VN");
 };
 
+const formatDepositDisplay = (item: Item) => {
+  let depositType = item.deposit_type;
+  let depositValue = item.deposit_value;
+
+  // If using system default, use zone settings
+  if (depositType === 'system_default') {
+    depositType = item.zone_deposit_type || 'percentage';
+    depositValue = item.zone_deposit_value || 0;
+  }
+
+  // Format based on type
+  if (depositType === 'percentage' || depositType === 'custom_percentage') {
+    return `${parseFloat(depositValue.toString())}%`;
+  } else if (depositType === 'fixed_amount') {
+    return `${formatCurrency(depositValue)} VND`;
+  } else if (depositType === 'per_hour') {
+    return `${formatCurrency(depositValue)} VND/giờ`;
+  } else if (depositType === 'per_qty') {
+    return `${formatCurrency(depositValue)} VND/số lượng`;
+  }
+
+  return `${formatCurrency(depositValue)} VND`;
+};
+
 export default function ItemsPage({ params }: { params: Promise<{ zoneId: string }> }) {
   const router = useRouter();
   const { zoneId } = use(params);
+  const { user } = useAuth();
   const t = useTranslations("admin.glamping.items");
   const tc = useTranslations("admin.glamping.common");
   const [items, setItems] = useState<Item[]>([]);
@@ -61,6 +90,10 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [showNoCategory, setShowNoCategory] = useState(false);
+  const [copyingItemId, setCopyingItemId] = useState<string | null>(null);
+
+  // Check if user is operations role (read-only)
+  const isOperations = user?.type === 'staff' && (user as any).role === 'operations';
 
   useEffect(() => {
     if (zoneId === "all") {
@@ -149,6 +182,57 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
     }
   };
 
+  const handleCopyItem = async (itemId: string, itemName: string) => {
+    const result = await Swal.fire({
+      title: t("card.confirmCopy", { name: itemName }),
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: t("card.confirmCopyBtn"),
+      cancelButtonText: t("card.cancelBtn"),
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    setCopyingItemId(itemId);
+    try {
+      const response = await fetch(`/api/admin/glamping/items/${itemId}/copy`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to copy item');
+      }
+
+      const data = await response.json();
+
+      // Refresh the items list
+      await fetchItems();
+
+      await Swal.fire({
+        title: t("card.copySuccess"),
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false,
+      });
+
+      // Optionally redirect to edit page of new item
+      // router.push(`/admin/zones/${zoneId}/items/${data.id}/edit`);
+    } catch (error) {
+      console.error("Failed to copy item:", error);
+      await Swal.fire({
+        title: t("card.copyError"),
+        icon: 'error',
+        confirmButtonText: 'OK',
+      });
+    } finally {
+      setCopyingItemId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -157,10 +241,12 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
           <h1 className="text-3xl font-bold text-gray-900">{t("title")}</h1>
           <p className="text-gray-600 mt-1">{t("subtitle")}</p>
         </div>
-        <Button onClick={() => router.push(`/admin/zones/${zoneId}/items/new`)}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t("addNew")}
-        </Button>
+        {!isOperations && (
+          <Button onClick={() => router.push(`/admin/zones/${zoneId}/items/new`)}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t("addNew")}
+          </Button>
+        )}
       </div>
 
       {/* Search & Filter */}
@@ -302,6 +388,21 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
                     </Badge>
                   )}
                 </div>
+
+                {/* Copy button in top-right corner */}
+                {!isOperations && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopyItem(item.id, item.name);
+                    }}
+                    disabled={copyingItemId === item.id}
+                    className="absolute top-3 right-3 p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed group"
+                    title={t("card.copy")}
+                  >
+                    <Copy className={`w-4 h-4 text-gray-700 group-hover:text-primary transition-colors ${copyingItemId === item.id ? 'animate-pulse' : ''}`} />
+                  </button>
+                )}
               </div>
 
               {/* Content */}
@@ -339,15 +440,13 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
                   )}
 
                   {/* Deposit */}
-                  {item.deposit_type && item.deposit_type !== "system_default" && (
+                  {item.deposit_type && item.deposit_type !== "no_deposit" && (
                     <div className="flex items-center gap-2">
                       <span className="w-3.5 h-3.5 flex items-center justify-center text-orange-500 flex-shrink-0 text-xs font-bold">%</span>
                       <span>
                         {t("card.deposit")}:{" "}
                         <span className="font-medium text-gray-900">
-                          {item.deposit_type === "custom_percentage"
-                            ? `${item.deposit_value}%`
-                            : `${formatCurrency(item.deposit_value)} VND`}
+                          {formatDepositDisplay(item)}
                         </span>
                       </span>
                     </div>
@@ -372,14 +471,16 @@ export default function ItemsPage({ params }: { params: Promise<{ zoneId: string
                 </div>
 
                 {/* Manage button */}
-                <Button
-                  className="w-full"
-                  variant="default"
-                  onClick={() => router.push(`/admin/zones/${zoneId}/items/${item.id}/edit`)}
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  {t("card.manage")}
-                </Button>
+                {!isOperations && (
+                  <Button
+                    className="w-full"
+                    variant="default"
+                    onClick={() => router.push(`/admin/zones/${zoneId}/items/${item.id}/edit`)}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    {t("card.manage")}
+                  </Button>
+                )}
               </div>
             </div>
           ))}

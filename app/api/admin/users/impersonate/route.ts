@@ -47,12 +47,12 @@ export async function POST(request: NextRequest) {
       campsiteIds = campsitesResult.rows.map(row => row.id);
     }
 
-    // For glamping_owner role, fetch their zones from user_glamping_zones
+    // For glamping_owner and operations roles, fetch their zones from user_glamping_zones
     let glampingZoneIds: string[] | undefined;
-    if (targetUser.role === 'glamping_owner') {
+    if (targetUser.role === 'glamping_owner' || targetUser.role === 'operations') {
       const zonesResult = await pool.query(
         'SELECT zone_id FROM user_glamping_zones WHERE user_id = $1 AND role = $2',
-        [targetUser.id, 'glamping_owner']
+        [targetUser.id, targetUser.role]
       );
       glampingZoneIds = zonesResult.rows.map(row => row.zone_id);
     }

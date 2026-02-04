@@ -4,6 +4,7 @@ import { ReactNode } from "react"
 import ToastProvider from "./ToastProvider"
 import { GoogleMapsProvider } from "./GoogleMapsProvider"
 import { GlampingCartProvider } from "./GlampingCartProvider"
+import { AuthProvider } from "@/contexts/AuthContext"
 
 interface ProvidersProps {
   children: ReactNode
@@ -11,11 +12,13 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <GoogleMapsProvider>
-      <GlampingCartProvider>
-        {children}
-        <ToastProvider />
-      </GlampingCartProvider>
-    </GoogleMapsProvider>
+    <AuthProvider>
+      <GoogleMapsProvider>
+        <GlampingCartProvider>
+          {children}
+          <ToastProvider />
+        </GlampingCartProvider>
+      </GoogleMapsProvider>
+    </AuthProvider>
   )
 }

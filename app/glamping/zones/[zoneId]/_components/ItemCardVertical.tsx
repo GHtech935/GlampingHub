@@ -84,9 +84,15 @@ export function ItemCardVertical({
   // Location string
   const location = [zoneCity, zoneProvince].filter(Boolean).join(", ");
 
-  // Truncate description
+  // Truncate description - properly decode HTML entities
   const description = item.summary
-    ? item.summary.replace(/<[^>]*>/g, "").slice(0, 100) + "..."
+    ? (() => {
+        // Create a temporary div to parse HTML and decode entities
+        const div = document.createElement('div');
+        div.innerHTML = item.summary;
+        const text = div.textContent || div.innerText || "";
+        return text.slice(0, 100) + "...";
+      })()
     : "";
 
   return (

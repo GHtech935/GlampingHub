@@ -13,8 +13,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Role check: admin, sale, glamping_owner
-    if (!['admin', 'sale', 'glamping_owner'].includes(session.role)) {
+    // Role check: admin, sale, glamping_owner, operations
+    if (!['admin', 'sale', 'glamping_owner', 'operations'].includes(session.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

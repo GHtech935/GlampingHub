@@ -3177,7 +3177,13 @@
                     "basePrice": "Giá cơ bản",
                     "deposit": "Đặt cọc",
                     "manage": "Quản lý item",
-                    "noImage": "Chưa có ảnh"
+                    "noImage": "Chưa có ảnh",
+                    "copy": "Sao chép lều",
+                    "confirmCopy": "Bạn có chắc chắn muốn sao chép lều \"{name}\"?",
+                    "confirmCopyBtn": "Sao chép",
+                    "cancelBtn": "Hủy",
+                    "copySuccess": "Sao chép lều thành công!",
+                    "copyError": "Không thể sao chép lều. Vui lòng thử lại."
                 },
                 "actions": {
                     "edit": "Sửa",
@@ -3337,8 +3343,8 @@
                     "main": "Chính",
                     "setAsMain": "Đặt làm ảnh chính",
                     "multiSelectNote": "Chọn nhiều thẻ sẽ được triển khai trong phiên bản tiếp theo",
-                    "maxImagesError": "Tối đa 5 hình ảnh",
-                    "imageUploadHint": "Tối đa 5 ảnh (PNG, JPG, GIF, mỗi ảnh 10MB). Ảnh đầu tiên sẽ trở thành ảnh chính.",
+                    "maxImagesError": "Tối đa 10 hình ảnh",
+                    "imageUploadHint": "Tối đa 10 ảnh (PNG, JPG, GIF). Ảnh sẽ được tự động nén xuống khoảng 400-500KB để tối ưu tốc độ tải. Ảnh đầu tiên sẽ trở thành ảnh chính.",
                     "captionPlaceholder": "Chú thích (tùy chọn)",
                     "youtubeHint": "Thêm video YouTube bằng cách dán URL đầy đủ hoặc Video ID.",
                     "youtubeStartTime": "Thời gian bắt đầu",

@@ -45,7 +45,9 @@ export async function GET(request: NextRequest) {
           WHERE gbi.item_id = i.id AND gb.status IN ('confirmed', 'checked_in')
         ) as active_bookings,
         COALESCE(ds.type, 'system_default') as deposit_type,
-        COALESCE(ds.amount, 0) as deposit_value
+        COALESCE(ds.amount, 0) as deposit_value,
+        z.deposit_type as zone_deposit_type,
+        z.deposit_value as zone_deposit_value
       FROM glamping_items i
       LEFT JOIN glamping_categories c ON i.category_id = c.id
       LEFT JOIN glamping_zones z ON i.zone_id = z.id

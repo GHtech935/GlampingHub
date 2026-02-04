@@ -20,6 +20,7 @@ import { ZoneFormModal } from "@/components/admin/glamping/ZoneFormModal";
 import { StatCard, StatCardGrid } from "@/components/admin/StatCard";
 import { RevenueChart } from "@/components/admin/RevenueChart";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ZoneStats {
   id: string;
@@ -86,6 +87,7 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
   const t = useTranslations("admin.glamping.zones");
   const tc = useTranslations("admin.glamping.common");
   const { toast } = useToast();
+  const { user } = useAuth();
   const { zoneId } = use(params);
   const isAllZones = zoneId === "all";
   const [loading, setLoading] = useState(true);
@@ -97,6 +99,9 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [chartMode, setChartMode] = useState<"daily" | "monthly">("daily");
+
+  // Check if user is operations role (read-only)
+  const isOperations = user?.type === 'staff' && (user as any).role === 'operations';
 
   useEffect(() => {
     if (isAllZones) {
@@ -418,17 +423,21 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => handleEditZone(zoneStats)}
-          >
-            <Edit className="w-4 h-4 mr-2" />
-            {tc("edit")}
-          </Button>
-          <Button onClick={() => router.push(`/admin/zones/${zoneId}/items/new`)}>
-            <Plus className="w-4 h-4 mr-2" />
-            {t("addItem")}
-          </Button>
+          {!isOperations && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => handleEditZone(zoneStats)}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                {tc("edit")}
+              </Button>
+              <Button onClick={() => router.push(`/admin/zones/${zoneId}/items/new`)}>
+                <Plus className="w-4 h-4 mr-2" />
+                {t("addItem")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

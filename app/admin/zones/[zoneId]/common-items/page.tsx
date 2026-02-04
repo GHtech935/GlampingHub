@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Item {
   id: string;
@@ -46,6 +47,7 @@ const formatCurrency = (amount: number) => {
 export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: string }> }) {
   const router = useRouter();
   const { zoneId } = use(params);
+  const { user } = useAuth();
   const t = useTranslations("admin.glamping.commonItems");
   const tc = useTranslations("admin.glamping.common");
   const [items, setItems] = useState<Item[]>([]);
@@ -53,6 +55,9 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [showNoCategory, setShowNoCategory] = useState(false);
+
+  // Check if user is operations role (read-only)
+  const isOperations = user?.type === 'staff' && (user as any).role === 'operations';
 
   useEffect(() => {
     if (zoneId === "all") {
@@ -107,10 +112,12 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
           <h1 className="text-3xl font-bold text-gray-900">{t("title")}</h1>
           <p className="text-gray-600 mt-1">{t("subtitle")}</p>
         </div>
-        <Button onClick={() => router.push(`/admin/zones/${zoneId}/common-items/new`)}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t("addNew")}
-        </Button>
+        {!isOperations && (
+          <Button onClick={() => router.push(`/admin/zones/${zoneId}/common-items/new`)}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t("addNew")}
+          </Button>
+        )}
       </div>
 
       {/* Search & Filter */}
@@ -241,15 +248,17 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        router.push(`/admin/zones/${zoneId}/common-items/${item.id}/edit`)
-                      }
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
+                    {!isOperations && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          router.push(`/admin/zones/${zoneId}/common-items/${item.id}/edit`)
+                        }
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

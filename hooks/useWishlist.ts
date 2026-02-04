@@ -31,11 +31,13 @@ export function useWishlist() {
     }
   }, [isAuthenticated, isCustomer]);
 
+  // Only fetch wishlist once when auth is loaded
   useEffect(() => {
     if (!authLoading) {
       fetchWishlist();
     }
-  }, [authLoading, fetchWishlist]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated, isCustomer]);
 
   // Check if item is in wishlist
   const isInWishlist = useCallback((itemId: string) => {

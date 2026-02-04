@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { CategoryTabs } from "../../search_2/_components/CategoryTabs";
 import { ItemsGrid } from "./_components/ItemsGrid";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ZoneImageGallery } from "./_components/ZoneImageGallery";
 
 interface GlampingItem {
   id: string;
@@ -55,6 +56,7 @@ interface GlampingZone {
   address?: string;
   city?: string;
   province?: string;
+  images?: string[];
 }
 
 function ZoneDetailContent() {
@@ -332,6 +334,14 @@ function ZoneDetailContent() {
                     {[zone.address, zone.city, zone.province].filter(Boolean).join(', ')}
                   </p>
                 )}
+                {zone.images && zone.images.length > 0 && (
+                  <div className="mb-6">
+                    <ZoneImageGallery
+                      images={zone.images}
+                      zoneName={zone.name?.vi || 'Khu Glamping'}
+                    />
+                  </div>
+                )}
                 {zone.description?.vi && (
                   <div className="mb-4">
                     <div className="relative">
@@ -363,6 +373,14 @@ function ZoneDetailContent() {
                   <p className="text-sm text-gray-500 mb-6">
                     {[zone.address, zone.city, zone.province].filter(Boolean).join(', ')}
                   </p>
+                )}
+                {zone.images && zone.images.length > 0 && (
+                  <div className="mb-6">
+                    <ZoneImageGallery
+                      images={zone.images}
+                      zoneName={zone.name?.en || 'Glamping Zone'}
+                    />
+                  </div>
                 )}
                 {zone.description?.en && (
                   <div className="mb-4">

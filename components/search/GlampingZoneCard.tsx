@@ -28,6 +28,7 @@ interface GlampingZoneCardProps {
   features?: string[]
   distance?: string
   items?: GlampingItem[]
+  tentCount?: number
   isHovered?: boolean
   onHoverChange?: (id: string | null) => void
 }
@@ -53,6 +54,7 @@ export function GlampingZoneCard({
   features,
   distance,
   items = [],
+  tentCount = 0,
   isHovered = false,
   onHoverChange,
 }: GlampingZoneCardProps) {
@@ -162,45 +164,65 @@ export function GlampingZoneCard({
 
           {/* Items with their categories and prices */}
           {items.length > 0 && (
-            <div className="space-y-1 mb-2 sm:mb-3 pt-2 sm:pt-3 border-t">
-              {items.map((item) => {
-                // Get category icon
-                const categoryKey = item.category_name.toLowerCase()
-                const Icon = categoryIcons[categoryKey] || categoryIcons.default
+            <div className="mb-2 sm:mb-3 pt-2 sm:pt-3 border-t">
+              <div className="space-y-2 sm:space-y-3">
+                {items.map((item) => {
+                  // Get category icon
+                  const categoryKey = item.category_name.toLowerCase()
+                  const Icon = categoryIcons[categoryKey] || categoryIcons.default
 
-                return (
-                  <div key={item.id} className="space-y-1">
-                    {/* Item Name with Category */}
-                    <div className="flex items-center justify-between text-xs sm:text-sm gap-2 py-0.5 sm:py-1 border-b border-gray-100 last:border-b-0">
-                      <div className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0">
+                  return (
+                    <div key={item.id} className="space-y-1 pb-2 sm:pb-3 border-b border-gray-100 last:border-b-0 last:pb-0">
+                      {/* Item Name - Own Row */}
+                      <div className="flex items-center gap-1 sm:gap-1.5">
                         <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-green-600 flex-shrink-0" />
-                        <span className="text-gray-800 font-medium line-clamp-1">
+                        <span className="text-gray-800 font-medium text-xs sm:text-sm line-clamp-2">
                           {item.name}
                         </span>
-                        <span className="text-gray-500 text-[10px] sm:text-xs">
-                          ({item.category_name})
-                        </span>
                       </div>
-                      <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-                        {item.base_price > 0 ? (
-                          <>
-                            <span className="font-semibold text-green-600 whitespace-nowrap">
-                              ₫{(item.base_price / 1000).toFixed(0)}k
+
+                      {/* Category and Price Row */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-500 text-[10px] sm:text-xs">
+                          {item.category_name}
+                        </span>
+                        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+                          {item.base_price > 0 ? (
+                            <>
+                              <span className="font-semibold text-green-600 whitespace-nowrap text-xs sm:text-sm">
+                                ₫{(item.base_price / 1000).toFixed(0)}k
+                              </span>
+                              <span className="text-muted-foreground whitespace-nowrap text-[10px] sm:text-xs">
+                                / {locale === 'vi' ? 'đêm' : 'night'}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground text-[10px] sm:text-xs">
+                              {locale === 'vi' ? 'Liên hệ' : 'Contact'}
                             </span>
-                            <span className="text-muted-foreground whitespace-nowrap text-[10px] sm:text-xs">
-                              / {locale === 'vi' ? 'đêm' : 'night'}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground text-[10px] sm:text-xs">
-                            {locale === 'vi' ? 'Liên hệ' : 'Contact'}
-                          </span>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+
+              {/* Show "+X more tents" if there are more tents than displayed */}
+              {tentCount > items.length && (
+                <div className="mt-3 pt-3 border-t text-center">
+                  <p className="text-sm text-gray-600">
+                    +{tentCount - items.length} {locale === 'vi' ? 'lều thêm' : 'more tents'}
+                  </p>
+                </div>
+              )}
+
+              {/* View button */}
+              <Link href={`/glamping/zones/${slug}`}>
+                <button className="mt-3 w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors text-sm">
+                  {locale === 'vi' ? 'Xem' : 'View'}
+                </button>
+              </Link>
             </div>
           )}
 
