@@ -694,11 +694,14 @@ export default function GlampingBookingsPage() {
                         <div className="text-sm font-semibold text-gray-900">
                           {formatCurrency(booking.pricing.totalAmount)}
                         </div>
-                        {booking.pricing.balanceDue > 0 && (
-                          <div className="text-xs text-gray-600">
-                            {tTable('remaining', { amount: formatCurrency(booking.pricing.balanceDue) })}
-                          </div>
-                        )}
+                        {(() => {
+                          const remaining = booking.pricing.balanceDue || 0;
+                          return remaining > 0 ? (
+                            <div className="text-xs text-gray-600">
+                              {tTable('remaining', { amount: formatCurrency(remaining) })}
+                            </div>
+                          ) : null;
+                        })()}
                       </td>
 
                       {/* Actions */}

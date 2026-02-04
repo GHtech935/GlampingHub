@@ -190,7 +190,9 @@ export function GlampingParameterSelector({
                           <div className="text-xs text-gray-500">
                             {nightlyParameterPricing.slice(0, nights || 0).map((n, i) => {
                               const price = n.pricing[paramId] || 0
-                              const dateLabel = n.date.slice(5).replace('-', '/')
+                              // n.date is "YYYY-MM-DD", extract DD/MM for Vietnamese locale
+                              const [, mm, dd] = n.date.split('-')
+                              const dateLabel = `${dd}/${mm}`
                               return (
                                 <span key={n.date}>
                                   {i > 0 && ' + '}
@@ -229,7 +231,7 @@ export function GlampingParameterSelector({
 
                   {/* Single Person Surcharge Alert - show when quantity = 1 and has pricing */}
                   {enableSinglePersonSurchargeAlert && singlePersonSurchargeAlertText && quantity === 1 && hasPricing && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800 mt-1">
+                    <div className="text-xs text-amber-800 mt-1">
                       {locale === 'vi' ? singlePersonSurchargeAlertText.vi : singlePersonSurchargeAlertText.en}
                     </div>
                   )}

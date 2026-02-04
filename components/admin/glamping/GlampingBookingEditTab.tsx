@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,13 +17,15 @@ import { Pencil, Trash2, Plus } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import type { Locale } from "@/lib/i18n-utils";
-import type { TentEditData, ProductEditData, BookingAdditionalCost } from "./types";
+import type { TentEditData, ProductEditData, CommonItemEditData, BookingAdditionalCost } from "./types";
 import { GlampingEditTentModal } from "./GlampingEditTentModal";
 import { GlampingEditMenuProductModal } from "./GlampingEditMenuProductModal";
+import { GlampingEditCommonItemModal } from "./GlampingEditCommonItemModal";
 import { AddAdditionalCostModal } from "./AddAdditionalCostModal";
 import { GlampingEditAdditionalCostModal } from "./GlampingEditAdditionalCostModal";
 import { GlampingAddTentModal } from "./GlampingAddTentModal";
 import { GlampingAddMenuProductModal } from "./GlampingAddMenuProductModal";
+import { GlampingAddCommonItemModal } from "./GlampingAddCommonItemModal";
 
 interface TentItem {
   id: string;
@@ -39,6 +41,7 @@ interface TentItem {
   discountType?: string | null;
   discountValue?: number;
   discountAmount: number;
+  totalGuests: number;
   parameters: Array<{
     parameterId: string;
     parameterName: string;
@@ -74,9 +77,28 @@ interface AdditionalCostItem {
   notes?: string | null;
 }
 
+interface CommonItemData {
+  itemId: string;
+  itemName: string;
+  bookingTentId: string | null;
+  ids: string[];
+  parameters: Array<{
+    parameterId: string;
+    parameterName: string;
+    quantity: number;
+    unitPrice: number;
+    pricingMode?: 'per_person' | 'per_group';
+  }>;
+  totalPrice: number;
+  voucherCode: string | null;
+  discountAmount: number;
+  dates: { from: string; to: string } | null;
+}
+
 interface EditItemsData {
   tents: TentItem[];
   menuProducts: MenuProductItem[];
+  commonItems: CommonItemData[];
   additionalCosts: AdditionalCostItem[];
   totals: {
     subtotal: number;
@@ -122,6 +144,7 @@ const texts = {
     confirmDeleteTent: 'Bạn có chắc muốn xoá lều này? Tất cả sản phẩm menu liên quan cũng sẽ bị xoá.',
     confirmDeleteProduct: 'Bạn có chắc muốn xoá sản phẩm menu này?',
     confirmDeleteAdditionalCost: 'Bạn có chắc muốn xoá chi phí phát sinh này?',
+    confirmDeleteCommonItem: 'Bạn có chắc muốn xoá item chung này?',
     cancel: 'Huỷ',
     confirm: 'Xoá',
     deleteSuccess: 'Đã xoá thành công',
@@ -134,6 +157,9 @@ const texts = {
     unitPrice: 'Đơn giá',
     addTent: 'Thêm lều',
     addProduct: 'Thêm',
+    commonItems: 'Item chung',
+    noCommonItems: 'Chưa có item chung',
+    addCommonItem: 'Thêm',
   },
   en: {
     loading: 'Loading...',
@@ -156,6 +182,7 @@ const texts = {
     confirmDeleteTent: 'Are you sure you want to delete this tent? All associated menu products will also be deleted.',
     confirmDeleteProduct: 'Are you sure you want to delete this menu product?',
     confirmDeleteAdditionalCost: 'Are you sure you want to delete this additional cost?',
+    confirmDeleteCommonItem: 'Are you sure you want to delete this common item?',
     cancel: 'Cancel',
     confirm: 'Delete',
     deleteSuccess: 'Deleted successfully',
@@ -168,6 +195,9 @@ const texts = {
     unitPrice: 'Unit Price',
     addTent: 'Add Tent',
     addProduct: 'Add',
+    commonItems: 'Common Items',
+    noCommonItems: 'No common items',
+    addCommonItem: 'Add',
   },
 };
 
@@ -185,13 +215,17 @@ export function GlampingBookingEditTab({
   const [editingTent, setEditingTent] = useState<TentEditData | null>(null);
   const [editingProduct, setEditingProduct] = useState<ProductEditData | null>(null);
   const [editingAdditionalCost, setEditingAdditionalCost] = useState<AdditionalCostItem | null>(null);
+  const [editingCommonItem, setEditingCommonItem] = useState<CommonItemEditData | null>(null);
   const [showAddCostModal, setShowAddCostModal] = useState(false);
   const [showAddTentModal, setShowAddTentModal] = useState(false);
   const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [showAddCommonItemModal, setShowAddCommonItemModal] = useState(false);
   const [deletingItem, setDeletingItem] = useState<{
-    type: 'tent' | 'menu_product' | 'additional_cost';
+    type: 'tent' | 'menu_product' | 'additional_cost' | 'common_item';
     id: string;
     name: string;
+    itemId?: string;
+    bookingTentId?: string | null;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -219,16 +253,28 @@ export function GlampingBookingEditTab({
 
     try {
       setDeleting(true);
-      let endpoint: string;
-      if (deletingItem.type === 'tent') {
-        endpoint = `/api/admin/glamping/bookings/${booking.id}/tents/${deletingItem.id}`;
-      } else if (deletingItem.type === 'menu_product') {
-        endpoint = `/api/admin/glamping/bookings/${booking.id}/menu-products/${deletingItem.id}`;
-      } else {
-        endpoint = `/api/admin/glamping/bookings/${booking.id}/additional-costs/${deletingItem.id}`;
-      }
+      let res: Response;
 
-      const res = await fetch(endpoint, { method: 'DELETE' });
+      if (deletingItem.type === 'common_item') {
+        res = await fetch(`/api/admin/glamping/bookings/${booking.id}/common-items`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            itemId: deletingItem.itemId,
+            bookingTentId: deletingItem.bookingTentId ?? null,
+          }),
+        });
+      } else {
+        let endpoint: string;
+        if (deletingItem.type === 'tent') {
+          endpoint = `/api/admin/glamping/bookings/${booking.id}/tents/${deletingItem.id}`;
+        } else if (deletingItem.type === 'menu_product') {
+          endpoint = `/api/admin/glamping/bookings/${booking.id}/menu-products/${deletingItem.id}`;
+        } else {
+          endpoint = `/api/admin/glamping/bookings/${booking.id}/additional-costs/${deletingItem.id}`;
+        }
+        res = await fetch(endpoint, { method: 'DELETE' });
+      }
       if (!res.ok) throw new Error('Failed to delete');
 
       toast.success(t.deleteSuccess);
@@ -272,6 +318,35 @@ export function GlampingBookingEditTab({
     setShowAddProductModal(false);
     fetchItems();
     onRefresh();
+  };
+
+  const handleCommonItemSaved = () => {
+    setEditingCommonItem(null);
+    fetchItems();
+    onRefresh();
+  };
+
+  const handleCommonItemAdded = () => {
+    setShowAddCommonItemModal(false);
+    fetchItems();
+    onRefresh();
+  };
+
+  const openCommonItemEdit = (item: CommonItemData) => {
+    const tent = data?.tents.find(t => t.id === item.bookingTentId);
+    setEditingCommonItem({
+      bookingId: booking.id,
+      itemId: item.itemId,
+      itemName: item.itemName,
+      bookingTentId: item.bookingTentId,
+      ids: item.ids,
+      parameters: item.parameters,
+      totalPrice: item.totalPrice,
+      dates: item.dates,
+      tentItemId: tent?.itemId || '',
+      tentCheckInDate: tent?.checkInDate || '',
+      tentCheckOutDate: tent?.checkOutDate || '',
+    });
   };
 
   const openTentEdit = (tent: TentItem) => {
@@ -463,7 +538,7 @@ export function GlampingBookingEditTab({
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span className="text-gray-900">
-                        {tent.parameters.reduce((sum, p) => sum + p.quantity, 0)} {t.guests}
+                        {tent.totalGuests} {t.guests}
                       </span>
                     </td>
                     <td className="px-3 py-3">
@@ -528,7 +603,7 @@ export function GlampingBookingEditTab({
           )}
         </div>
         {data.menuProducts.length > 0 ? (
-          <div className="divide-y divide-gray-100">
+          <div className="overflow-x-auto">
             {/* Group products by tent, then by date */}
             {(() => {
               // Group by tent
@@ -570,165 +645,251 @@ export function GlampingBookingEditTab({
                 });
               };
 
-              return (
-                <>
-                  {sortedEntries.map(([tentId, products], tentIdx) => {
-                    const tent = data.tents.find(t => t.id === tentId);
-                    const productsByDate = groupByDate(products);
-
-                    return (
-                      <div key={tentId}>
-                        {/* Tent Header */}
-                        {data.tents.length > 1 && (
-                          <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
-                            <span className="font-medium text-sm text-blue-800">
-                              {locale === 'vi' ? 'Lều' : 'Tent'} {tentIdx + 1}: {tent?.itemName || '-'}
-                            </span>
-                            <span className="text-xs text-blue-600 ml-2">
-                              ({formatDate(tent?.checkInDate || '')} - {formatDate(tent?.checkOutDate || '')})
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Products grouped by date */}
-                        {productsByDate.map(([dateKey, dateProducts]) => (
-                          <div key={`${tentId}-${dateKey}`}>
-                            {/* Date Header */}
-                            <div className="px-4 py-1.5 bg-gray-50/70 border-b">
-                              <span className="text-xs font-medium text-gray-600">
-                                {dateKey === 'no-date'
-                                  ? (locale === 'vi' ? 'Chưa xác định ngày' : 'No date specified')
-                                  : formatDate(dateKey)}
-                              </span>
-                            </div>
-
-                            {/* Products table for this date */}
-                            <table className="w-full text-sm">
-                              <tbody>
-                                {dateProducts.map((product) => (
-                                  <tr key={product.id} className="border-b hover:bg-gray-50">
-                                    <td className="px-4 py-2.5">
-                                      <div className="font-medium text-gray-900">{product.productName}</div>
-                                      <div className="text-xs text-gray-500">{product.categoryName}</div>
-                                      {product.voucherCode && (
-                                        <Badge variant="secondary" className="mt-1 text-xs">
-                                          {t.voucher}: {product.voucherCode} (-{formatCurrency(product.discountAmount)})
-                                        </Badge>
-                                      )}
-                                    </td>
-                                    <td className="px-3 py-2.5 text-center text-gray-900 w-16">
-                                      {product.quantity}
-                                    </td>
-                                    <td className="px-3 py-2.5 text-right font-medium text-gray-900 w-28">
-                                      {formatCurrency(product.totalPrice - product.discountAmount)}
-                                    </td>
-                                    <td className="px-3 py-2.5 text-center w-32">
-                                      <div className="flex items-center justify-center gap-1">
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-7 px-2 text-xs"
-                                          onClick={() => openProductEdit(product)}
-                                          disabled={isUpdating}
-                                        >
-                                          <Pencil className="h-3 w-3 mr-1" />
-                                          {t.edit}
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                          onClick={() => setDeletingItem({ type: 'menu_product', id: product.id, name: product.productName })}
-                                          disabled={isUpdating}
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
-
-                  {/* Products without tent */}
-                  {productsWithoutTent.length > 0 && (
-                    <div>
-                      <div className="px-4 py-2 bg-gray-100 border-b">
-                        <span className="font-medium text-sm text-gray-700">
-                          {locale === 'vi' ? 'Sản phẩm chung' : 'General Products'}
-                        </span>
-                      </div>
-                      {groupByDate(productsWithoutTent).map(([dateKey, dateProducts]) => (
-                        <div key={`no-tent-${dateKey}`}>
-                          <div className="px-4 py-1.5 bg-gray-50/70 border-b">
-                            <span className="text-xs font-medium text-gray-600">
-                              {dateKey === 'no-date'
-                                ? (locale === 'vi' ? 'Chưa xác định ngày' : 'No date specified')
-                                : formatDate(dateKey)}
-                            </span>
-                          </div>
-                          <table className="w-full text-sm">
-                            <tbody>
-                              {dateProducts.map((product) => (
-                                <tr key={product.id} className="border-b hover:bg-gray-50">
-                                  <td className="px-4 py-2.5">
-                                    <div className="font-medium text-gray-900">{product.productName}</div>
-                                    <div className="text-xs text-gray-500">{product.categoryName}</div>
-                                    {product.voucherCode && (
-                                      <Badge variant="secondary" className="mt-1 text-xs">
-                                        {t.voucher}: {product.voucherCode} (-{formatCurrency(product.discountAmount)})
-                                      </Badge>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-2.5 text-center text-gray-900 w-16">
-                                    {product.quantity}
-                                  </td>
-                                  <td className="px-3 py-2.5 text-right font-medium text-gray-900 w-28">
-                                    {formatCurrency(product.totalPrice - product.discountAmount)}
-                                  </td>
-                                  <td className="px-3 py-2.5 text-center w-32">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 px-2 text-xs"
-                                        onClick={() => openProductEdit(product)}
-                                        disabled={isUpdating}
-                                      >
-                                        <Pencil className="h-3 w-3 mr-1" />
-                                        {t.edit}
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                        onClick={() => setDeletingItem({ type: 'menu_product', id: product.id, name: product.productName })}
-                                        disabled={isUpdating}
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ))}
+              const renderProductRow = (product: MenuProductItem) => (
+                <tr key={product.id} className="border-b hover:bg-gray-50">
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-gray-900">{product.productName}</div>
+                    <div className="text-xs text-gray-500">{product.categoryName}</div>
+                    {product.voucherCode && (
+                      <Badge variant="secondary" className="mt-1 text-xs">
+                        {t.voucher}: {product.voucherCode} (-{formatCurrency(product.discountAmount)})
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-center text-gray-900 w-16">
+                    {product.quantity}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-medium text-gray-900 w-28">
+                    {formatCurrency(product.totalPrice - product.discountAmount)}
+                  </td>
+                  <td className="px-3 py-2.5 text-center w-32">
+                    <div className="flex items-center justify-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => openProductEdit(product)}
+                        disabled={isUpdating}
+                      >
+                        <Pencil className="h-3 w-3 mr-1" />
+                        {t.edit}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => setDeletingItem({ type: 'menu_product', id: product.id, name: product.productName })}
+                        disabled={isUpdating}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                  )}
-                </>
+                  </td>
+                </tr>
+              );
+
+              return (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50/50">
+                      <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-16">{t.qty}</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600 w-28">{t.total}</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 w-32">{t.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedEntries.map(([tentId, products], tentIdx) => {
+                      const tent = data.tents.find(t => t.id === tentId);
+                      const productsByDate = groupByDate(products);
+
+                      return (
+                        <React.Fragment key={tentId}>
+                          {/* Tent Header */}
+                          {data.tents.length > 1 && (
+                            <tr className="bg-blue-50 border-b border-blue-100">
+                              <td colSpan={4} className="px-4 py-2">
+                                <span className="font-medium text-sm text-blue-800">
+                                  {locale === 'vi' ? 'Lều' : 'Tent'} {tentIdx + 1}: {tent?.itemName || '-'}
+                                </span>
+                                <span className="text-xs text-blue-600 ml-2">
+                                  ({formatDate(tent?.checkInDate || '')} - {formatDate(tent?.checkOutDate || '')})
+                                </span>
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* Products grouped by date */}
+                          {productsByDate.map(([dateKey, dateProducts]) => (
+                            <React.Fragment key={`${tentId}-${dateKey}`}>
+                              {/* Date Header */}
+                              <tr className="bg-gray-50/70 border-b">
+                                <td colSpan={4} className="px-4 py-1.5">
+                                  <span className="text-xs font-medium text-gray-600">
+                                    {dateKey === 'no-date'
+                                      ? (locale === 'vi' ? 'Chưa xác định ngày' : 'No date specified')
+                                      : formatDate(dateKey)}
+                                  </span>
+                                </td>
+                              </tr>
+                              {dateProducts.map(renderProductRow)}
+                            </React.Fragment>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* Products without tent */}
+                    {productsWithoutTent.length > 0 && (
+                      <>
+                        <tr className="bg-gray-100 border-b">
+                          <td colSpan={4} className="px-4 py-2">
+                            <span className="font-medium text-sm text-gray-700">
+                              {locale === 'vi' ? 'Sản phẩm chung' : 'General Products'}
+                            </span>
+                          </td>
+                        </tr>
+                        {groupByDate(productsWithoutTent).map(([dateKey, dateProducts]) => (
+                          <React.Fragment key={`no-tent-${dateKey}`}>
+                            <tr className="bg-gray-50/70 border-b">
+                              <td colSpan={4} className="px-4 py-1.5">
+                                <span className="text-xs font-medium text-gray-600">
+                                  {dateKey === 'no-date'
+                                    ? (locale === 'vi' ? 'Chưa xác định ngày' : 'No date specified')
+                                    : formatDate(dateKey)}
+                                </span>
+                              </td>
+                            </tr>
+                            {dateProducts.map(renderProductRow)}
+                          </React.Fragment>
+                        ))}
+                      </>
+                    )}
+                  </tbody>
+                </table>
               );
             })()}
           </div>
         ) : (
           <div className="p-4 text-center text-sm text-gray-500">
             {locale === 'vi' ? 'Chưa có sản phẩm nào' : 'No products yet'}
+          </div>
+        )}
+      </div>
+
+      {/* Common Items Section */}
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="px-4 py-3 bg-purple-50 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-purple-700">{t.commonItems}</h3>
+          {data.tents.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddCommonItemModal(true)}
+              disabled={isUpdating}
+              className="h-7 px-2 text-xs border-purple-300 text-purple-600 hover:bg-purple-100"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              {t.addCommonItem}
+            </Button>
+          )}
+        </div>
+        {data.commonItems && data.commonItems.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50/50">
+                  <th className="text-left px-4 py-2 font-medium text-gray-600">{t.item}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.qty}</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600">{t.date}</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600">{t.total}</th>
+                  <th className="text-center px-3 py-2 font-medium text-gray-600">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.commonItems.map((item, idx) => {
+                  const afterDiscount = item.totalPrice - item.discountAmount;
+                  const tent = item.bookingTentId ? data.tents.find(t => t.id === item.bookingTentId) : null;
+                  return (
+                    <tr key={`${item.itemId}-${item.bookingTentId}-${idx}`} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{item.itemName}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {item.parameters.map(p => `${p.parameterName}: ${p.quantity}`).join(', ')}
+                        </div>
+                        {tent && data.tents.length > 1 && (
+                          <div className="text-xs text-purple-600 mt-0.5">{tent.itemName}</div>
+                        )}
+                        {item.voucherCode && (
+                          <Badge variant="secondary" className="mt-1 text-xs">
+                            {t.voucher}: {item.voucherCode} (-{formatCurrency(item.discountAmount)})
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className="text-gray-900">
+                          {item.parameters.reduce((sum, p) => sum + p.quantity, 0)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        {item.dates ? (
+                          <>
+                            <div className="text-gray-900">
+                              {formatDate(item.dates.from)} - {formatDate(item.dates.to)}
+                            </div>
+                          </>
+                        ) : tent ? (
+                          <>
+                            <div className="text-gray-900">
+                              {formatDate(tent.checkInDate)} - {formatDate(tent.checkOutDate)}
+                            </div>
+                            <div className="text-xs text-gray-500">{tent.nights} {t.nights}</div>
+                          </>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-right font-medium text-gray-900">
+                        {formatCurrency(afterDiscount)}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => openCommonItemEdit(item)}
+                            disabled={isUpdating}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            {t.edit}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => setDeletingItem({
+                              type: 'common_item',
+                              id: item.ids?.[0] || item.itemId,
+                              name: item.itemName,
+                              itemId: item.itemId,
+                              bookingTentId: item.bookingTentId,
+                            })}
+                            disabled={isUpdating}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-4 text-center text-sm text-gray-500">
+            {t.noCommonItems}
           </div>
         )}
       </div>
@@ -780,6 +941,16 @@ export function GlampingBookingEditTab({
         />
       )}
 
+      {editingCommonItem && (
+        <GlampingEditCommonItemModal
+          isOpen={!!editingCommonItem}
+          onClose={() => setEditingCommonItem(null)}
+          onSave={handleCommonItemSaved}
+          item={editingCommonItem}
+          locale={locale}
+        />
+      )}
+
       {/* Add Additional Cost Modal */}
       <AddAdditionalCostModal
         isOpen={showAddCostModal}
@@ -825,6 +996,19 @@ export function GlampingBookingEditTab({
         />
       )}
 
+      {/* Add Common Item Modal */}
+      {data && data.tents.length > 0 && (
+        <GlampingAddCommonItemModal
+          isOpen={showAddCommonItemModal}
+          onClose={() => setShowAddCommonItemModal(false)}
+          onSave={handleCommonItemAdded}
+          bookingId={booking.id}
+          zoneId={zoneId || ''}
+          tents={data.tents}
+          locale={locale}
+        />
+      )}
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && setDeletingItem(null)}>
         <AlertDialogContent>
@@ -835,7 +1019,9 @@ export function GlampingBookingEditTab({
                 ? t.confirmDeleteTent
                 : deletingItem?.type === 'menu_product'
                   ? t.confirmDeleteProduct
-                  : t.confirmDeleteAdditionalCost}
+                  : deletingItem?.type === 'common_item'
+                    ? t.confirmDeleteCommonItem
+                    : t.confirmDeleteAdditionalCost}
               <br />
               <span className="font-medium mt-2 block">{deletingItem?.name}</span>
             </AlertDialogDescription>

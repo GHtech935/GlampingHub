@@ -147,6 +147,7 @@ export interface ItemFormWizardProps {
       item_name: string;
       price_percentage: number;
       opt_in: 'optional' | 'required';
+      dates_setting?: string;
     }>;
     show_package_price?: boolean;
     package_starting_price?: number;
@@ -232,6 +233,30 @@ export function ItemFormWizard({
   }>>([]);
   const [showMenuDialog, setShowMenuDialog] = useState<boolean>(false);
   const [availableMenuItems, setAvailableMenuItems] = useState<Array<{id: string; name: any; price: number; unit: any}>>([]);
+
+  // Package items (add-ons) state
+  const [packageItems, setPackageItems] = useState<Array<{
+    item_id: string;
+    item_name: string;
+    item_sku?: string;
+    price_percentage: number;
+    opt_in: 'optional' | 'required';
+    dates_setting: string;
+    custom_start_date?: string | null;
+    custom_end_date?: string | null;
+  }>>([]);
+  const [showPackagePrice, setShowPackagePrice] = useState(false);
+  const [showAttachDialog, setShowAttachDialog] = useState(false);
+  const [availableCommonItems, setAvailableCommonItems] = useState<Array<{id: string; name: any; sku?: string}>>([]);
+  const [showEditPackageItemDialog, setShowEditPackageItemDialog] = useState(false);
+  const [editingPackageItemIndex, setEditingPackageItemIndex] = useState<number | null>(null);
+  const [editPackageItemForm, setEditPackageItemForm] = useState<{
+    price_percentage: number;
+    opt_in: 'optional' | 'required';
+    dates_setting: string;
+    custom_start_date: string;
+    custom_end_date: string;
+  }>({ price_percentage: 100, opt_in: 'optional', dates_setting: 'inherit_parent', custom_start_date: '', custom_end_date: '' });
 
   // Inline Category/Tag creation state
   const [showCategoryInput, setShowCategoryInput] = useState(false);
@@ -559,6 +584,16 @@ export function ItemFormWizard({
       if (initialData.menu_products) {
         setMenuProducts(initialData.menu_products);
       }
+      // Set package items (add-ons)
+      if (initialData.package_items) {
+        setPackageItems(initialData.package_items.map(pi => ({
+          ...pi,
+          dates_setting: pi.dates_setting || 'inherit_parent',
+        })));
+      }
+      if (initialData.show_package_price) {
+        setShowPackagePrice(initialData.show_package_price);
+      }
       // Set allocation settings
       if (initialData.allocation_type) {
         form.setValue('allocation_type', initialData.allocation_type);
@@ -685,7 +720,6 @@ export function ItemFormWizard({
                 form.setValue('visibility', item.visibility || 'everyone');
                 form.setValue('default_calendar_status', item.default_calendar_status || 'available');
                 form.setValue('is_active', item.is_active !== false);
-
                 // Set tags
                 if (item.tags && item.tags.length > 0) {
                   setSelectedTags(item.tags.map((t: any) => t.id));
@@ -1223,6 +1257,9 @@ export function ItemFormWizard({
         deposit_value: depositValue,
         // Menu Products (Step 5)
         menu_products: menuProducts,
+        // Package Items / Add-Ons (Step 5)
+        package_items: packageItems,
+        show_package_price: showPackagePrice,
         // Timeslots (Step 3 - Allocation)
         timeslots: transformedTimeslots,
         // Taxes (Step 6)
@@ -4376,11 +4413,356 @@ export function ItemFormWizard({
                   </div>
                 )}
 
-                {/* Step 5: Menu Products */}
+                {/* Step 5: Package / Add-Ons & Menu Products */}
                 {currentStep === 5 && (
                   <div className="space-y-6">
+                    {/* Item Add-Ons Section */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-4">
+                          {t('packages.title')}
+                        </label>
+
+                        {packageItems.length > 0 ? (
+                          <div className="border rounded-lg overflow-hidden">
+                            <table className="w-full">
+                              <thead className="bg-gray-50 border-b">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{t('table.name')}</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{t('table.pricePercent')}</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{t('table.optIn')}</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{t('table.details')}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {packageItems.map((item, index) => (
+                                  <tr key={index} className="border-b last:border-0">
+                                    <td className="px-4 py-3">
+                                      <div>
+                                        <span className="font-medium">
+                                          {typeof item.item_name === 'string'
+                                            ? item.item_name
+                                            : ((item.item_name as any)?.vi || (item.item_name as any)?.en || '-')}
+                                        </span>
+                                        {item.item_sku && (
+                                          <span className="ml-2 text-xs text-gray-400">({item.item_sku})</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-700">
+                                      {item.price_percentage}%
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-700">
+                                      {item.opt_in === 'required' ? t('required') : t('optional')}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setEditingPackageItemIndex(index);
+                                            setEditPackageItemForm({
+                                              price_percentage: item.price_percentage,
+                                              opt_in: item.opt_in,
+                                              dates_setting: item.dates_setting || 'inherit_parent',
+                                              custom_start_date: item.custom_start_date || '',
+                                              custom_end_date: item.custom_end_date || '',
+                                            });
+                                            setShowEditPackageItemDialog(true);
+                                          }}
+                                        >
+                                          <Edit className="w-3.5 h-3.5 mr-1" />
+                                          {t('edit')}
+                                        </Button>
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button type="button" variant="outline" size="sm" className="px-1.5">
+                                              <ChevronDown className="w-3.5 h-3.5" />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            <DropdownMenuItem
+                                              className="text-red-600"
+                                              onClick={() => setPackageItems(packageItems.filter((_, i) => i !== index))}
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5 mr-2" />
+                                              {t('remove')}
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                            <p className="text-gray-500">{t('noAddOnsYet')}</p>
+                            <p className="text-sm text-gray-400 mt-1">{t('clickToAttachItem')}</p>
+                          </div>
+                        )}
+
+                        {/* Attach Item Button */}
+                        <div className="mt-4">
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              fetch(`/api/admin/glamping/items?zone_id=${zoneId}&is_tent=false`)
+                                .then(res => res.json())
+                                .then(data => {
+                                  const currentId = itemId || createdItemId;
+                                  const items = (data.items || []).filter((item: any) => item.id !== currentId);
+                                  setAvailableCommonItems(items);
+                                  setShowAttachDialog(true);
+                                })
+                                .catch(() => {
+                                  toast({
+                                    title: tc("error"),
+                                    description: t("failedToLoadItems"),
+                                    variant: "destructive",
+                                  });
+                                });
+                            }}
+                          >
+                            <Paperclip className="w-4 h-4 mr-2" />
+                            {t('attachItem')}
+                          </Button>
+                        </div>
+
+                        {/* Attach Item Dialog */}
+                        <Dialog open={showAttachDialog} onOpenChange={setShowAttachDialog}>
+                          <DialogContent className="max-w-2xl">
+                            <DialogHeader>
+                              <DialogTitle>{t('packages.dialogTitle')}</DialogTitle>
+                              <DialogDescription>
+                                {t('packages.dialogDesc')}
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="max-h-96 overflow-y-auto">
+                              {availableCommonItems.length === 0 ? (
+                                <p className="text-center text-gray-500 py-8">{t('noItemsAvailable')}</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {availableCommonItems.map((commonItem) => {
+                                    const isAttached = packageItems.some(p => p.item_id === commonItem.id);
+                                    return (
+                                      <div
+                                        key={commonItem.id}
+                                        className="flex items-center gap-3 p-3 border rounded hover:bg-gray-50"
+                                      >
+                                        <Checkbox
+                                          checked={isAttached}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setPackageItems([
+                                                ...packageItems,
+                                                {
+                                                  item_id: commonItem.id,
+                                                  item_name: typeof commonItem.name === 'string'
+                                                    ? commonItem.name
+                                                    : (commonItem.name?.vi || commonItem.name?.en || ''),
+                                                  item_sku: commonItem.sku,
+                                                  price_percentage: 100,
+                                                  opt_in: 'optional',
+                                                  dates_setting: 'inherit_parent',
+                                                }
+                                              ]);
+                                            } else {
+                                              setPackageItems(packageItems.filter(p => p.item_id !== commonItem.id));
+                                            }
+                                          }}
+                                        />
+                                        <label className="text-sm cursor-pointer flex-1">
+                                          {typeof commonItem.name === 'string'
+                                            ? commonItem.name
+                                            : (commonItem.name?.vi || commonItem.name?.en || '-')}
+                                          {commonItem.sku && (
+                                            <span className="ml-2 text-xs text-gray-500">({commonItem.sku})</span>
+                                          )}
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            <DialogFooter>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setShowAttachDialog(false)}
+                              >
+                                {tc('cancel')}
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={() => setShowAttachDialog(false)}
+                              >
+                                {t('done')}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+
+                        {/* Edit Package Item Dialog */}
+                        <Dialog open={showEditPackageItemDialog} onOpenChange={setShowEditPackageItemDialog}>
+                          <DialogContent className="max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>{t('packages.editDialogTitle')}</DialogTitle>
+                              <DialogDescription>
+                                {t('packages.editDialogDesc')}
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            {editingPackageItemIndex !== null && packageItems[editingPackageItemIndex] && (
+                              <div className="space-y-4">
+                                {/* Item info display */}
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <p className="font-medium text-sm">
+                                    {typeof packageItems[editingPackageItemIndex].item_name === 'string'
+                                      ? packageItems[editingPackageItemIndex].item_name
+                                      : ((packageItems[editingPackageItemIndex].item_name as any)?.vi || (packageItems[editingPackageItemIndex].item_name as any)?.en || '-')}
+                                  </p>
+                                  {packageItems[editingPackageItemIndex].item_sku && (
+                                    <p className="text-xs text-gray-500 mt-0.5">SKU: {packageItems[editingPackageItemIndex].item_sku}</p>
+                                  )}
+                                </div>
+
+                                {/* Price Percentage */}
+                                <div className="space-y-1.5">
+                                  <Label>{t('packages.pricePercentage')}</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={editPackageItemForm.price_percentage}
+                                    onChange={(e) => setEditPackageItemForm({
+                                      ...editPackageItemForm,
+                                      price_percentage: parseInt(e.target.value) || 0,
+                                    })}
+                                  />
+                                  <p className="text-xs text-gray-500">{t('packages.pricePercentageDesc')}</p>
+                                </div>
+
+                                {/* Opt-in */}
+                                <div className="space-y-1.5">
+                                  <Label>{t('packages.optIn')}</Label>
+                                  <Select
+                                    value={editPackageItemForm.opt_in}
+                                    onValueChange={(value: 'optional' | 'required') => setEditPackageItemForm({
+                                      ...editPackageItemForm,
+                                      opt_in: value,
+                                    })}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="optional">{t('optional')}</SelectItem>
+                                      <SelectItem value="required">{t('required')}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <p className="text-xs text-gray-500">{t('packages.optInDesc')}</p>
+                                </div>
+
+                                {/* Dates Setting */}
+                                <div className="space-y-1.5">
+                                  <Label>{t('packages.datesSetting')}</Label>
+                                  <Select
+                                    value={editPackageItemForm.dates_setting}
+                                    onValueChange={(value: string) => setEditPackageItemForm({
+                                      ...editPackageItemForm,
+                                      dates_setting: value,
+                                    })}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="inherit_parent">{t('packages.datesInheritParent')}</SelectItem>
+                                      <SelectItem value="custom">{t('packages.datesCustom')}</SelectItem>
+                                      <SelectItem value="none">{t('packages.datesNone')}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <p className="text-xs text-gray-500">{t('packages.datesSettingDesc')}</p>
+                                </div>
+
+                                {/* Custom Date Pickers - shown when dates_setting is 'custom' */}
+                                {editPackageItemForm.dates_setting === 'custom' && (
+                                  <div className="space-y-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                    <div className="space-y-1.5">
+                                      <Label>{t('packages.customStartDate')}</Label>
+                                      <Input
+                                        type="date"
+                                        value={editPackageItemForm.custom_start_date}
+                                        onChange={(e) => setEditPackageItemForm({
+                                          ...editPackageItemForm,
+                                          custom_start_date: e.target.value,
+                                        })}
+                                      />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      <Label>{t('packages.customEndDate')}</Label>
+                                      <Input
+                                        type="date"
+                                        value={editPackageItemForm.custom_end_date}
+                                        onChange={(e) => setEditPackageItemForm({
+                                          ...editPackageItemForm,
+                                          custom_end_date: e.target.value,
+                                        })}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <DialogFooter>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setShowEditPackageItemDialog(false)}
+                              >
+                                {tc('cancel')}
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  if (editingPackageItemIndex !== null) {
+                                    const newItems = [...packageItems];
+                                    newItems[editingPackageItemIndex] = {
+                                      ...newItems[editingPackageItemIndex],
+                                      price_percentage: editPackageItemForm.price_percentage,
+                                      opt_in: editPackageItemForm.opt_in,
+                                      dates_setting: editPackageItemForm.dates_setting,
+                                      custom_start_date: editPackageItemForm.dates_setting === 'custom' ? editPackageItemForm.custom_start_date || null : null,
+                                      custom_end_date: editPackageItemForm.dates_setting === 'custom' ? editPackageItemForm.custom_end_date || null : null,
+                                    };
+                                    setPackageItems(newItems);
+                                  }
+                                  setShowEditPackageItemDialog(false);
+                                  setEditingPackageItemIndex(null);
+                                }}
+                              >
+                                {t('packages.submit')}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+
+                    {/* Separator between Add-Ons and Menu Products */}
+                    {isTentCategory && (
+                    <>
+                    <div className="border-t pt-6 mt-6" />
+
                     {/* Menu Products Section (Food/Beverages) */}
-                    <div className="border-t pt-6">
+                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-4">
                         {t('menuProducts.title')}
                       </label>
@@ -4571,6 +4953,8 @@ export function ItemFormWizard({
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
+                    </>
+                    )}
                   </div>
                 )}
               </div>
@@ -4674,10 +5058,22 @@ export function ItemFormWizard({
 
                   {currentStep === 5 && (
                     <>
-                      <h3 className="font-semibold text-gray-900 mb-2">{t('sidebar.menuProductsTitle')}</h3>
-                      <p className="text-sm text-gray-600 mb-4">
-                        {t('sidebar.menuProductsDesc')}
-                      </p>
+                          <h3 className="font-semibold text-gray-900 mb-2">{t('sidebar.addOnsTitle')}</h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            {t('sidebar.addOnsDesc')}
+                          </p>
+                          <p className="text-sm text-gray-500 italic mb-6 whitespace-pre-line">
+                            {t('sidebar.addOnsExamples')}
+                          </p>
+                          <div className="border-t pt-4 mt-4" />
+                      {isTentCategory && (
+                        <>
+                          <h3 className="font-semibold text-gray-900 mb-2">{t('sidebar.menuProductsTitle')}</h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            {t('sidebar.menuProductsDesc')}
+                          </p>
+                        </>
+                      )}
                     </>
                   )}
 

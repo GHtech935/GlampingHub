@@ -374,6 +374,35 @@
             "removed": "Đã xóa voucher"
         },
         "addMoreTents": "Thêm lều",
+        "inlineEdit": {
+            "saving": "Đang lưu...",
+            "saved": "Đã lưu",
+            "saveError": "Lỗi khi lưu",
+            "bookingInfo": "Thông tin đặt phòng",
+            "nights": "đêm",
+            "tentCost": "Tiền lều",
+            "close": "Đóng",
+            "clickToEdit": "Click vào đây để chỉnh sửa và chọn món ăn",
+            "loadingFood": "Đang tải món ăn...",
+            "loadingAddons": "Đang tải dịch vụ thêm...",
+            "addons": "Dịch vụ thêm",
+            "required": "Bắt buộc",
+            "pricePercent": "{percent}% giá",
+            "date": "Ngày",
+            "fromDate": "Từ ngày",
+            "toDate": "Đến ngày",
+            "dateRange": "Trong khoảng {from} - {to}",
+            "perPerson": "người",
+            "perGroup": "nhóm",
+            "serviceTotal": "Tổng dịch vụ",
+            "tentVoucher": "Voucher lều ({code})",
+            "food": "Món ăn",
+            "foodVoucher": "Voucher món ăn",
+            "grandTotal": "Tổng cộng",
+            "addonVoucher": "Voucher dịch vụ",
+            "calculatingPrice": "Đang tính giá...",
+            "selectDatesToSeePrice": "Chọn ngày và thông tin để xem giá"
+        },
         "datesAlreadyBooked": "Ngày đã được đặt",
         "datesAlreadyBookedMessage": "Rất tiếc, mặt hàng này đã được đặt trong khoảng thời gian bạn chọn. Vui lòng chọn ngày khác hoặc quay lại trang chi tiết để chọn ngày còn trống.",
         "confirmButton": "Đồng ý",
@@ -3169,7 +3198,7 @@
                         "attributes": "Thuộc tính",
                         "pricing": "Giá",
                         "packages": "Gói",
-                        "menuProducts": "Sản phẩm"
+                        "menuProducts": "Gói hàng"
                     },
                     "stepDesc": {
                         "description": "Đây là bước đầu tiên để tạo mặt hàng cho kho của bạn",
@@ -3177,7 +3206,7 @@
                         "attributes": "Chỉ định các thuộc tính quan trọng như phân bổ, tham số, hiển thị và kho hàng",
                         "pricing": "Thiết lập giá cho các sự kiện và tham số khác nhau",
                         "packages": "Cấu hình gói và tiện ích bổ sung cho mặt hàng này",
-                        "menuProducts": "Cấu hình sản phẩm menu cho mặt hàng này"
+                        "menuProducts": "Cấu hình gói hàng và sản phẩm menu"
                     },
                     "stepDescEdit": {
                         "description": "Cập nhật mô tả và chi tiết mặt hàng",
@@ -3227,6 +3256,7 @@
                     "enterStartTime": "Nhập thời gian bắt đầu",
                     "enterEndTime": "Nhập thời gian kết thúc",
                     "remove": "Xóa",
+                    "edit": "Chỉnh sửa",
                     "monday": "Thứ Hai",
                     "tuesday": "Thứ Ba",
                     "wednesday": "Thứ Tư",
@@ -3505,7 +3535,21 @@
                         "enterCustomPrice": "Nhập giá tùy chỉnh",
                         "overridePriceHint": "Ghi đè giá gói đã tính toán bằng giá khởi điểm tùy chỉnh",
                         "dialogTitle": "Đính kèm mặt hàng vào gói",
-                        "dialogDesc": "Chọn mặt hàng để bao gồm như tiện ích bổ sung cho gói này"
+                        "dialogDesc": "Chọn mặt hàng để bao gồm như tiện ích bổ sung cho gói này",
+                        "editDialogTitle": "Chỉnh sửa mặt hàng gói",
+                        "editDialogDesc": "Cấu hình cài đặt cho mặt hàng gói này",
+                        "pricePercentage": "Phần trăm giá",
+                        "pricePercentageDesc": "Phần trăm giá cơ bản của mặt hàng để tính phí (0-100)",
+                        "optIn": "Tham gia",
+                        "optInDesc": "Mặt hàng này là bắt buộc hay tùy chọn cho gói",
+                        "datesSetting": "Ngày",
+                        "datesSettingDesc": "Cách xác định ngày đặt chỗ cho tiện ích bổ sung này",
+                        "datesInheritParent": "Kế thừa từ mục cha",
+                        "datesCustom": "Ngày tùy chỉnh",
+                        "datesNone": "Không có ngày",
+                        "customStartDate": "Ngày bắt đầu",
+                        "customEndDate": "Ngày kết thúc",
+                        "submit": "Lưu thay đổi"
                     },
                     "menuProducts": {
                         "title": "Sản phẩm Menu",
@@ -4211,6 +4255,7 @@
                     "statusDesc": "Chỉ những giảm giá được kích hoạt mới áp dụng cho đặt chỗ",
                     "tentTab": "Lều",
                     "menuTab": "Menu",
+                    "commonItemTab": "Item chung",
                     "errorTitle": "Lỗi",
                     "errorNameRequired": "Tên là bắt buộc",
                     "errorNoItemsSelected": "Vui lòng chọn ít nhất một mặt hàng",

@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { differenceInDays } from 'date-fns';
-import { useGlampingCart, type GlampingCartItem, type MenuProductSelection } from '@/components/providers/GlampingCartProvider';
+import { useGlampingCart, type GlampingCartItem, type MenuProductSelection, type AddonSelection } from '@/components/providers/GlampingCartProvider';
 import type { DateRange } from 'react-day-picker';
 import type { AppliedVoucher } from '@/components/booking/VoucherInput';
 import type { MenuProduct } from '@/components/glamping-booking/GlampingMenuProductsSelector';
@@ -10,6 +10,7 @@ interface CartItemFormState {
   parameterQuantities: Record<string, number>;
   menuProducts: Record<number, Record<string, MenuProductSelection>>; // Per-night structure
   accommodationVoucher: AppliedVoucher | null;
+  addonSelections?: Record<string, AddonSelection>;
   totalGuests: number;
   isDirty?: boolean;
 }
@@ -85,6 +86,24 @@ export function useCartItemSave({
       );
     }, 0);
   }, [formState.menuProducts]);
+
+  // Calculate total add-on cost (sum of all selected addon totalPrices)
+  const addonsTotalCost = useMemo(() => {
+    if (!formState.addonSelections) return 0;
+    return Object.values(formState.addonSelections).reduce((sum, sel) => {
+      if (!sel || !sel.selected) return sum;
+      return sum + (sel.totalPrice || 0);
+    }, 0);
+  }, [formState.addonSelections]);
+
+  // Calculate total add-on voucher discount
+  const addonsDiscountAmount = useMemo(() => {
+    if (!formState.addonSelections) return 0;
+    return Object.values(formState.addonSelections).reduce((sum, sel) => {
+      if (!sel || !sel.selected) return sum;
+      return sum + (sel.voucher?.discountAmount || 0);
+    }, 0);
+  }, [formState.addonSelections]);
 
   // Core save logic without toast (for auto-save)
   const performSave = useCallback(async (silent: boolean = false) => {
@@ -169,7 +188,11 @@ export function useCartItemSave({
       const accommodationDiscount = Number(formState.accommodationVoucher?.discountAmount) || 0;
       const menuProductsCost = Number(menuProductsTotal) || 0;
       const menuDiscount = Number(menuDiscountAmount) || 0;
-      const subtotal = accommodationCost - accommodationDiscount + menuProductsCost - menuDiscount;
+      const addonsCost = Number(addonsTotalCost) || 0;
+      const addonsDiscount = Number(addonsDiscountAmount) || 0;
+      const subtotal = accommodationCost - accommodationDiscount
+                     + menuProductsCost - menuDiscount
+                     + addonsCost - addonsDiscount;
 
       updateCartItem(cartItemId, {
         checkIn,
@@ -182,12 +205,15 @@ export function useCartItemSave({
         parameters,
         menuProducts: formState.menuProducts, // Now includes per-item vouchers
         menuProductsDetails,
+        addonSelections: formState.addonSelections || {},
         accommodationVoucher: formState.accommodationVoucher as any || null,
         pricingBreakdown: {
           accommodationCost,
           menuProductsCost,
           accommodationDiscount,
           menuDiscount,
+          addonsCost,
+          addonsDiscount,
           subtotal
         },
         totalPrice: subtotal
@@ -213,7 +239,7 @@ export function useCartItemSave({
     } finally {
       setIsSaving(false);
     }
-  }, [item, formState, pricingData, menuProductsTotal, menuDiscountAmount, cartItemId, updateCartItem, parametersData, autoSave]);
+  }, [item, formState, pricingData, menuProductsTotal, menuDiscountAmount, addonsTotalCost, addonsDiscountAmount, cartItemId, updateCartItem, parametersData, autoSave]);
 
   // Public handleSave function (for manual save)
   const handleSave = useCallback(async () => {

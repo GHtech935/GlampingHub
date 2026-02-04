@@ -71,6 +71,7 @@ export async function GET(
     // Fetch parameters for each tent
     const tentIds = tentsResult.rows.map(t => t.id);
     let parametersMap: Record<string, Array<{ parameterId: string; parameterName: string; quantity: number; unitPrice: number }>> = {};
+    let guestCountMap: Record<string, number> = {};
 
     if (tentIds.length > 0) {
       const paramsResult = await client.query(
@@ -83,6 +84,7 @@ export async function GET(
         FROM glamping_booking_items bi
         LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
         WHERE bi.booking_id = $1 AND bi.booking_tent_id = ANY($2)
+          AND (bi.metadata IS NULL OR bi.metadata->>'type' != 'addon')
         ORDER BY bi.created_at`,
         [id, tentIds]
       );
@@ -97,6 +99,19 @@ export async function GET(
           quantity: row.quantity,
           unitPrice: parseFloat(row.unit_price || '0'),
         });
+      }
+
+      // Fetch guest counts from booking_parameters
+      const guestResult = await client.query(
+        `SELECT booking_tent_id, SUM(booked_quantity) as total_guests
+         FROM glamping_booking_parameters
+         WHERE booking_id = $1 AND booking_tent_id = ANY($2)
+         GROUP BY booking_tent_id`,
+        [id, tentIds]
+      );
+
+      for (const row of guestResult.rows) {
+        guestCountMap[row.booking_tent_id] = parseInt(row.total_guests || '0');
       }
     }
 
@@ -122,6 +137,7 @@ export async function GET(
         discountType: tent.discount_type || null,
         discountValue: parseFloat(tent.discount_value || '0'),
         discountAmount,
+        totalGuests: guestCountMap[tent.id] || 0,
         parameters: parametersMap[tent.id] || [],
       };
     });
@@ -207,6 +223,76 @@ export async function GET(
       notes: ac.notes || null,
     }));
 
+    // Fetch common items (addons)
+    const commonItemsResult = await client.query(
+      `SELECT
+        bi.id,
+        bi.booking_tent_id,
+        bi.item_id,
+        bi.parameter_id,
+        bi.quantity,
+        bi.unit_price,
+        bi.total_price,
+        bi.metadata,
+        i.name as item_name,
+        p.name as parameter_name
+      FROM glamping_booking_items bi
+      LEFT JOIN glamping_items i ON bi.item_id = i.id
+      LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
+      WHERE bi.booking_id = $1
+        AND bi.metadata->>'type' = 'addon'
+      ORDER BY bi.booking_tent_id, bi.item_id, bi.created_at`,
+      [id]
+    );
+
+    // Group addon rows by (booking_tent_id, item_id)
+    const commonItemsMap = new Map<string, {
+      itemId: string;
+      itemName: string;
+      bookingTentId: string | null;
+      ids: string[];
+      parameters: Array<{ parameterId: string; parameterName: string; quantity: number; unitPrice: number; pricingMode: 'per_person' | 'per_group' }>;
+      totalPrice: number;
+      voucherCode: string | null;
+      discountAmount: number;
+      dates: { from: string; to: string } | null;
+    }>();
+
+    for (const row of commonItemsResult.rows) {
+      const key = `${row.booking_tent_id || 'none'}_${row.item_id}`;
+      if (!commonItemsMap.has(key)) {
+        const metadata = row.metadata || {};
+        commonItemsMap.set(key, {
+          itemId: row.item_id,
+          itemName: getLocalizedString(row.item_name),
+          bookingTentId: row.booking_tent_id || null,
+          ids: [],
+          parameters: [],
+          totalPrice: 0,
+          voucherCode: metadata.voucher?.code || metadata.voucher_code || null,
+          discountAmount: parseFloat(metadata.voucher?.discountAmount || metadata.discount_amount || '0'),
+          dates: metadata.dates?.from && metadata.dates?.to
+            ? { from: metadata.dates.from, to: metadata.dates.to }
+            : (metadata.dates_from && metadata.dates_to
+              ? { from: metadata.dates_from, to: metadata.dates_to }
+              : null),
+        });
+      }
+      const entry = commonItemsMap.get(key)!;
+      entry.ids.push(row.id);
+      const rowMetadata = row.metadata || {};
+      entry.parameters.push({
+        parameterId: row.parameter_id,
+        parameterName: getLocalizedString(row.parameter_name),
+        quantity: row.quantity,
+        unitPrice: parseFloat(row.unit_price || '0'),
+        pricingMode: rowMetadata.pricingMode || 'per_person',
+      });
+      entry.totalPrice += parseFloat(row.total_price || '0');
+    }
+
+    const commonItems = Array.from(commonItemsMap.values());
+
     // Calculate totals
     const tentSubtotal = tents.reduce((sum, t) => sum + t.subtotal, 0);
     const tentDiscount = tents.reduce((sum, t) => sum + t.discountAmount, 0);
@@ -219,16 +305,22 @@ export async function GET(
     const additionalCostsSubtotal = additionalCosts.reduce((sum, c) => sum + c.totalPrice, 0);
     const additionalCostsTax = additionalCosts.reduce((sum, c) => sum + c.taxAmount, 0);
 
+    const commonItemsSubtotal = commonItems.reduce((sum, ci) => sum + ci.totalPrice, 0);
+    const commonItemsDiscount = commonItems.reduce((sum, ci) => sum + ci.discountAmount, 0);
+    const commonItemsAfterDiscount = commonItemsSubtotal - commonItemsDiscount;
+    const commonItemsTax = taxEnabled ? Math.round(commonItemsAfterDiscount * (taxRate / 100)) : 0;
+
     const totals = {
-      subtotal: tentSubtotal + menuSubtotal + additionalCostsSubtotal,
-      discountTotal: tentDiscount + menuDiscount,
-      taxTotal: tentTax + menuTax + additionalCostsTax,
-      grandTotal: (tentSubtotal + menuSubtotal + additionalCostsSubtotal) - (tentDiscount + menuDiscount) + (tentTax + menuTax + additionalCostsTax),
+      subtotal: tentSubtotal + menuSubtotal + additionalCostsSubtotal + commonItemsSubtotal,
+      discountTotal: tentDiscount + menuDiscount + commonItemsDiscount,
+      taxTotal: tentTax + menuTax + additionalCostsTax + commonItemsTax,
+      grandTotal: (tentSubtotal + menuSubtotal + additionalCostsSubtotal + commonItemsSubtotal) - (tentDiscount + menuDiscount + commonItemsDiscount) + (tentTax + menuTax + additionalCostsTax + commonItemsTax),
     };
 
     return NextResponse.json({
       tents,
       menuProducts,
+      commonItems,
       additionalCosts,
       totals,
       taxEnabled,

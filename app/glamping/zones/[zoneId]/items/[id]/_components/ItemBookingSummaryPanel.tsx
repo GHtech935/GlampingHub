@@ -280,9 +280,9 @@ export function ItemBookingSummaryPanel({
         {/* Header */}
         <div className="pb-4 border-b">
           <h2 className="text-xl font-semibold">{t.yourBooking}</h2>
-          {hasValidSelection && (
+          {hasValidSelection && selectedStart && selectedEnd && (
             <p className="text-sm text-gray-600 mt-1">
-              {t.basedOnNights} {nights} {t.nights}
+              {t.basedOnNights} {nights} {t.nights}: {new Date(selectedStart).toLocaleDateString(locale === 'vi' ? 'vi-VN' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' })} - {new Date(selectedEnd).toLocaleDateString(locale === 'vi' ? 'vi-VN' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' })}
             </p>
           )}
         </div>
@@ -330,7 +330,7 @@ export function ItemBookingSummaryPanel({
                           </div>
                           {/* Single Person Surcharge Alert - below price line */}
                           {showParamAlert && (
-                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800 mt-1">
+                            <div className=" text-xs text-amber-800 mt-1">
                               {locale === 'vi' ? singlePersonSurchargeAlertText.vi : singlePersonSurchargeAlertText.en}
                             </div>
                           )}

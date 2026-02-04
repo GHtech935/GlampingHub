@@ -402,12 +402,18 @@ export function AdminGlampingBookingFormModal({
                 calculatedAccommodationCost = itemPricing.accommodationCost || 0
               }
 
+              const addonCost = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
+                if (!sel || !sel.selected) return sum
+                return sum + (sel.totalPrice || 0)
+              }, 0)
+
               return {
                 ...tent,
                 pricingBreakdown: {
                   accommodationCost: calculatedAccommodationCost,
                   menuProductsCost: menuCost,
-                  subtotal: calculatedAccommodationCost + menuCost,
+                  addonsCost: addonCost,
+                  subtotal: calculatedAccommodationCost + menuCost + addonCost,
                 },
               }
             }
@@ -586,6 +592,18 @@ export function AdminGlampingBookingFormModal({
             })
         })
 
+        const addonPayload = Object.values(t.addonSelections || {})
+          .filter(sel => sel.selected)
+          .map(sel => ({
+            addonItemId: sel.addonItemId,
+            quantity: sel.quantity,
+            parameterQuantities: sel.parameterQuantities,
+            dates: sel.dates || undefined,
+            totalPrice: sel.totalPrice || 0,
+            parameterPricing: sel.parameterPricing || {},
+            voucher: sel.voucher ? { ...sel.voucher } : undefined,
+          }))
+
         return {
           itemId: t.itemId,
           checkInDate: t.checkIn,
@@ -595,6 +613,7 @@ export function AdminGlampingBookingFormModal({
           parameterQuantities: t.parameterQuantities,
           accommodationVoucher: t.accommodationVoucher || undefined,
           menuProducts: flatMenuProducts,
+          addons: addonPayload,
         }
       })
 

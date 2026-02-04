@@ -153,6 +153,7 @@ export function GlampingBookingDetailModal({
   const [editPhone, setEditPhone] = useState("");
   const [editCountry, setEditCountry] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editSpecialRequirements, setEditSpecialRequirements] = useState("");
   const [editInvoiceNotes, setEditInvoiceNotes] = useState("");
 
@@ -314,6 +315,7 @@ export function GlampingBookingDetailModal({
           phone: editPhone,
           country: editCountry,
           address: editAddress,
+          email: editEmail,
           specialRequirements: editSpecialRequirements,
           invoiceNotes: editInvoiceNotes,
         }),
@@ -365,6 +367,7 @@ export function GlampingBookingDetailModal({
       setEditPhone(booking.customer.phone || '');
       setEditCountry(booking.customer.country || '');
       setEditAddress(booking.customer.address || '');
+      setEditEmail(booking.customer.email || '');
       setEditSpecialRequirements(booking.specialRequirements || '');
       setEditInvoiceNotes(booking.invoiceNotes || '');
       setIsEditingGuest(true);
@@ -867,6 +870,7 @@ export function GlampingBookingDetailModal({
               onRefresh={() => {
                 fetchBookingDetails();
                 fetchBookingHistory();
+                onUpdate?.();
               }}
               isUpdating={updating}
             />
@@ -993,10 +997,14 @@ export function GlampingBookingDetailModal({
                     />
                   </div>
 
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Mail className="h-4 w-4" />
-                    <span>{booking.customer.email}</span>
-                    <span className="text-xs text-gray-400">({locale === 'vi' ? 'không thể sửa' : 'cannot edit'})</span>
+                  <div>
+                    <label className="text-sm text-gray-600">Email</label>
+                    <Input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="mt-1"
+                    />
                   </div>
                 </div>
               )}

@@ -64,6 +64,7 @@ export async function GET(
         b.updated_at,
         b.confirmed_at,
         b.cancelled_at,
+        b.guest_name,
 
         -- Customer info
         c.id as customer_id,
@@ -228,7 +229,7 @@ export async function GET(
         id: row.customer_id,
         firstName: row.customer_first_name,
         lastName: row.customer_last_name,
-        fullName: `${row.customer_first_name || ''} ${row.customer_last_name || ''}`.trim(),
+        fullName: row.guest_name || `${row.customer_first_name || ''} ${row.customer_last_name || ''}`.trim(),
         email: row.customer_email,
         phone: row.customer_phone,
         country: row.customer_country,

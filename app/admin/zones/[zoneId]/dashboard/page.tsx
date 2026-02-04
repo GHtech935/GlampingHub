@@ -450,7 +450,7 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
         <StatCardGrid>
           <StatCard
             title={td("totalRevenue")}
-            value={formatShortCurrency(dashboardData.summary.totalRevenue) + "đ"}
+            value={formatCurrency(dashboardData.summary.totalRevenue)}
             icon={DollarSign}
             color="green"
           />
@@ -468,7 +468,7 @@ export default function ZoneDashboardPage({ params }: { params: Promise<{ zoneId
           />
           <StatCard
             title={td("avgBookingValue")}
-            value={formatShortCurrency(dashboardData.summary.avgBookingValue) + "đ"}
+            value={formatCurrency(dashboardData.summary.avgBookingValue)}
             icon={DollarSign}
             color="purple"
           />

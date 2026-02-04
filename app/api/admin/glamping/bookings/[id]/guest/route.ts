@@ -28,6 +28,7 @@ export async function PATCH(
       phone,
       country,
       address,
+      email,
       customerNotes,
       invoiceNotes,
       specialRequirements,
@@ -81,8 +82,14 @@ export async function PATCH(
       }
 
       if (address !== undefined) {
-        customerUpdates.push(`address = $${paramIndex}`);
+        customerUpdates.push(`address_line1 = $${paramIndex}`);
         customerValues.push(address);
+        paramIndex++;
+      }
+
+      if (email !== undefined) {
+        customerUpdates.push(`email = $${paramIndex}`);
+        customerValues.push(email);
         paramIndex++;
       }
 
@@ -95,6 +102,23 @@ export async function PATCH(
            SET ${customerUpdates.join(', ')}
            WHERE id = $${paramIndex}`,
           customerValues
+        );
+      }
+    }
+
+    // Update guest_name on booking if name changed
+    if (firstName !== undefined || lastName !== undefined) {
+      const currentCustomer = await client.query(
+        `SELECT first_name, last_name FROM customers WHERE id = $1`,
+        [booking.customer_id]
+      );
+      if (currentCustomer.rows.length > 0) {
+        const newFirst = firstName !== undefined ? firstName : currentCustomer.rows[0].first_name || '';
+        const newLast = lastName !== undefined ? lastName : currentCustomer.rows[0].last_name || '';
+        const newGuestName = `${newFirst} ${newLast}`.trim();
+        await client.query(
+          `UPDATE glamping_bookings SET guest_name = $1, updated_at = NOW() WHERE id = $2`,
+          [newGuestName, id]
         );
       }
     }

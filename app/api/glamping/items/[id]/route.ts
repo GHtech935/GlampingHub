@@ -122,6 +122,52 @@ export async function GET(
       mp.menu_item_status === 'active' && mp.menu_item_available !== false
     );
 
+    // Get item add-ons (common items attached in admin step 5)
+    const addonsQuery = `
+      SELECT
+        a.addon_item_id,
+        a.price_percentage,
+        a.is_required,
+        a.dates_setting,
+        a.custom_start_date,
+        a.custom_end_date,
+        a.display_order,
+        i.name as addon_name,
+        i.sku as addon_sku
+      FROM glamping_item_addons a
+      JOIN glamping_items i ON a.addon_item_id = i.id
+      WHERE a.item_id = $1
+      ORDER BY a.display_order
+    `;
+    const { rows: addons } = await pool.query(addonsQuery, [id]);
+
+    // For each addon, fetch its parameters
+    const addonsWithParams = await Promise.all(
+      addons.map(async (addon) => {
+        const addonParamsQuery = `
+          SELECT p.id, p.name, p.color_code, ip.min_quantity, ip.max_quantity
+          FROM glamping_parameters p
+          JOIN glamping_item_parameters ip ON ip.parameter_id = p.id
+          WHERE ip.item_id = $1
+          ORDER BY ip.display_order
+        `;
+        const { rows: addonParams } = await pool.query(addonParamsQuery, [addon.addon_item_id]);
+
+        return {
+          addon_item_id: addon.addon_item_id,
+          name: addon.addon_name,
+          sku: addon.addon_sku,
+          price_percentage: addon.price_percentage,
+          is_required: addon.is_required,
+          dates_setting: addon.dates_setting || 'inherit_parent',
+          custom_start_date: addon.custom_start_date || null,
+          custom_end_date: addon.custom_end_date || null,
+          display_order: addon.display_order,
+          parameters: addonParams,
+        };
+      })
+    );
+
     // Get taxes for this item
     const taxesQuery = `
       SELECT t.id, t.name, t.amount, t.is_percentage, t.apply_to, t.type
@@ -161,6 +207,7 @@ export async function GET(
         apply_to: t.apply_to,
         type: t.type,
       })),
+      addons: addonsWithParams,
     };
 
     return NextResponse.json({ item: itemWithDetails });

@@ -29,6 +29,18 @@ interface TentMenuProduct {
   categoryName?: any;
 }
 
+interface TentCommonItem {
+  addonItemId: string;
+  itemName: any;
+  parameterId: string;
+  parameterName: string;
+  quantity: number;
+  unitPrice: number;
+  pricingMode: string;
+  dates?: { from: string; to: string } | null;
+  voucher?: { code: string; id: string; discountAmount: number; discountType: string; discountValue: number } | null;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -132,6 +144,48 @@ export async function GET(
       ORDER BY bmp.serving_date NULLS LAST, mc.weight, mi.sort_order
     `, [bookingId]);
 
+    // Query 6: Common items (addons) per tent from glamping_booking_items
+    const commonItemsResult = await query(`
+      SELECT
+        bi.id,
+        bi.booking_tent_id,
+        bi.item_id,
+        bi.addon_item_id,
+        bi.parameter_id,
+        bi.quantity,
+        bi.unit_price,
+        bi.metadata,
+        gi.name as addon_item_name,
+        gp.name as parameter_name
+      FROM glamping_booking_items bi
+      LEFT JOIN glamping_items gi ON bi.addon_item_id = gi.id
+      LEFT JOIN glamping_parameters gp ON bi.parameter_id = gp.id
+      WHERE bi.booking_id = $1
+        AND bi.metadata->>'type' = 'addon'
+      ORDER BY bi.created_at
+    `, [bookingId]);
+
+    // Group common items by tent_id
+    const commonItemsByTentId = new Map<string, TentCommonItem[]>();
+    for (const row of commonItemsResult.rows) {
+      const tentId = row.booking_tent_id || 'shared';
+      if (!commonItemsByTentId.has(tentId)) {
+        commonItemsByTentId.set(tentId, []);
+      }
+      const metadata = row.metadata || {};
+      commonItemsByTentId.get(tentId)!.push({
+        addonItemId: row.addon_item_id,
+        itemName: row.addon_item_name,
+        parameterId: row.parameter_id,
+        parameterName: row.parameter_name,
+        quantity: row.quantity,
+        unitPrice: parseFloat(row.unit_price),
+        pricingMode: metadata.pricingMode || 'per_person',
+        dates: metadata.dates || null,
+        voucher: metadata.voucher || null,
+      });
+    }
+
     // Group parameters by tent_id
     const paramsByTentId = new Map<string, TentParameter[]>();
     for (const row of paramsResult.rows) {
@@ -190,6 +244,7 @@ export async function GET(
       displayOrder: tent.display_order,
       parameters: paramsByTentId.get(tent.id) || [],
       menuProducts: menuByTentId.get(tent.id) || [],
+      commonItems: commonItemsByTentId.get(tent.id) || [],
     }));
 
     // Legacy: Parameters (flat list for backward compatibility)
@@ -239,6 +294,7 @@ export async function GET(
       parameters: parametersResult.rows,
       menuProducts: menuProductsResult.rows,
       canEditMenu,
+      canEditCommonItems: canEditMenu,
       hoursUntilCheckIn: Math.max(0, hoursUntilCheckIn),
     });
   } catch (error: any) {

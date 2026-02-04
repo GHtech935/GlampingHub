@@ -363,6 +363,31 @@ export function AdminBookingSummaryTab({
                         <span>-{formatCurrency(tent.accommodationVoucher.discountAmount, locale)}</span>
                       </div>
                     )}
+                    {(() => {
+                      const addonTotal = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
+                        if (!sel || !sel.selected) return sum
+                        return sum + (sel.totalPrice || 0)
+                      }, 0)
+                      const addonDiscount = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
+                        if (!sel || !sel.selected) return sum
+                        return sum + (sel.voucher?.discountAmount || 0)
+                      }, 0)
+                      if (addonTotal <= 0) return null
+                      return (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">{locale === 'vi' ? 'Dịch vụ bổ sung' : 'Add-ons'}</span>
+                            <span>{formatCurrency(addonTotal, locale)}</span>
+                          </div>
+                          {addonDiscount > 0 && (
+                            <div className="flex justify-between text-green-600">
+                              <span>{locale === 'vi' ? 'Voucher dịch vụ' : 'Add-on vouchers'}</span>
+                              <span>-{formatCurrency(addonDiscount, locale)}</span>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
                   </>
                 )}
               </div>
@@ -398,8 +423,20 @@ export function AdminBookingSummaryTab({
                       .reduce((s2, p: any) => s2 + (p.voucher?.discountAmount || 0), 0)
                   }, 0)
                 }, 0)
-                const totalDiscount = totalAccDiscount + totalMenuDiscount
-                const grandTotal = totalAccommodation - totalAccDiscount + totalMenuProducts - totalMenuDiscount
+                const totalAddonsCost = tents.reduce((sum, t) => {
+                  return sum + Object.values(t.addonSelections || {}).reduce((s, sel) => {
+                    if (!sel || !sel.selected) return s
+                    return s + (sel.totalPrice || 0)
+                  }, 0)
+                }, 0)
+                const totalAddonsDiscount = tents.reduce((sum, t) => {
+                  return sum + Object.values(t.addonSelections || {}).reduce((s, sel) => {
+                    if (!sel || !sel.selected) return s
+                    return s + (sel.voucher?.discountAmount || 0)
+                  }, 0)
+                }, 0)
+                const totalDiscount = totalAccDiscount + totalMenuDiscount + totalAddonsDiscount
+                const grandTotal = totalAccommodation - totalAccDiscount + totalMenuProducts - totalMenuDiscount + totalAddonsCost - totalAddonsDiscount
 
                 return (
                   <div className="space-y-2">
@@ -414,6 +451,14 @@ export function AdminBookingSummaryTab({
                         <span>{locale === 'vi' ? 'Menu items' : 'Menu products'}</span>
                         <span className="font-semibold">
                           {formatCurrency(totalMenuProducts, locale)}
+                        </span>
+                      </div>
+                    )}
+                    {totalAddonsCost > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span>{locale === 'vi' ? 'Dịch vụ bổ sung' : 'Add-ons'}</span>
+                        <span className="font-semibold">
+                          {formatCurrency(totalAddonsCost, locale)}
                         </span>
                       </div>
                     )}

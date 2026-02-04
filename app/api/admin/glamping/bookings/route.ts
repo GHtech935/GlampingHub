@@ -175,6 +175,7 @@ export async function GET(request: NextRequest) {
         b.created_at,
         b.confirmed_at,
         b.cancelled_at,
+        b.guest_name,
 
         -- Customer info
         c.id as customer_id,
@@ -189,7 +190,14 @@ export async function GET(request: NextRequest) {
 
         -- Zone info
         z.id as zone_id,
-        z.name as zone_name
+        z.name as zone_name,
+
+        -- Actual paid amount
+        COALESCE((
+          SELECT SUM(p.amount)
+          FROM glamping_booking_payments p
+          WHERE p.booking_id = b.id AND p.status = 'paid'
+        ), 0) as total_paid
 
       FROM glamping_bookings b
       LEFT JOIN customers c ON b.customer_id = c.id
@@ -233,13 +241,14 @@ export async function GET(request: NextRequest) {
         totalAmount: parseFloat(row.total_amount || 0),
         depositDue: parseFloat(row.deposit_due || 0),
         balanceDue: parseFloat(row.balance_due || 0),
+        paidAmount: parseFloat(row.total_paid || 0),
         currency: row.currency,
       },
       customer: {
         id: row.customer_id,
         firstName: row.customer_first_name,
         lastName: row.customer_last_name,
-        fullName: `${row.customer_first_name || ''} ${row.customer_last_name || ''}`.trim(),
+        fullName: row.guest_name || `${row.customer_first_name || ''} ${row.customer_last_name || ''}`.trim(),
         email: row.customer_email,
         phone: row.customer_phone,
       },

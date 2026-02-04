@@ -15,6 +15,8 @@ interface MapLocation {
   basePrice: number
   latitude: number
   longitude: number
+  items?: Array<{ name: string; base_price: number; category_name?: string }>
+  tentCount?: number
 }
 
 interface LeafletMapProps {
@@ -160,28 +162,49 @@ function LeafletMapContent({
         html: `
           <div style="
             background-color: ${bgColor};
-            color: white;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-weight: bold;
-            font-size: 12px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border: 2px solid white;
             box-shadow: ${isHovered ? '0 4px 12px rgba(34, 197, 94, 0.5)' : '0 2px 4px rgba(0,0,0,0.3)'};
-            white-space: nowrap;
             transform: ${scale};
             transition: all 0.3s ease;
             z-index: ${zIndex};
           ">
-            ${(location.basePrice / 1000).toFixed(0)}k
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 20h18L12 4 3 20z"/>
+              <path d="M9.5 20v-6h5v6"/>
+            </svg>
           </div>
         `,
-        iconSize: [60, 30],
-        iconAnchor: [30, 15],
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
       })
 
       const marker = leaflet
         .marker([location.latitude, location.longitude], { icon })
         .addTo(mapRef.current)
+
+      const sortedItems = (location.items || [])
+        .filter(item => item.base_price > 0)
+        .sort((a, b) => a.base_price - b.base_price)
+
+      const remainingTents = (location.tentCount || 0) - sortedItems.length
+      const moreHtml = remainingTents > 0
+        ? `<div style="text-align: center; padding: 4px 0; font-size: 12px; color: #6b7280;">+${remainingTents} lều thêm</div>`
+        : ''
+
+      const priceListHtml = sortedItems.length > 0
+        ? sortedItems.map(item => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
+              <span style="font-size: 12px; color: #374151; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${getLocalizedText(item.name, locale)}</span>
+              <span style="font-size: 13px; font-weight: 600; color: #22c55e; white-space: nowrap;">\u20AB${(item.base_price / 1000).toFixed(0)}k</span>
+            </div>
+          `).join('') + moreHtml
+        : `<p style="font-size: 12px; color: #6b7280;">Liên hệ để biết giá</p>`
 
       const popupContent = `
         <div class="p-2" style="width: 250px;">
@@ -190,25 +213,24 @@ function LeafletMapContent({
           </div>
           <h3 style="font-weight: 600; margin-bottom: 8px;">${localizedName}</h3>
           <p style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">${localizedLocation}</p>
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div>
-              <span style="font-size: 12px; color: #6b7280;">Từ</span>
-              <p style="font-weight: bold; color: #22c55e;">
-                ${location.basePrice.toLocaleString('vi-VN')} VND
-              </p>
-            </div>
-            <a href="${getLinkPath(location.slug)}" style="
-              background-color: #22c55e;
-              color: white;
-              padding: 6px 16px;
-              border-radius: 6px;
-              text-decoration: none;
-              font-size: 14px;
-              font-weight: 500;
-            ">
-              Xem
-            </a>
+          <div style="margin-top: 4px; border-top: 1px solid #e5e7eb; padding-top: 6px;">
+            <span style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Giá / đêm</span>
+            ${priceListHtml}
           </div>
+          <a href="${getLinkPath(location.slug)}" style="
+            display: block;
+            text-align: center;
+            background-color: #22c55e;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 8px;
+          ">
+            Xem
+          </a>
         </div>
       `
 

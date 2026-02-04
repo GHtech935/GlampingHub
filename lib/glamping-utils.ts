@@ -47,6 +47,9 @@ export function groupBookingItemsByPeriod(
   const grouped = new Map<string, BookingPeriod>();
 
   for (const item of bookingItems) {
+    // Skip addon items - they're shown separately, not in accommodation totals
+    if (item.metadata?.type === 'addon') continue;
+
     // CRITICAL: Use metadata dates if available, fallback to booking dates
     const checkIn = item.metadata?.checkInDate || bookingCheckIn || '';
     const checkOut = item.metadata?.checkOutDate || bookingCheckOut || '';
@@ -250,11 +253,12 @@ export function tentToBookingPeriod(
   tent: BookingTent,
   bookingItems: BookingItem[]
 ): BookingPeriod {
-  // Filter items that belong to this tent
+  // Filter items that belong to this tent, excluding addon items
   const tentItems = bookingItems.filter(item => item.bookingTentId === tent.id);
+  const accommodationItems = tentItems.filter(item => item.metadata?.type !== 'addon');
 
-  // Build parameter groups from the tent's items
-  const parameterGroups: ParameterGroup[] = tentItems
+  // Build parameter groups from accommodation items only (no addons)
+  const parameterGroups: ParameterGroup[] = accommodationItems
     .filter(item => item.parameterId && item.parameterName)
     .map(item => ({
       parameterId: item.parameterId!,
@@ -264,8 +268,8 @@ export function tentToBookingPeriod(
       totalPrice: item.totalPrice,
     }));
 
-  // Calculate total price from items
-  const totalPrice = tentItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  // Calculate total price from accommodation items only
+  const totalPrice = accommodationItems.reduce((sum, item) => sum + item.totalPrice, 0);
 
   return {
     itemId: tent.itemId,

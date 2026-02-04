@@ -21,7 +21,7 @@ interface VoucherInputProps {
   zoneId?: string;
   itemId?: string;
   validationEndpoint?: string; // Optional custom endpoint (default: /api/booking/validate-voucher)
-  applicationType?: 'accommodation' | 'menu_only' | 'all'; // Filter vouchers by type
+  applicationType?: 'accommodation' | 'menu_only' | 'common_item' | 'all'; // Filter vouchers by type
   appliedVoucher?: AppliedVoucher | null; // Controlled component support
 
   // Callbacks
@@ -74,6 +74,8 @@ export default function VoucherInput({
       return locale === 'vi' ? 'Mã giảm giá' : 'Discount code';
     } else if (applicationType === 'accommodation') {
       return locale === 'vi' ? 'Mã giảm giá cho Lều' : 'Discount code for Tent';
+    } else if (applicationType === 'common_item') {
+      return locale === 'vi' ? 'Mã giảm giá' : 'Discount code';
     }
     return locale === 'vi' ? 'Mã giảm giá' : 'Discount code';
   };

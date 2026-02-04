@@ -125,9 +125,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate application_type
-    if (!application_type || !['tent', 'menu'].includes(application_type)) {
+    if (!application_type || !['tent', 'menu', 'common_item'].includes(application_type)) {
       return NextResponse.json(
-        { error: 'Valid application_type (tent or menu) is required' },
+        { error: 'Valid application_type (tent, menu, or common_item) is required' },
         { status: 400 }
       );
     }

@@ -153,6 +153,9 @@ export async function GET(
       // Get tent discount info
       const tentDiscount = item.booking_tent_id ? tentsDiscountMap.get(item.booking_tent_id) : null;
 
+      // Extract addon voucher from metadata (common items store voucher in metadata.voucher)
+      const addonVoucher = metadata.type === 'addon' && metadata.voucher ? metadata.voucher : null;
+
       return {
         date: new Date(booking.check_in_date).toISOString().split('T')[0],
         subtotalBeforeDiscounts: calculatedSubtotal,
@@ -170,6 +173,9 @@ export async function GET(
         itemId: item.item_id || null,
         tentVoucherCode: tentDiscount?.voucher_code || null,
         tentDiscountAmount: parseFloat(tentDiscount?.discount_amount || 0),
+        voucherCode: addonVoucher?.code || null,
+        discountAmount: parseFloat(addonVoucher?.discountAmount || 0),
+        isAddon: metadata.type === 'addon',
       };
     });
 

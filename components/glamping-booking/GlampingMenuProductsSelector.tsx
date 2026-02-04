@@ -341,7 +341,7 @@ export function GlampingMenuProductsSelector({
                     <div className="flex flex-col">
                       {/* Product Image - Full width, square aspect ratio */}
                       {product.image_url && (
-                        <div className="relative w-full aspect-square rounded-lg overflow-hidden mb-3">
+                        <div className="relative w-full aspect-[2/1] rounded-lg overflow-hidden mb-2">
                           <Image
                             src={product.image_url}
                             alt={getLocalizedString(product.name, locale, 'Product')}
@@ -353,8 +353,8 @@ export function GlampingMenuProductsSelector({
 
                       {/* Product Info */}
                       <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-gray-900">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-gray-900 text-xs">
                             {getLocalizedString(product.name, locale, 'Unknown')}
                           </span>
                           {/* Quantity Controls */}
@@ -363,23 +363,23 @@ export function GlampingMenuProductsSelector({
                               type="button"
                               variant="outline"
                               size="icon"
-                              className="h-8 w-8"
+                              className="h-7 w-7"
                               onClick={() => handleQuantityChange(product.id, product, -1)}
                               disabled={quantity === 0}
                             >
-                              <Minus className="h-4 w-4" />
+                              <Minus className="h-3 w-3" />
                             </Button>
-                            <span className="w-8 text-center font-medium">{quantity}</span>
+                            <span className="w-8 text-center font-medium text-sm">{quantity}</span>
                             <Button
                               type="button"
                               variant="outline"
                               size="icon"
-                              className="h-8 w-8"
+                              className="h-7 w-7"
                               onClick={() => handleQuantityChange(product.id, product, 1)}
                               disabled={isAtMax}
                               title={isAtMax ? `Tối đa ${maxQuantity}` : ''}
                             >
-                              <Plus className="h-4 w-4" />
+                              <Plus className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>
@@ -411,14 +411,14 @@ export function GlampingMenuProductsSelector({
                           )}
                         </div>
                         {product.description && (
-                          <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
                             {getLocalizedString(product.description, locale)}
                           </p>
                         )}
-                        <p className="text-primary font-semibold mt-1">
+                        <p className="text-primary font-semibold mt-1 text-sm">
                           {formatCurrency(product.price)}
                           {product.unit && (
-                            <span className="text-gray-500 font-normal text-sm">
+                            <span className="text-gray-500 font-normal text-xs">
                               {' '}
                               / {getLocalizedString(product.unit, locale, '')}
                             </span>
@@ -467,7 +467,7 @@ export function GlampingMenuProductsSelector({
                             </div>
                           )}
 
-                          <div className="flex justify-between font-semibold text-base pt-1.5 border-t border-gray-200">
+                          <div className="flex justify-between font-semibold text-sm pt-1.5 border-t border-gray-200">
                             <span>Tổng</span>
                             <span className="text-blue-600">
                               {formatCurrency(
@@ -544,7 +544,7 @@ export function GlampingMenuProductsSelector({
                         <div className="flex flex-col">
                           {/* Product Image - Full width, square aspect ratio */}
                           {product.image_url && (
-                            <div className="relative w-full aspect-square rounded-lg overflow-hidden mb-3">
+                            <div className="relative w-full aspect-[2/1] rounded-lg overflow-hidden mb-2">
                               <Image
                                 src={product.image_url}
                                 alt={getLocalizedString(product.name, locale, 'Product')}
@@ -556,8 +556,8 @@ export function GlampingMenuProductsSelector({
 
                           {/* Product Info */}
                           <div className="flex-1">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium text-gray-900">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium text-gray-900 text-xs">
                                 {getLocalizedString(product.name, locale, 'Unknown')}
                               </span>
                               {/* Quantity Controls */}
@@ -566,23 +566,23 @@ export function GlampingMenuProductsSelector({
                                   type="button"
                                   variant="outline"
                                   size="icon"
-                                  className="h-8 w-8"
+                                  className="h-7 w-7"
                                   onClick={() => handleQuantityChange(product.id, product, -1)}
                                   disabled={quantity === 0}
                                 >
-                                  <Minus className="h-4 w-4" />
+                                  <Minus className="h-3 w-3" />
                                 </Button>
-                                <span className="w-8 text-center font-medium">{quantity}</span>
+                                <span className="w-8 text-center font-medium text-sm">{quantity}</span>
                                 <Button
                                   type="button"
                                   variant="outline"
                                   size="icon"
-                                  className="h-8 w-8"
+                                  className="h-7 w-7"
                                   onClick={() => handleQuantityChange(product.id, product, 1)}
                                   disabled={isAtMax}
                                   title={isAtMax ? `Tối đa ${maxQuantity}` : ''}
                                 >
-                                  <Plus className="h-4 w-4" />
+                                  <Plus className="h-3 w-3" />
                                 </Button>
                               </div>
                             </div>
@@ -614,14 +614,14 @@ export function GlampingMenuProductsSelector({
                               )}
                             </div>
                             {product.description && (
-                              <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
+                              <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
                                 {getLocalizedString(product.description, locale)}
                               </p>
                             )}
-                            <p className="text-primary font-semibold mt-1">
+                            <p className="text-primary font-semibold mt-1 text-sm">
                               {formatCurrency(product.price)}
                               {product.unit && (
-                                <span className="text-gray-500 font-normal text-sm">
+                                <span className="text-gray-500 font-normal text-xs">
                                   {' '}
                                   / {getLocalizedString(product.unit, locale, '')}
                                 </span>
@@ -670,7 +670,7 @@ export function GlampingMenuProductsSelector({
                                 </div>
                               )}
 
-                              <div className="flex justify-between font-semibold text-base pt-1.5 border-t border-gray-200">
+                              <div className="flex justify-between font-semibold text-sm pt-1.5 border-t border-gray-200">
                                 <span>Tổng</span>
                                 <span className="text-blue-600">
                                   {formatCurrency(

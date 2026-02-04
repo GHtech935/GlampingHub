@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { differenceInDays } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
-import type { GlampingCartItem, MenuProductSelection } from '@/components/providers/GlampingCartProvider';
+import type { GlampingCartItem, MenuProductSelection, AddonSelection } from '@/components/providers/GlampingCartProvider';
 import { isPerNightMenuProducts } from '@/components/providers/GlampingCartProvider';
 import type { AppliedVoucher } from '@/components/booking/VoucherInput';
 
@@ -10,6 +10,7 @@ interface CartItemFormState {
   parameterQuantities: Record<string, number>;
   menuProducts: Record<number, Record<string, MenuProductSelection>>; // Always per-night in form
   accommodationVoucher: AppliedVoucher | null;
+  addonSelections: Record<string, AddonSelection>;
 }
 
 interface UseCartItemFormStateReturn extends CartItemFormState {
@@ -17,6 +18,7 @@ interface UseCartItemFormStateReturn extends CartItemFormState {
   setParameterQuantities: (quantities: Record<string, number>) => void;
   setMenuProducts: (products: Record<number, Record<string, MenuProductSelection>>) => void;
   setAccommodationVoucher: (voucher: AppliedVoucher | null) => void;
+  setAddonSelections: (selections: Record<string, AddonSelection>) => void;
   reset: () => void;
   isDirty: boolean;
   // Computed from parameters
@@ -50,6 +52,7 @@ export function useCartItemFormState(item: GlampingCartItem | null): UseCartItem
   const [parameterQuantities, setParameterQuantities] = useState<Record<string, number>>({});
   const [menuProducts, setMenuProducts] = useState<Record<number, Record<string, MenuProductSelection>>>({});
   const [accommodationVoucher, setAccommodationVoucher] = useState<AppliedVoucher | null>(null);
+  const [addonSelections, setAddonSelections] = useState<Record<string, AddonSelection>>({});
   const [isDirty, setIsDirty] = useState(false);
 
   // Calculate total guests from all parameters
@@ -58,36 +61,66 @@ export function useCartItemFormState(item: GlampingCartItem | null): UseCartItem
   }, [parameterQuantities]);
 
   // Initialize form with item data
+  // Uses functional setState to avoid creating new references when values haven't changed
   const initializeForm = useCallback(() => {
     if (item) {
-      const itemDateRange = {
-        from: new Date(item.checkIn),
-        to: new Date(item.checkOut)
-      };
-      setDateRange(itemDateRange);
-      setParameterQuantities(item.parameterQuantities || {});
+      const newFrom = new Date(item.checkIn);
+      const newTo = new Date(item.checkOut);
+
+      setDateRange(prev => {
+        if (prev?.from?.getTime() === newFrom.getTime() && prev?.to?.getTime() === newTo.getTime()) {
+          return prev; // Same dates, keep same reference to avoid triggering pricing re-fetch
+        }
+        return { from: newFrom, to: newTo };
+      });
+
+      const newParamQty = item.parameterQuantities || {};
+      setParameterQuantities(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newParamQty)) {
+          return prev;
+        }
+        return newParamQty;
+      });
 
       // Migrate menu products if needed
       const nights = differenceInDays(new Date(item.checkOut), new Date(item.checkIn));
+      let newMenuProducts: Record<number, Record<string, MenuProductSelection>>;
       if (item.menuProducts) {
-        // Check if it's using the old flat structure
         const isPerNight = isPerNightMenuProducts(item.menuProducts);
         if (isPerNight) {
-          // Already per-night structure
-          setMenuProducts(item.menuProducts as Record<number, Record<string, MenuProductSelection>>);
+          newMenuProducts = item.menuProducts as Record<number, Record<string, MenuProductSelection>>;
         } else {
-          // Migrate from flat to per-night
-          const migrated = migrateMenuProductsToPerNight(
+          newMenuProducts = migrateMenuProductsToPerNight(
             item.menuProducts as Record<string, MenuProductSelection>,
             nights
           );
-          setMenuProducts(migrated);
         }
       } else {
-        setMenuProducts({});
+        newMenuProducts = {};
       }
+      setMenuProducts(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newMenuProducts)) {
+          return prev;
+        }
+        return newMenuProducts;
+      });
 
-      setAccommodationVoucher(item.accommodationVoucher as any || null);
+      const newVoucher = item.accommodationVoucher as any || null;
+      setAccommodationVoucher(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newVoucher)) {
+          return prev;
+        }
+        return newVoucher;
+      });
+
+      const newAddonSelections = item.addonSelections || {};
+      setAddonSelections(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newAddonSelections)) {
+          return prev;
+        }
+        return newAddonSelections;
+      });
+
       setIsDirty(false);
     }
   }, [item]);
@@ -119,10 +152,11 @@ export function useCartItemFormState(item: GlampingCartItem | null): UseCartItem
       dateRange?.to?.toISOString().split('T')[0] !== item.checkOut ||
       JSON.stringify(parameterQuantities) !== JSON.stringify(item.parameterQuantities || {}) ||
       JSON.stringify(menuProducts) !== JSON.stringify(itemMenuProducts) ||
-      JSON.stringify(accommodationVoucher) !== JSON.stringify(item.accommodationVoucher || null);
+      JSON.stringify(accommodationVoucher) !== JSON.stringify(item.accommodationVoucher || null) ||
+      JSON.stringify(addonSelections) !== JSON.stringify(item.addonSelections || {});
 
     setIsDirty(hasChanges);
-  }, [dateRange, parameterQuantities, menuProducts, accommodationVoucher, item]);
+  }, [dateRange, parameterQuantities, menuProducts, accommodationVoucher, addonSelections, item]);
 
   const reset = useCallback(() => {
     initializeForm();
@@ -133,10 +167,12 @@ export function useCartItemFormState(item: GlampingCartItem | null): UseCartItem
     parameterQuantities,
     menuProducts,
     accommodationVoucher,
+    addonSelections,
     setDateRange,
     setParameterQuantities,
     setMenuProducts,
     setAccommodationVoucher,
+    setAddonSelections,
     reset,
     isDirty,
     totalGuests

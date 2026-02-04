@@ -72,13 +72,15 @@ export function DiscountFormModal({
   }, [locale]);
 
   // Tab and category states
-  const [activeTab, setActiveTab] = useState<'tent' | 'menu'>('tent');
+  const [activeTab, setActiveTab] = useState<'tent' | 'menu' | 'common_item'>('tent');
   const [tentCategories, setTentCategories] = useState<Category[]>([]);
   const [menuCategories, setMenuCategories] = useState<Category[]>([]);
+  const [commonItemCategories, setCommonItemCategories] = useState<Category[]>([]);
 
   // Separate selection states
   const [selectedTentItems, setSelectedTentItems] = useState<string[]>([]);
   const [selectedMenuItems, setSelectedMenuItems] = useState<string[]>([]);
+  const [selectedCommonItems, setSelectedCommonItems] = useState<string[]>([]);
 
   const [ruleSets, setRuleSets] = useState<RuleSet[]>([]);
 
@@ -105,6 +107,7 @@ export function DiscountFormModal({
     if (open) {
       fetchTentCategories();
       fetchMenuCategories();
+      fetchCommonItemCategories();
       fetchRuleSets();
 
       if (discountId) {
@@ -118,7 +121,7 @@ export function DiscountFormModal({
 
   const fetchTentCategories = async () => {
     try {
-      const response = await fetch(`/api/admin/glamping/categories?zone_id=${zoneId}`);
+      const response = await fetch(`/api/admin/glamping/categories?zone_id=${zoneId}&is_tent_category=true`);
       const data = await response.json();
 
       // Fetch items for each category
@@ -160,6 +163,29 @@ export function DiscountFormModal({
       setMenuCategories(categoriesWithItems);
     } catch (error) {
       console.error('Failed to fetch menu categories:', error);
+    }
+  };
+
+  const fetchCommonItemCategories = async () => {
+    try {
+      const response = await fetch(`/api/admin/glamping/categories?zone_id=${zoneId}&is_tent_category=false`);
+      const data = await response.json();
+
+      // Fetch items for each category
+      const categoriesWithItems = await Promise.all(
+        (data.categories || []).map(async (cat: any) => {
+          const itemsRes = await fetch(`/api/admin/glamping/items?zone_id=${zoneId}&category_id=${cat.id}`);
+          const itemsData = await itemsRes.json();
+          return {
+            ...cat,
+            items: itemsData.items || []
+          };
+        })
+      );
+
+      setCommonItemCategories(categoriesWithItems);
+    } catch (error) {
+      console.error('Failed to fetch common item categories:', error);
     }
   };
 
@@ -247,12 +273,15 @@ export function DiscountFormModal({
       setActiveTab(appType);
 
       // Load items into correct state
+      setSelectedTentItems([]);
+      setSelectedMenuItems([]);
+      setSelectedCommonItems([]);
       if (appType === 'tent') {
         setSelectedTentItems(data.discount.item_ids || []);
-        setSelectedMenuItems([]);
-      } else {
+      } else if (appType === 'menu') {
         setSelectedMenuItems(data.discount.item_ids || []);
-        setSelectedTentItems([]);
+      } else if (appType === 'common_item') {
+        setSelectedCommonItems(data.discount.item_ids || []);
       }
     } catch (error) {
       console.error('Failed to fetch discount:', error);
@@ -283,18 +312,17 @@ export function DiscountFormModal({
     });
     setSelectedTentItems([]);
     setSelectedMenuItems([]);
+    setSelectedCommonItems([]);
     setActiveTab('tent');
   };
 
   // Tab change handler
-  const handleTabChange = useCallback((newTab: 'tent' | 'menu') => {
+  const handleTabChange = useCallback((newTab: 'tent' | 'menu' | 'common_item') => {
     setActiveTab(newTab);
-    // Clear the other type's selections
-    if (newTab === 'tent') {
-      setSelectedMenuItems([]);
-    } else {
-      setSelectedTentItems([]);
-    }
+    // Clear non-active selections
+    if (newTab !== 'tent') setSelectedTentItems([]);
+    if (newTab !== 'menu') setSelectedMenuItems([]);
+    if (newTab !== 'common_item') setSelectedCommonItems([]);
   }, []);
 
   // Tent selection handlers
@@ -319,6 +347,16 @@ export function DiscountFormModal({
     setSelectedMenuItems([]);
   }, []);
 
+  // Common item selection handlers
+  const handleSelectAllCommonItems = useCallback(() => {
+    const allItemIds = commonItemCategories.flatMap(cat => cat.items.map(item => item.id));
+    setSelectedCommonItems(allItemIds);
+  }, [commonItemCategories]);
+
+  const handleSelectNoneCommonItems = useCallback(() => {
+    setSelectedCommonItems([]);
+  }, []);
+
   const toggleWeekday = useCallback((day: number) => {
     setFormData(prev => ({
       ...prev,
@@ -341,7 +379,11 @@ export function DiscountFormModal({
     }
 
     // Determine which items to submit based on active tab
-    const itemsToSubmit = activeTab === 'tent' ? selectedTentItems : selectedMenuItems;
+    const itemsToSubmit = activeTab === 'tent'
+      ? selectedTentItems
+      : activeTab === 'menu'
+        ? selectedMenuItems
+        : selectedCommonItems;
 
     // Validation - at least one item must be selected
     if (itemsToSubmit.length === 0) {
@@ -435,15 +477,12 @@ export function DiscountFormModal({
             <Label htmlFor="code" className="text-right pt-2 font-medium">
               {t('codeLabel')}
             </Label>
-            <div className="col-span-3 space-y-1">
+            <div className="col-span-3">
               <Input
                 id="code"
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value })}
               />
-              <p className="text-sm text-muted-foreground">
-                {t('codeDesc')}
-              </p>
             </div>
           </div>
 
@@ -678,10 +717,11 @@ export function DiscountFormModal({
               {t('applyToLabel')}
             </Label>
             <div className="col-span-3 space-y-4">
-              <Tabs value={activeTab} onValueChange={(val) => handleTabChange(val as 'tent' | 'menu')}>
-                <TabsList className="grid w-full grid-cols-2">
+              <Tabs value={activeTab} onValueChange={(val) => handleTabChange(val as 'tent' | 'menu' | 'common_item')}>
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="tent">{t('tentTab')}</TabsTrigger>
                   <TabsTrigger value="menu">{t('menuTab')}</TabsTrigger>
+                  <TabsTrigger value="common_item">{t('commonItemTab')}</TabsTrigger>
                 </TabsList>
 
                 {/* Tent Tab */}
@@ -734,6 +774,33 @@ export function DiscountFormModal({
                       }))}
                       selectedIds={selectedMenuItems}
                       onSelectionChange={setSelectedMenuItems}
+                    />
+                  </div>
+                </TabsContent>
+
+                {/* Common Item Tab */}
+                <TabsContent value="common_item" className="space-y-4 mt-4">
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={handleSelectAllCommonItems}>
+                      {t('selectAll')}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={handleSelectNoneCommonItems}>
+                      {t('selectNone')}
+                    </Button>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto">
+                    <CheckboxTree
+                      items={commonItemCategories.map(cat => ({
+                        id: cat.id,
+                        label: `${getLocalizedName(cat.name)} (${t('itemsCount', { count: cat.items?.length || 0 })})`,
+                        children: (cat.items || []).map(item => ({
+                          id: item.id,
+                          label: getLocalizedName(item.name)
+                        }))
+                      }))}
+                      selectedIds={selectedCommonItems}
+                      onSelectionChange={setSelectedCommonItems}
                     />
                   </div>
                 </TabsContent>

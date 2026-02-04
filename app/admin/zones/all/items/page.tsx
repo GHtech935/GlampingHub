@@ -66,7 +66,7 @@ export default function AllZonesItemsPage() {
   const fetchItems = async () => {
     try {
       // Fetch items from all zones by not passing zone_id filter
-      const response = await fetch("/api/admin/glamping/items");
+      const response = await fetch("/api/admin/glamping/items?is_tent_category=true");
       const data = await response.json();
 
       if (data.items) {

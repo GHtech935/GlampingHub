@@ -42,7 +42,8 @@ import {
   AlertCircle,
   LogIn,
   CheckCircle,
-  MapPin
+  MapPin,
+  Mail
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -114,6 +115,12 @@ export default function UsersPage() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Change email modal state
+  const [isChangeEmailModalOpen, setIsChangeEmailModalOpen] = useState(false);
+  const [emailChangeUser, setEmailChangeUser] = useState<User | null>(null);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
 
   // Activity logs state
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -461,6 +468,67 @@ useEffect(() => {
     }
   };
 
+  // Handle change email
+  const handleChangeEmail = async () => {
+    if (!emailChangeUser) return;
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      toast({
+        title: t('toast.error'),
+        description: 'Email không hợp lệ',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (newEmail.toLowerCase().trim() === emailChangeUser.email.toLowerCase()) {
+      toast({
+        title: t('toast.error'),
+        description: 'Email mới phải khác email hiện tại',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setEmailLoading(true);
+    try {
+      const response = await fetch(`/api/admin/users/${emailChangeUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: t('toast.success'),
+          description: 'Đổi email thành công'
+        });
+        setIsChangeEmailModalOpen(false);
+        setEmailChangeUser(null);
+        setNewEmail('');
+        fetchUsers();
+      } else {
+        toast({
+          title: t('toast.error'),
+          description: data.error || 'Không thể đổi email',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: t('toast.error'),
+        description: 'Đã xảy ra lỗi khi đổi email',
+        variant: 'destructive'
+      });
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
   // Handle impersonate user (login as)
   const handleImpersonateUser = async (userId: string, userName: string) => {
     if (!confirm(t('toast.impersonateConfirm', { name: userName }))) return;
@@ -778,6 +846,21 @@ useEffect(() => {
                                 >
                                   <Key className="w-4 h-4" />
                                 </Button>
+                                {(userRole === 'admin' || userRole === 'glamping_owner') && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                                    onClick={() => {
+                                      setEmailChangeUser(user);
+                                      setNewEmail('');
+                                      setIsChangeEmailModalOpen(true);
+                                    }}
+                                    title="Đổi email"
+                                  >
+                                    <Mail className="w-4 h-4" />
+                                  </Button>
+                                )}
                                 {user.is_active ? (
                                   <Button
                                     size="sm"
@@ -1174,6 +1257,85 @@ useEffect(() => {
               disabled={passwordLoading || !newPassword || !confirmPassword || newPassword !== confirmPassword || newPassword.length < 8}
             >
               {passwordLoading ? 'Đang xử lý...' : 'Đổi mật khẩu'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Email Modal */}
+      <Dialog open={isChangeEmailModalOpen} onOpenChange={setIsChangeEmailModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              Đổi email
+            </DialogTitle>
+            <DialogDescription>
+              Đổi email cho: <strong>{emailChangeUser?.first_name} {emailChangeUser?.last_name}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div>
+              <Label className="text-sm text-gray-500">Email hiện tại</Label>
+              <p className="text-sm font-medium mt-1">{emailChangeUser?.email}</p>
+            </div>
+
+            <div>
+              <Label htmlFor="newEmail">Email mới</Label>
+              <div className="relative mt-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Mail className="h-4 w-4 text-gray-400" />
+                </div>
+                <Input
+                  id="newEmail"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="pl-10"
+                  placeholder="Nhập email mới"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                Email không hợp lệ
+              </p>
+            )}
+
+            {newEmail && emailChangeUser && newEmail.toLowerCase().trim() === emailChangeUser.email.toLowerCase() && (
+              <p className="text-sm text-yellow-600 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                Email mới phải khác email hiện tại
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsChangeEmailModalOpen(false);
+                setEmailChangeUser(null);
+                setNewEmail('');
+              }}
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={handleChangeEmail}
+              disabled={
+                emailLoading ||
+                !newEmail ||
+                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) ||
+                (emailChangeUser ? newEmail.toLowerCase().trim() === emailChangeUser.email.toLowerCase() : true)
+              }
+            >
+              {emailLoading ? 'Đang xử lý...' : 'Đổi email'}
             </Button>
           </DialogFooter>
         </DialogContent>

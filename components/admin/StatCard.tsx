@@ -25,7 +25,7 @@ export function StatCard({ title, value, icon: Icon, color = "blue" }: StatCardP
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-600 truncate">{title}</p>
-            <p className="mt-1 text-2xl sm:text-3xl font-bold text-gray-900">{value}</p>
+            <p className="mt-1 text-lg sm:text-xl font-bold text-gray-900">{value}</p>
           </div>
           <div
             className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg ${colorClasses[color] || colorClasses.blue} flex items-center justify-center flex-shrink-0 ml-3`}

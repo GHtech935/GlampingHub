@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
         COUNT(DISTINCT b.id) as total_bookings,
         COUNT(DISTINCT b.id) FILTER (WHERE b.status = 'confirmed') as confirmed_bookings,
         COUNT(DISTINCT b.id) FILTER (WHERE b.status = 'pending') as pending_bookings,
-        COALESCE(SUM(DISTINCT b.total_amount), 0) as total_revenue
+        COALESCE(SUM(DISTINCT b.total_amount) FILTER (WHERE b.status NOT IN ('cancelled', 'pending')), 0) as total_revenue
       FROM glamping_bookings b
       LEFT JOIN customers c ON b.customer_id = c.id
       LEFT JOIN glamping_booking_items bi ON bi.booking_id = b.id

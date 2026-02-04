@@ -163,6 +163,8 @@ export async function POST(request: NextRequest) {
       deposit_type,
       deposit_value,
       menu_products,
+      package_items,
+      show_package_price,
       // Allocation fields
       fixed_length_value,
       fixed_length_unit,
@@ -508,6 +510,37 @@ export async function POST(request: NextRequest) {
             ]
           );
         }
+      }
+
+      // Insert package items (add-ons) if provided
+      if (package_items && package_items.length > 0) {
+        for (let i = 0; i < package_items.length; i++) {
+          const pi = package_items[i];
+          await client.query(
+            `INSERT INTO glamping_item_addons (
+              item_id, addon_item_id, price_percentage, is_required, display_order, dates_setting, custom_start_date, custom_end_date
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              itemId,
+              pi.item_id,
+              pi.price_percentage ?? 100,
+              pi.opt_in === 'required',
+              i,
+              pi.dates_setting || 'inherit_parent',
+              pi.custom_start_date || null,
+              pi.custom_end_date || null
+            ]
+          );
+        }
+      }
+
+      // Insert package settings if show_package_price is true
+      if (show_package_price) {
+        await client.query(
+          `INSERT INTO glamping_package_settings (item_id, show_starting_price)
+           VALUES ($1, $2)`,
+          [itemId, true]
+        );
       }
 
       // Insert timeslots if allocation type is 'timeslots'

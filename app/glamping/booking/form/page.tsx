@@ -1,7 +1,7 @@
 "use client"
 
 import { useSearchParams, useRouter } from "next/navigation"
-import { useEffect, useState, useMemo, Suspense } from "react"
+import { useEffect, useState, useMemo, useRef, Suspense } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -93,6 +93,8 @@ function GlampingBookingFormContent() {
   const t = useTranslations('booking')
   const { user, isCustomer, loading: authLoading } = useAuth()
   const { cart, clearCart, isInitialized: cartInitialized } = useGlampingCart()
+  const cartRef = useRef(cart)
+  cartRef.current = cart
   const [bookingData, setBookingData] = useState<BookingData | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [bookingSubmitted, setBookingSubmitted] = useState(false)
@@ -105,6 +107,20 @@ function GlampingBookingFormContent() {
 
   // Cart mode state
   const isCartMode = searchParams.get('from') === 'cart'
+
+  // Stable key for cart pricing - only changes when pricing-relevant fields change
+  // (not when menu products change)
+  const cartPricingKey = useMemo(() => {
+    if (!cart) return null
+    return JSON.stringify(cart.items.map(item => ({
+      itemId: item.itemId,
+      checkIn: item.checkIn,
+      checkOut: item.checkOut,
+      adults: item.adults,
+      children: item.children,
+      parameterQuantities: item.parameterQuantities,
+    })))
+  }, [cart])
 
   // Deposit settings state
   const [depositType, setDepositType] = useState<'percentage' | 'fixed_amount' | null>(null)
@@ -216,18 +232,19 @@ function GlampingBookingFormContent() {
         }
 
         // Now check if cart is empty AFTER it's initialized
-        if (!cart || cart.items.length === 0) {
+        const currentCart = cartRef.current
+        if (!currentCart || currentCart.items.length === 0) {
           console.log('[Booking Form] Cart is empty after initialization, redirecting...')
           toast.error(t('cart.empty'))
           router.push('/')
           return
         }
 
-        console.log('[Booking Form] Cart loaded successfully with', cart.items.length, 'items')
+        console.log('[Booking Form] Cart loaded successfully with', currentCart.items.length, 'items')
 
         // For cart mode, we'll use the first item's zone info as the booking zone
         // All items must be from the same zone (enforced by cart provider)
-        const firstItem = cart.items[0]
+        const firstItem = currentCart.items[0]
 
         // Fetch zone details for policies
         let cancellationPolicy = undefined
@@ -314,12 +331,12 @@ function GlampingBookingFormContent() {
           itemId: firstItem.itemId, // Use first item ID for compatibility
           zoneId: firstItem.zoneId,
           zoneName: firstItem.zoneName.vi,
-          itemName: `${cart.items.length} lều`, // Multi-item indicator
+          itemName: `${currentCart.items.length} lều`, // Multi-item indicator
           checkIn: firstItem.checkIn, // Use first item's dates for display
           checkOut: firstItem.checkOut,
           adults: firstItem.adults,
           children: firstItem.children,
-          basePrice: cart.items.reduce((sum, item) => sum + item.basePrice, 0),
+          basePrice: currentCart.items.reduce((sum, item) => sum + item.basePrice, 0),
           itemImageUrl: firstItem.itemImageUrl,
           cancellationPolicy,
           houseRules,
@@ -539,7 +556,8 @@ function GlampingBookingFormContent() {
     }
 
     loadBookingData()
-  }, [searchParams, router, t, isCartMode, cart, cartInitialized, bookingSubmitted])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, router, t, isCartMode, cartPricingKey, cartInitialized, bookingSubmitted])
 
   // Fetch pricing data
   useEffect(() => {
@@ -550,8 +568,9 @@ function GlampingBookingFormContent() {
         const voucherCode = appliedVoucher?.code || ''
 
         // Cart mode: Use multi-item pricing API
-        if (isCartMode && cart && cart.items.length > 0) {
-          const itemsPayload = cart.items.map(item => ({
+        const currentCart = cartRef.current
+        if (isCartMode && currentCart && currentCart.items.length > 0) {
+          const itemsPayload = currentCart.items.map(item => ({
             itemId: item.itemId,
             checkIn: item.checkIn,
             checkOut: item.checkOut,
@@ -611,7 +630,8 @@ function GlampingBookingFormContent() {
 
     const timer = setTimeout(fetchPricingData, 300)
     return () => clearTimeout(timer)
-  }, [bookingData, appliedVoucher, isCartMode, cart])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingData, appliedVoucher, isCartMode, cartPricingKey])
 
   // Voucher handlers
   const handleVoucherApplied = (voucher: AppliedVoucher) => {
@@ -701,6 +721,27 @@ function GlampingBookingFormContent() {
             }
           }
 
+          // Build addon selections payload (include pricing + voucher)
+          const addonPayload = item.addonSelections
+            ? Object.values(item.addonSelections)
+                .filter(sel => sel.selected)
+                .map(sel => ({
+                  addonItemId: sel.addonItemId,
+                  quantity: sel.quantity,
+                  parameterQuantities: sel.parameterQuantities,
+                  dates: sel.dates || undefined,
+                  totalPrice: sel.totalPrice || 0,
+                  parameterPricing: sel.parameterPricing || {},
+                  voucher: sel.voucher ? {
+                    code: sel.voucher.code,
+                    id: sel.voucher.id,
+                    discountAmount: sel.voucher.discountAmount,
+                    discountType: sel.voucher.discountType,
+                    discountValue: sel.voucher.discountValue,
+                  } : undefined,
+                }))
+            : [];
+
           return {
             itemId: item.itemId,
             checkInDate: item.checkIn,
@@ -712,6 +753,8 @@ function GlampingBookingFormContent() {
             accommodationVoucher: item.accommodationVoucher || null,
             // Menu products with per-product vouchers
             menuProducts: itemMenuProducts,
+            // Add-on selections
+            addons: addonPayload,
           };
         })
 

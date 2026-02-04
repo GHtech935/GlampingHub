@@ -246,6 +246,8 @@ export function GlampingBookingFinancialTab({
                 taxAmount,
                 totalWithTax: subtotal + taxAmount,
                 bookingTentId: night.bookingTentId || null,
+                voucherCode: night.voucherCode || null,
+                discountAmount: night.discountAmount || 0,
               });
             });
           } else if (booking.pricing.subtotalAmount > 0) {
@@ -605,6 +607,22 @@ export function GlampingBookingFinancialTab({
                                               <td className="px-3 py-2 text-right text-sm">{formatCurrency(item.unitPrice)}</td>
                                               <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(item.subtotal)}</td>
                                             </tr>
+                                            {item.voucherCode && item.discountAmount && item.discountAmount > 0 && (
+                                              <tr className="bg-green-50">
+                                                <td></td>
+                                                <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-green-600">
+                                                  <span className="inline-flex items-center gap-1">
+                                                    ↳ Voucher
+                                                    <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-mono">
+                                                      {item.voucherCode}
+                                                    </span>
+                                                  </span>
+                                                </td>
+                                                <td className="px-3 py-1 text-right text-xs font-medium text-green-600">
+                                                  -{formatCurrency(item.discountAmount)}
+                                                </td>
+                                              </tr>
+                                            )}
                                             {taxInvoiceRequired && item.taxAmount > 0 && (
                                               <tr className="bg-blue-50">
                                                 <td></td>
@@ -846,8 +864,67 @@ export function GlampingBookingFinancialTab({
                                   <td className="px-3 py-2 text-right text-sm">{formatCurrency(item.unitPrice)}</td>
                                   <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(item.subtotal)}</td>
                                 </tr>
+                                {item.voucherCode && item.discountAmount && item.discountAmount > 0 && (
+                                  <tr className="bg-green-50">
+                                    <td></td>
+                                    <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-green-600">
+                                      <span className="inline-flex items-center gap-1">
+                                        ↳ Voucher
+                                        <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-mono">
+                                          {item.voucherCode}
+                                        </span>
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-1 text-right text-xs font-medium text-green-600">
+                                      -{formatCurrency(item.discountAmount)}
+                                    </td>
+                                  </tr>
+                                )}
+                                {taxInvoiceRequired && item.taxAmount > 0 && (
+                                  <tr className="bg-blue-50">
+                                    <td></td>
+                                    <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-blue-600">
+                                      ↳ VAT ({item.taxRate}%)
+                                    </td>
+                                    <td className="px-3 py-1 text-right text-xs text-blue-600">
+                                      {formatCurrency(item.taxAmount)}
+                                    </td>
+                                  </tr>
+                                )}
                               </React.Fragment>
                             ))}
+                            {/* Shared Items Subtotal */}
+                            {(() => {
+                              const sharedSubtotal = sharedItems.reduce((sum, item) => sum + item.subtotal, 0);
+                              const sharedDiscounts = sharedItems.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+                              const sharedTax = sharedItems.reduce((sum, item) => sum + item.taxAmount, 0);
+                              const sharedTotal = sharedSubtotal - sharedDiscounts + sharedTax;
+                              const hasSharedDiscounts = sharedDiscounts > 0;
+                              const hasSharedTax = taxInvoiceRequired && sharedTax > 0;
+                              if (!hasSharedDiscounts && !hasSharedTax) return null;
+                              return (
+                                <>
+                                  {hasSharedDiscounts && (
+                                    <tr className="bg-slate-100">
+                                      <td colSpan={4} className="px-3 py-1 text-right text-sm text-green-600">
+                                        {locale === 'vi' ? 'Giảm giá' : 'Discount'}:
+                                      </td>
+                                      <td className="px-3 py-1 text-right font-medium text-sm text-green-600">
+                                        -{formatCurrency(sharedDiscounts)}
+                                      </td>
+                                    </tr>
+                                  )}
+                                  <tr className="bg-slate-100">
+                                    <td colSpan={4} className="px-3 py-2 text-right font-medium text-sm">
+                                      {locale === 'vi' ? 'Tổng sản phẩm chung' : 'Shared Items Total'}:
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-semibold text-sm">
+                                      {formatCurrency(sharedTotal)}
+                                    </td>
+                                  </tr>
+                                </>
+                              );
+                            })()}
                           </>
                         )}
 

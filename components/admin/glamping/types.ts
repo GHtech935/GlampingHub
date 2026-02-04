@@ -112,6 +112,7 @@ export interface BookingDetail {
     totalAmount: number;
     depositDue: number;
     balanceDue: number;
+    paidAmount: number;
     currency: string;
   };
 
@@ -341,6 +342,29 @@ export interface TentEditData {
     quantity: number;
     unitPrice: number;
   }>;
+}
+
+/**
+ * Data passed to the common item edit modal
+ */
+export interface CommonItemEditData {
+  bookingId: string;
+  itemId: string;
+  itemName: string;
+  bookingTentId: string | null;
+  ids: string[];
+  parameters: Array<{
+    parameterId: string;
+    parameterName: string;
+    quantity: number;
+    unitPrice: number;
+    pricingMode?: 'per_person' | 'per_group';
+  }>;
+  totalPrice: number;
+  dates: { from: string; to: string } | null;
+  tentItemId: string;
+  tentCheckInDate: string;
+  tentCheckOutDate: string;
 }
 
 /**

@@ -16,6 +16,28 @@ export interface MenuProductSelection {
   } | null;
 }
 
+export interface AddonSelection {
+  addonItemId: string;
+  selected: boolean;
+  quantity: number;
+  parameterQuantities: Record<string, number>;
+  dates?: { from: string; to: string }; // for custom dates
+  voucher?: {
+    code: string;
+    id: string;
+    discountAmount: number;
+    discountType: 'percentage' | 'fixed';
+    discountValue: number;
+  } | null;
+  totalPrice?: number;   // Computed total price for this addon (before voucher)
+  addonName?: string;    // Display name of the addon
+  parameterPricing?: Record<string, {  // Per-parameter pricing details
+    unitPrice: number;       // Unit price (after price_percentage)
+    pricingMode: string;     // 'per_person' | 'per_group'
+    paramName: string;       // Parameter name for display
+  }>;
+}
+
 export interface GlampingCartItem {
   id: string; // unique cart item ID (UUID)
   itemId: string; // glamping_items.id
@@ -55,6 +77,9 @@ export interface GlampingCartItem {
     quantity: number;
   }>;
 
+  // Add-on selections (common items from step 5)
+  addonSelections?: Record<string, AddonSelection>; // keyed by addonItemId
+
   // Pricing
   basePrice: number;
   totalPrice?: number; // calculated from API
@@ -74,6 +99,8 @@ export interface GlampingCartItem {
     menuProductsCost: number;
     accommodationDiscount: number;
     menuDiscount: number;
+    addonsCost: number;      // Total add-on cost (before voucher)
+    addonsDiscount: number;  // Total add-on voucher discount
     subtotal: number;
   };
 

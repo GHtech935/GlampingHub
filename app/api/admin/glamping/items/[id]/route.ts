@@ -161,6 +161,31 @@ export async function GET(
       ORDER BY mp.display_order
     `, [id]);
 
+    // Get item add-ons (package items)
+    const addonsResult = await pool.query(`
+      SELECT
+        a.addon_item_id as item_id,
+        i.name as item_name,
+        i.sku as item_sku,
+        a.price_percentage,
+        a.is_required,
+        a.display_order,
+        a.dates_setting,
+        a.custom_start_date,
+        a.custom_end_date
+      FROM glamping_item_addons a
+      LEFT JOIN glamping_items i ON a.addon_item_id = i.id
+      WHERE a.item_id = $1
+      ORDER BY a.display_order
+    `, [id]);
+
+    // Get package settings
+    const packageSettingsResult = await pool.query(`
+      SELECT show_starting_price
+      FROM glamping_package_settings
+      WHERE item_id = $1
+    `, [id]);
+
     // Get timeslots
     const timeslotsResult = await pool.query(`
       SELECT start_time, end_time, days_of_week
@@ -421,6 +446,17 @@ export async function GET(
           opt_in: mp.is_required ? 'required' : 'optional',
           display_order: mp.display_order
         })),
+        package_items: addonsResult.rows.map((a: any) => ({
+          item_id: a.item_id,
+          item_name: a.item_name,
+          item_sku: a.item_sku,
+          price_percentage: a.price_percentage,
+          opt_in: a.is_required ? 'required' : 'optional',
+          dates_setting: a.dates_setting || 'inherit_parent',
+          custom_start_date: a.custom_start_date || null,
+          custom_end_date: a.custom_end_date || null,
+        })),
+        show_package_price: packageSettingsResult.rows[0]?.show_starting_price || false,
         timeslots: timeslotsResult.rows,
         taxes: taxes,
         events: events,
@@ -471,6 +507,8 @@ export async function PUT(
       deposit_type,
       deposit_value,
       menu_products,
+      package_items,
+      show_package_price,
       // Allocation fields
       fixed_length_value,
       fixed_length_unit,
@@ -911,6 +949,51 @@ export async function PUT(
         }
       }
 
+      // Update package items (add-ons) if provided
+      if (package_items !== undefined) {
+        await client.query(
+          'DELETE FROM glamping_item_addons WHERE item_id = $1',
+          [id]
+        );
+
+        if (package_items && package_items.length > 0) {
+          for (let i = 0; i < package_items.length; i++) {
+            const pi = package_items[i];
+            await client.query(
+              `INSERT INTO glamping_item_addons (
+                item_id, addon_item_id, price_percentage, is_required, display_order, dates_setting, custom_start_date, custom_end_date
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              [
+                id,
+                pi.item_id,
+                pi.price_percentage ?? 100,
+                pi.opt_in === 'required',
+                i,
+                pi.dates_setting || 'inherit_parent',
+                pi.custom_start_date || null,
+                pi.custom_end_date || null
+              ]
+            );
+          }
+        }
+      }
+
+      // Update package settings if provided
+      if (show_package_price !== undefined) {
+        await client.query(
+          'DELETE FROM glamping_package_settings WHERE item_id = $1',
+          [id]
+        );
+
+        if (show_package_price) {
+          await client.query(
+            `INSERT INTO glamping_package_settings (item_id, show_starting_price)
+             VALUES ($1, $2)`,
+            [id, true]
+          );
+        }
+      }
+
       // Update timeslots if provided
       if (timeslots !== undefined) {
         // Delete existing timeslots
@@ -948,6 +1031,28 @@ export async function PUT(
 
   } catch (error) {
     console.error('Item update error:', error);
+    return NextResponse.json({ error: 'Failed to update item' }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSession();
+
+    if (!session || session.type !== 'staff') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+
+    return NextResponse.json({ success: true });
+
+  } catch (error) {
+    console.error('Item patch error:', error);
     return NextResponse.json({ error: 'Failed to update item' }, { status: 500 });
   }
 }

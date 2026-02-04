@@ -84,12 +84,23 @@ export async function GET(request: NextRequest) {
             LEFT JOIN glamping_categories c ON c.id = i.category_id
             LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
             WHERE i.zone_id = z.id
+              AND i.is_tent = true
               AND COALESCE(a.is_active, true) = true
               AND a.default_calendar_status = 'available'
             ORDER BY i.created_at DESC
             LIMIT 3
           ) as item_data
-        ) as items
+        ) as items,
+        -- Total tent count for "+X more" indicator
+        (
+          SELECT COUNT(*)
+          FROM glamping_items i
+          LEFT JOIN glamping_item_attributes a ON a.item_id = i.id
+          WHERE i.zone_id = z.id
+            AND i.is_tent = true
+            AND COALESCE(a.is_active, true) = true
+            AND a.default_calendar_status = 'available'
+        ) as tent_count
       FROM glamping_zones z
       WHERE z.is_active = true
     `
@@ -221,6 +232,7 @@ export async function GET(request: NextRequest) {
       basePrice: parseFloat(row.base_price) || 0,
       features: [], // TODO: Add features when zone features are implemented
       items: row.items || [],
+      tentCount: parseInt(row.tent_count) || 0,
       distance: "", // TODO: Calculate distance from user location
       latitude: parseFloat(row.latitude),
       longitude: parseFloat(row.longitude),

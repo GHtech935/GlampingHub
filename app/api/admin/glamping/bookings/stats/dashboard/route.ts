@@ -35,21 +35,25 @@ export async function GET(request: NextRequest) {
 
     // 1. Summary stats
     const summaryQuery = `
+      WITH zone_bookings AS (
+        SELECT DISTINCT b.id, b.total_amount, b.status, b.total_guests
+        FROM glamping_bookings b
+        JOIN glamping_booking_items bi ON bi.booking_id = b.id
+        JOIN glamping_items i ON bi.item_id = i.id
+        WHERE i.zone_id = $1
+      )
       SELECT
-        COALESCE(SUM(b.total_amount), 0) as total_revenue,
-        COUNT(b.id) as total_bookings,
-        COUNT(b.id) FILTER (WHERE b.status = 'confirmed') as confirmed_bookings,
-        COUNT(b.id) FILTER (WHERE b.status = 'pending') as pending_bookings,
-        COUNT(b.id) FILTER (WHERE b.status = 'cancelled') as cancelled_bookings,
-        CASE WHEN COUNT(b.id) > 0
-          THEN COALESCE(SUM(b.total_amount), 0) / COUNT(b.id)
+        COALESCE(SUM(total_amount) FILTER (WHERE status NOT IN ('cancelled', 'pending')), 0) as total_revenue,
+        COUNT(id) as total_bookings,
+        COUNT(id) FILTER (WHERE status = 'confirmed') as confirmed_bookings,
+        COUNT(id) FILTER (WHERE status = 'pending') as pending_bookings,
+        COUNT(id) FILTER (WHERE status = 'cancelled') as cancelled_bookings,
+        CASE WHEN COUNT(id) FILTER (WHERE status NOT IN ('cancelled', 'pending')) > 0
+          THEN COALESCE(SUM(total_amount) FILTER (WHERE status NOT IN ('cancelled', 'pending')), 0) / COUNT(id) FILTER (WHERE status NOT IN ('cancelled', 'pending'))
           ELSE 0
         END as avg_booking_value,
-        COALESCE(SUM(b.total_guests), 0) as total_guests
-      FROM glamping_bookings b
-      JOIN glamping_booking_items bi ON bi.booking_id = b.id
-      JOIN glamping_items i ON bi.item_id = i.id
-      WHERE i.zone_id = $1
+        COALESCE(SUM(total_guests), 0) as total_guests
+      FROM zone_bookings
     `;
     const summaryResult = await client.query(summaryQuery, [zoneId]);
     const summary = summaryResult.rows[0];
@@ -66,6 +70,7 @@ export async function GET(request: NextRequest) {
         '1 day'
       ) d(date)
       LEFT JOIN glamping_bookings b ON DATE(b.created_at) = d.date
+        AND b.status NOT IN ('cancelled', 'pending')
         AND b.id IN (
           SELECT bi.booking_id FROM glamping_booking_items bi
           JOIN glamping_items i ON bi.item_id = i.id
@@ -89,6 +94,7 @@ export async function GET(request: NextRequest) {
         '1 month'
       ) m(month)
       LEFT JOIN glamping_bookings b ON DATE_TRUNC('month', b.created_at) = m.month
+        AND b.status NOT IN ('cancelled', 'pending')
         AND b.id IN (
           SELECT bi.booking_id FROM glamping_booking_items bi
           JOIN glamping_items i ON bi.item_id = i.id

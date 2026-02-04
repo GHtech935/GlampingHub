@@ -125,12 +125,15 @@ export async function POST(request: NextRequest) {
         mappedType = 'tent';
       } else if (applicationType === 'menu_only') {
         mappedType = 'menu';
+      } else if (applicationType === 'common_item') {
+        mappedType = 'common_item';
       }
 
       if (voucherAppType !== 'all' && voucherAppType !== mappedType) {
         const errorMessages: Record<string, string> = {
           'accommodation': 'Voucher không áp dụng cho lưu trú',
           'menu_only': 'Voucher không áp dụng cho món ăn',
+          'common_item': 'Voucher không áp dụng cho dịch vụ thêm',
         };
         return NextResponse.json(
           { error: errorMessages[applicationType] || "Voucher không áp dụng cho loại này" },

@@ -373,6 +373,7 @@ export async function POST(request: NextRequest) {
           pricingModes: aggregatedPricingModes,
           accommodationCost: itemAccommodationCost,
           menuProducts: cartItem.menuProducts || [],
+          addons: cartItem.addons || [],
         });
       }
 
@@ -395,7 +396,29 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Step 6: Validate per-item vouchers (accommodation + menu products)
+      // Step 5b: Calculate total addon costs (from client-computed prices in payload)
+      let addonsTotalCost = 0;
+      let addonsVoucherDiscount = 0;
+      const addonVoucherResults: Array<{
+        tentIndex: number;
+        addonIndex: number;
+        voucherCode: string | null;
+        voucherId: string | null;
+        discountType: string | null;
+        discountValue: number;
+        discountAmount: number;
+      }> = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const cartItem = items[i];
+        if (cartItem.addons && Array.isArray(cartItem.addons)) {
+          cartItem.addons.forEach((addon: any) => {
+            addonsTotalCost += addon.totalPrice || 0;
+          });
+        }
+      }
+
+      // Step 6: Validate per-item vouchers (accommodation + menu products + addons)
       // Track voucher usage counts within this transaction
       const voucherUsageCounts: Record<string, number> = {}; // voucherId -> count
       const tentVoucherResults: Array<{
@@ -526,11 +549,67 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 6c: Fallback to global discountCode if no per-item vouchers were provided
+      // 6c: Validate per-addon vouchers
+      let totalAddonDiscounts = 0;
+
+      for (let i = 0; i < items.length; i++) {
+        const cartItem = items[i];
+        const cartAddons = cartItem.addons || [];
+        for (let j = 0; j < cartAddons.length; j++) {
+          const addon = cartAddons[j];
+          if (addon.voucher && addon.voucher.code) {
+            try {
+              const additionalUses = voucherUsageCounts[addon.voucher.code?.toUpperCase()] || 0;
+              const addonTotal = addon.totalPrice || 0;
+              const result = await validateVoucherDirect(client, addon.voucher.code, {
+                zoneId,
+                itemId: addon.addonItemId,
+                totalAmount: addonTotal,
+              }, additionalUses);
+
+              if (result.valid) {
+                addonVoucherResults.push({
+                  tentIndex: i, addonIndex: j,
+                  voucherCode: result.voucherCode,
+                  voucherId: result.voucherId,
+                  discountType: result.discountType,
+                  discountValue: result.discountValue,
+                  discountAmount: result.discountAmount,
+                });
+                totalAddonDiscounts += result.discountAmount;
+                addonsVoucherDiscount += result.discountAmount;
+                const key = result.voucherCode?.toUpperCase() || '';
+                voucherUsageCounts[key] = (voucherUsageCounts[key] || 0) + 1;
+              } else {
+                addonVoucherResults.push({
+                  tentIndex: i, addonIndex: j,
+                  voucherCode: null, voucherId: null,
+                  discountType: null, discountValue: 0, discountAmount: 0,
+                });
+              }
+            } catch (err) {
+              console.error(`[Multi-Item Booking] Error validating addon voucher:`, err);
+              addonVoucherResults.push({
+                tentIndex: i, addonIndex: j,
+                voucherCode: null, voucherId: null,
+                discountType: null, discountValue: 0, discountAmount: 0,
+              });
+            }
+          } else {
+            addonVoucherResults.push({
+              tentIndex: i, addonIndex: j,
+              voucherCode: null, voucherId: null,
+              discountType: null, discountValue: 0, discountAmount: 0,
+            });
+          }
+        }
+      }
+
+      // 6d: Fallback to global discountCode if no per-item vouchers were provided
       let globalVoucherId: string | null = null;
       let globalVoucherDiscount = 0;
 
-      const subtotalAmount = totalAccommodationCost + menuProductsTotal;
+      const subtotalAmount = totalAccommodationCost + menuProductsTotal + addonsTotalCost;
 
       if (discountCode && totalTentDiscounts === 0 && totalProductDiscounts === 0) {
         try {
@@ -552,7 +631,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const voucherDiscount = totalTentDiscounts + totalProductDiscounts + globalVoucherDiscount;
+      const voucherDiscount = totalTentDiscounts + totalProductDiscounts + totalAddonDiscounts + globalVoucherDiscount;
       const totalAmount = subtotalAmount - voucherDiscount;
 
       // Step 7: Calculate deposit
@@ -602,6 +681,20 @@ export async function POST(request: NextRequest) {
         const checkResult = await client.query('SELECT id FROM customers WHERE id = $1', [customerId]);
         if (checkResult.rows.length === 0) {
           customerId = null; // Fall through to email-based lookup
+        }
+      }
+
+      // If customerId was provided but guest name fields are missing, resolve from DB
+      let resolvedGuestFirstName = guestFirstName || '';
+      let resolvedGuestLastName = guestLastName || '';
+      if (customerId && !guestFirstName) {
+        const custNameResult = await client.query(
+          'SELECT first_name, last_name FROM customers WHERE id = $1',
+          [customerId]
+        );
+        if (custNameResult.rows.length > 0) {
+          resolvedGuestFirstName = custNameResult.rows[0].first_name || '';
+          resolvedGuestLastName = custNameResult.rows[0].last_name || '';
         }
       }
 
@@ -704,6 +797,7 @@ export async function POST(request: NextRequest) {
         INSERT INTO glamping_bookings (
           booking_code,
           customer_id,
+          guest_name,
           status,
           payment_status,
           check_in_date,
@@ -728,13 +822,14 @@ export async function POST(request: NextRequest) {
           referral_source,
           created_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW())
         RETURNING id, booking_code, created_at, total_amount
       `;
 
       const bookingResult = await client.query(bookingInsertQuery, [
         bookingCode,
         customerId,
+        `${resolvedGuestFirstName} ${resolvedGuestLastName}`.trim(),
         'confirmed',
         'pending',
         earliestCheckIn.toISOString().split('T')[0],
@@ -929,6 +1024,92 @@ export async function POST(request: NextRequest) {
             }
           }
         }
+
+        // Step 12e: Save per-item add-on selections (common items) with pricing + voucher
+        if (itemData.addons && Array.isArray(itemData.addons) && itemData.addons.length > 0) {
+          for (let addonIdx = 0; addonIdx < itemData.addons.length; addonIdx++) {
+            const addon = itemData.addons[addonIdx];
+            if (!addon.addonItemId) continue;
+
+            // Find validated voucher for this addon
+            const addonVoucher = addonVoucherResults.find(
+              v => v.tentIndex === tentIndex && v.addonIndex === addonIdx
+            );
+
+            const addonInsertQuery = `
+              INSERT INTO glamping_booking_items (
+                booking_id,
+                booking_tent_id,
+                item_id,
+                parameter_id,
+                allocation_type,
+                quantity,
+                unit_price,
+                metadata
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `;
+
+            // Save each addon parameter as a booking item with real unit_price
+            const addonParamEntries = Object.entries(addon.parameterQuantities || {});
+            if (addonParamEntries.length > 0) {
+              for (const [paramId, qty] of addonParamEntries) {
+                if ((qty as number) > 0) {
+                  // Get unit price from client-supplied parameterPricing
+                  const paramPricing = addon.parameterPricing?.[paramId];
+                  const unitPrice = paramPricing?.unitPrice || 0;
+                  const pricingMode = paramPricing?.pricingMode || 'per_person';
+
+                  await client.query(addonInsertQuery, [
+                    booking.id,
+                    tentId,
+                    addon.addonItemId,
+                    paramId,
+                    'per_night',
+                    qty,
+                    unitPrice,
+                    JSON.stringify({
+                      type: 'addon',
+                      parentItemId: itemData.itemId,
+                      dates: addon.dates || null,
+                      pricingMode,
+                      voucher: addonVoucher?.voucherCode ? {
+                        code: addonVoucher.voucherCode,
+                        id: addonVoucher.voucherId,
+                        discountAmount: addonVoucher.discountAmount,
+                        discountType: addonVoucher.discountType,
+                        discountValue: addonVoucher.discountValue,
+                      } : null,
+                    }),
+                  ]);
+                }
+              }
+            } else {
+              // Addon with no parameters - save with quantity
+              await client.query(addonInsertQuery, [
+                booking.id,
+                tentId,
+                addon.addonItemId,
+                null,
+                'per_night',
+                addon.quantity || 1,
+                addon.totalPrice || 0,
+                JSON.stringify({
+                  type: 'addon',
+                  parentItemId: itemData.itemId,
+                  dates: addon.dates || null,
+                  voucher: addonVoucher?.voucherCode ? {
+                    code: addonVoucher.voucherCode,
+                    id: addonVoucher.voucherId,
+                    discountAmount: addonVoucher.discountAmount,
+                    discountType: addonVoucher.discountType,
+                    discountValue: addonVoucher.discountValue,
+                  } : null,
+                }),
+              ]);
+            }
+          }
+        }
       }
 
       // Step 13: Save shared menu products (if any) - booking_tent_id = NULL
@@ -992,6 +1173,12 @@ export async function POST(request: NextRequest) {
       for (const pv of menuProductVoucherResults) {
         if (pv.voucherId) {
           voucherIncrements[pv.voucherId] = (voucherIncrements[pv.voucherId] || 0) + 1;
+        }
+      }
+      // From addon vouchers
+      for (const av of addonVoucherResults) {
+        if (av.voucherId) {
+          voucherIncrements[av.voucherId] = (voucherIncrements[av.voucherId] || 0) + 1;
         }
       }
       // From global voucher fallback
@@ -1615,6 +1802,7 @@ export async function POST(request: NextRequest) {
       INSERT INTO glamping_bookings (
         booking_code,
         customer_id,
+        guest_name,
         status,
         payment_status,
         check_in_date,
@@ -1638,13 +1826,14 @@ export async function POST(request: NextRequest) {
         referral_source,
         created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW())
       RETURNING id, booking_code, created_at, total_amount
     `;
 
     const bookingResult = await client.query(bookingInsertQuery, [
       bookingCode,
       customerId,
+      `${guestFirstName} ${guestLastName}`.trim(),
       'confirmed',
       'pending',
       checkInDate,

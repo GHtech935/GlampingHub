@@ -219,6 +219,8 @@ export default function GlampingPricingSummary({
                 const menuCost = Number(item.pricingBreakdown?.menuProductsCost) || 0;
                 const accommodationDiscount = Number(item.accommodationVoucher?.discountAmount) || 0;
                 const menuDiscount = Number(item.pricingBreakdown?.menuDiscount) || 0;
+                const addonsCost = Number(item.pricingBreakdown?.addonsCost) || 0;
+                const addonsDiscount = Number(item.pricingBreakdown?.addonsDiscount) || 0;
                 const itemSubtotal = Number(item.pricingBreakdown?.subtotal || item.totalPrice || item.basePrice) || 0;
 
                 return (
@@ -350,6 +352,50 @@ export default function GlampingPricingSummary({
                                   })
                                 )}
                               </div>
+                            </>
+                          )}
+
+                          {/* Add-ons */}
+                          {addonsCost > 0 && (
+                            <>
+                              <div className="flex justify-between text-sm pt-2 border-t">
+                                <span className="text-gray-600">
+                                  {locale === 'vi' ? 'Dịch vụ thêm' : 'Add-ons'}
+                                </span>
+                                <span className="font-medium">
+                                  {formatCurrency(addonsCost)}
+                                </span>
+                              </div>
+                              {/* Show individual addons */}
+                              {item.addonSelections && (
+                                <div className="pl-4 space-y-1">
+                                  {Object.values(item.addonSelections)
+                                    .filter(sel => sel.selected && (sel.totalPrice || 0) > 0)
+                                    .map(sel => (
+                                      <div key={sel.addonItemId} className="space-y-1">
+                                        <div className="flex justify-between text-xs text-gray-500">
+                                          <span>{sel.addonName || sel.addonItemId}</span>
+                                          <span>{formatCurrency(sel.totalPrice || 0)}</span>
+                                        </div>
+                                        {sel.voucher && sel.voucher.discountAmount > 0 && (
+                                          <div className="flex justify-between text-xs text-green-600 pl-3">
+                                            <span>
+                                              {locale === 'vi' ? 'Voucher dịch vụ' : 'Addon voucher'} ({sel.voucher.code})
+                                            </span>
+                                            <span>-{formatCurrency(sel.voucher.discountAmount)}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))
+                                  }
+                                </div>
+                              )}
+                              {addonsDiscount > 0 && (
+                                <div className="flex justify-between text-sm text-green-600 font-medium">
+                                  <span>- {locale === 'vi' ? 'Voucher dịch vụ' : 'Addon voucher'}</span>
+                                  <span>-{formatCurrency(addonsDiscount)}</span>
+                                </div>
+                              )}
                             </>
                           )}
 

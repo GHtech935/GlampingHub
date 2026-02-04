@@ -111,8 +111,13 @@ export function GlampingDateRangePickerWithCalendar({
   // Set currentMonth to dateRange.from month when dateRange is provided
   useEffect(() => {
     if (dateRange?.from) {
-      const fromMonth = new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), 1)
-      setCurrentMonth(fromMonth)
+      setCurrentMonth(prev => {
+        // Only update if the month/year actually changed to avoid re-fetching availability
+        if (prev.getFullYear() === dateRange.from!.getFullYear() && prev.getMonth() === dateRange.from!.getMonth()) {
+          return prev
+        }
+        return new Date(dateRange.from!.getFullYear(), dateRange.from!.getMonth(), 1)
+      })
     }
   }, [dateRange?.from])
 
@@ -460,14 +465,14 @@ export function GlampingDateRangePickerWithCalendar({
     }
   }
 
-  // For hotel bookings, the visual range is [check-in, check-out) - exclusive of check-out date
-  // Because check-out is when you leave, not when you stay
+  // For hotel bookings, the visual range is [check-in, check-out] - inclusive of check-out date
+  // So selecting 3 days (e.g. 10, 11, 12) highlights all 3 days
   const isDateInRange = (date: string) => {
     if (!dateRange?.from) return false
     const checkDate = new Date(date)
     if (!dateRange.to) return checkDate.getTime() === dateRange.from.getTime()
-    // Exclusive of check-out date
-    return checkDate >= dateRange.from && checkDate < dateRange.to
+    // Inclusive of check-out date
+    return checkDate >= dateRange.from && checkDate <= dateRange.to
   }
 
   const isRangeStart = (date: string) => {
@@ -476,22 +481,17 @@ export function GlampingDateRangePickerWithCalendar({
     return checkDate.getTime() === dateRange.from.getTime()
   }
 
-  // Check if date is the last NIGHT in range (day before check-out)
+  // Check if date is the check-out date (end of visual range)
   const isRangeEnd = (date: string) => {
     if (!dateRange?.from || !dateRange?.to) return false
     const checkDate = new Date(date)
-    // The visual "end" is the day before check-out (last night of stay)
-    const lastNight = new Date(dateRange.to)
-    lastNight.setDate(lastNight.getDate() - 1)
-    return checkDate.getTime() === lastNight.getTime()
+    return checkDate.getTime() === dateRange.to.getTime()
   }
 
   const isRangeMiddle = (date: string) => {
     if (!dateRange?.from || !dateRange?.to) return false
     const checkDate = new Date(date)
-    const lastNight = new Date(dateRange.to)
-    lastNight.setDate(lastNight.getDate() - 1)
-    return checkDate > dateRange.from && checkDate < lastNight
+    return checkDate > dateRange.from && checkDate < dateRange.to
   }
 
   const calculateTotalPrice = () => {

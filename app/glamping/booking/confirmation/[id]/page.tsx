@@ -62,6 +62,7 @@ interface BookingData {
     category_name: any;
   }>;
   canEditMenu: boolean;
+  canEditCommonItems: boolean;
   hoursUntilCheckIn: number;
 }
 
@@ -247,6 +248,7 @@ export default function BookingConfirmationPage() {
           tents={booking.tents}
           bookingId={bookingId}
           canEditMenu={booking.canEditMenu}
+          canEditCommonItems={booking.canEditCommonItems}
           onMenuUpdated={fetchBookingDetails}
         />
       ) : (

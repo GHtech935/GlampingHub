@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Loader2, Package, Minus, Plus } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { GlampingItemSelector } from './GlampingItemSelector'
 import { GlampingDateRangePickerWithCalendar } from './GlampingDateRangePickerWithCalendar'
@@ -12,6 +12,11 @@ import VoucherInput, { type AppliedVoucher } from '@/components/booking/VoucherI
 import { format } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
 import { type MultilingualText, getLocalizedText } from '@/lib/i18n-utils'
+import { useItemAddons, type ItemAddon } from '@/hooks/useItemAddons'
+import { type AddonSelection } from '@/components/providers/GlampingCartProvider'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 // Types shared with the parent modal
 export interface AdminTentItem {
@@ -37,9 +42,11 @@ export interface AdminTentItem {
     discountType: string
     discountValue: number
   } | null
+  addonSelections: Record<string, AddonSelection>
   pricingBreakdown: {
     accommodationCost: number
     menuProductsCost: number
+    addonsCost: number
     subtotal: number
   } | null
   loadingItemDetails: boolean
@@ -86,6 +93,7 @@ export function createEmptyTent(): AdminTentItem {
     parameters: [],
     menuProducts: {},
     accommodationVoucher: null,
+    addonSelections: {},
     pricingBreakdown: null,
     loadingItemDetails: false,
   }
@@ -221,6 +229,7 @@ export function AdminTentTabContent({
       children: 0,
       menuProducts: {},
       accommodationVoucher: null,
+      addonSelections: {},
       pricingBreakdown: null,
     })
   }
@@ -277,6 +286,334 @@ export function AdminTentTabContent({
   const handleVoucherRemoved = () => {
     onTentChange({ ...tent, accommodationVoucher: null })
   }
+
+  // ========== ADDON SUPPORT ==========
+  const { addons, loading: addonsLoading } = useItemAddons(tent.itemId || null)
+
+  // Addon pricing state
+  const [addonPricingMap, setAddonPricingMap] = useState<Record<string, {
+    parameterPricing: Record<string, number>
+    parameterPricingModes: Record<string, string>
+    loading: boolean
+  }>>({})
+
+  // Helper: get localized name for addon/param
+  const getAddonName = useCallback((obj: any) => {
+    if (!obj) return ''
+    if (typeof obj.name === 'object' && obj.name !== null) {
+      return obj.name[locale] || obj.name.vi || obj.name.en || ''
+    }
+    return obj.name || ''
+  }, [locale])
+
+  // Helper: build default dates for an addon based on dates_setting
+  const getDefaultAddonDates = useCallback((addon: ItemAddon): { from: string; to: string } | undefined => {
+    if (addon.dates_setting === 'inherit_parent') {
+      if (tent.dateRange?.from) {
+        const fromStr = format(tent.dateRange.from, 'yyyy-MM-dd')
+        const nextDay = new Date(tent.dateRange.from)
+        nextDay.setDate(nextDay.getDate() + 1)
+        return { from: fromStr, to: format(nextDay, 'yyyy-MM-dd') }
+      }
+    } else if (addon.dates_setting === 'custom') {
+      if (addon.custom_start_date && addon.custom_end_date) {
+        return { from: addon.custom_start_date, to: addon.custom_end_date }
+      }
+    }
+    return undefined
+  }, [tent.dateRange])
+
+  // Init required addons — auto-select is_required addons with default param quantities
+  useEffect(() => {
+    if (!addons || addons.length === 0) return
+    const currentSelections = { ...tent.addonSelections }
+    let hasChanges = false
+
+    addons.forEach((addon) => {
+      if (!currentSelections[addon.addon_item_id]) {
+        if (addon.is_required) {
+          const defaultParamQtys: Record<string, number> = {}
+          addon.parameters.forEach((p) => {
+            defaultParamQtys[p.id] = p.min_quantity || 0
+          })
+          currentSelections[addon.addon_item_id] = {
+            addonItemId: addon.addon_item_id,
+            selected: true,
+            quantity: 1,
+            parameterQuantities: defaultParamQtys,
+            dates: getDefaultAddonDates(addon),
+          }
+          hasChanges = true
+        }
+      }
+    })
+
+    if (hasChanges) {
+      onTentChange({ ...tent, addonSelections: currentSelections })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addons, getDefaultAddonDates])
+
+  // Fetch addon pricing — call calculate-pricing for each selected addon
+  useEffect(() => {
+    if (!addons || addons.length === 0) return
+
+    const selectedAddons = addons.filter(
+      (a) => tent.addonSelections[a.addon_item_id]?.selected
+    )
+
+    if (selectedAddons.length === 0) {
+      setAddonPricingMap({})
+      return
+    }
+
+    const fetchAllAddonPricing = async () => {
+      const newMap: typeof addonPricingMap = {}
+
+      selectedAddons.forEach((addon) => {
+        newMap[addon.addon_item_id] = {
+          parameterPricing: {},
+          parameterPricingModes: {},
+          loading: true,
+        }
+      })
+      setAddonPricingMap({ ...newMap })
+
+      await Promise.all(
+        selectedAddons.map(async (addon) => {
+          const sel = tent.addonSelections[addon.addon_item_id]
+          if (!sel) return
+
+          const checkIn = sel.dates?.from
+          const checkOut = sel.dates?.to
+
+          if (!checkIn || !checkOut) {
+            newMap[addon.addon_item_id] = {
+              parameterPricing: {},
+              parameterPricingModes: {},
+              loading: false,
+            }
+            return
+          }
+
+          try {
+            const params = new URLSearchParams({
+              itemId: addon.addon_item_id,
+              checkIn,
+              checkOut,
+            })
+
+            Object.entries(sel.parameterQuantities).forEach(([paramId, qty]) => {
+              if (qty > 0) {
+                params.append(`param_${paramId}`, qty.toString())
+              }
+            })
+
+            const response = await fetch(
+              `/api/glamping/booking/calculate-pricing?${params}`
+            )
+            const data = await response.json()
+
+            if (response.ok) {
+              const adjustedPricing: Record<string, number> = {}
+              const pct = addon.price_percentage / 100
+              Object.entries(data.parameterPricing || {}).forEach(
+                ([paramId, price]) => {
+                  adjustedPricing[paramId] = (price as number) * pct
+                }
+              )
+
+              newMap[addon.addon_item_id] = {
+                parameterPricing: adjustedPricing,
+                parameterPricingModes: data.parameterPricingModes || {},
+                loading: false,
+              }
+            } else {
+              newMap[addon.addon_item_id] = {
+                parameterPricing: {},
+                parameterPricingModes: {},
+                loading: false,
+              }
+            }
+          } catch {
+            newMap[addon.addon_item_id] = {
+              parameterPricing: {},
+              parameterPricingModes: {},
+              loading: false,
+            }
+          }
+        })
+      )
+
+      setAddonPricingMap({ ...newMap })
+    }
+
+    const timer = setTimeout(fetchAllAddonPricing, 600)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addons, tent.addonSelections, tent.dateRange])
+
+  // Sync computed addon pricing back into addonSelections
+  useEffect(() => {
+    if (!addons || addons.length === 0) return
+
+    const anyLoading = Object.values(addonPricingMap).some(p => p.loading)
+    if (anyLoading) return
+
+    const currentSelections = tent.addonSelections
+    let hasChanges = false
+    const updatedSelections = { ...currentSelections }
+
+    for (const addon of addons) {
+      const sel = currentSelections[addon.addon_item_id]
+      if (!sel || !sel.selected) continue
+
+      const addonPricing = addonPricingMap[addon.addon_item_id]
+      if (!addonPricing) continue
+
+      let computedTotal = 0
+      const computedParamPricing: Record<string, { unitPrice: number; pricingMode: string; paramName: string }> = {}
+
+      addon.parameters.forEach((param) => {
+        const qty = sel.parameterQuantities[param.id] || 0
+        const unitPrice = addonPricing.parameterPricing[param.id] || 0
+        const pricingMode = addonPricing.parameterPricingModes[param.id] || 'per_person'
+        const isPerGroup = pricingMode === 'per_group'
+        const paramTotal = isPerGroup ? unitPrice : unitPrice * qty
+        computedTotal += paramTotal
+
+        computedParamPricing[param.id] = {
+          unitPrice,
+          pricingMode,
+          paramName: getAddonName(param),
+        }
+      })
+
+      const addonName = getAddonName(addon)
+
+      if (
+        sel.totalPrice !== computedTotal ||
+        sel.addonName !== addonName ||
+        JSON.stringify(sel.parameterPricing) !== JSON.stringify(computedParamPricing)
+      ) {
+        updatedSelections[addon.addon_item_id] = {
+          ...sel,
+          totalPrice: computedTotal,
+          addonName,
+          parameterPricing: computedParamPricing,
+        }
+        hasChanges = true
+      }
+    }
+
+    if (hasChanges) {
+      onTentChange({ ...tent, addonSelections: updatedSelections })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addonPricingMap, addons])
+
+  // Addon event handlers
+  const handleAddonToggle = useCallback((addonItemId: string, selected: boolean, addon: ItemAddon) => {
+    const current = { ...tent.addonSelections }
+    if (selected) {
+      const defaultParamQtys: Record<string, number> = {}
+      addon.parameters.forEach((p) => {
+        defaultParamQtys[p.id] = p.min_quantity || 0
+      })
+      current[addonItemId] = {
+        addonItemId,
+        selected: true,
+        quantity: 1,
+        parameterQuantities: defaultParamQtys,
+        dates: getDefaultAddonDates(addon),
+      }
+    } else {
+      delete current[addonItemId]
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange, getDefaultAddonDates])
+
+  const handleAddonParamQtyChange = useCallback((addonItemId: string, paramId: string, delta: number, addon: ItemAddon) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel) return
+
+    const param = addon.parameters.find(p => p.id === paramId)
+    const min = param?.min_quantity || 0
+    const max = param?.max_quantity || 99
+    const currentQty = sel.parameterQuantities[paramId] || 0
+    const newQty = Math.max(min, Math.min(max, currentQty + delta))
+
+    current[addonItemId] = {
+      ...sel,
+      parameterQuantities: {
+        ...sel.parameterQuantities,
+        [paramId]: newQty,
+      },
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
+
+  const handleAddonSingleDateChange = useCallback((addonItemId: string, value: string) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel) return
+
+    const nextDay = new Date(value)
+    nextDay.setDate(nextDay.getDate() + 1)
+
+    current[addonItemId] = {
+      ...sel,
+      dates: { from: value, to: format(nextDay, 'yyyy-MM-dd') },
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
+
+  const handleAddonDateChange = useCallback((addonItemId: string, field: 'from' | 'to', value: string) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel) return
+
+    const currentDates = sel.dates || { from: '', to: '' }
+    current[addonItemId] = {
+      ...sel,
+      dates: {
+        ...currentDates,
+        [field]: value,
+      },
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
+
+  const handleAddonVoucherApplied = useCallback((addonItemId: string, voucher: AppliedVoucher) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel) return
+
+    current[addonItemId] = {
+      ...sel,
+      voucher: {
+        code: voucher.code,
+        id: voucher.id,
+        discountAmount: voucher.discountAmount,
+        discountType: voucher.discountType as 'percentage' | 'fixed',
+        discountValue: voucher.discountValue,
+      },
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
+
+  const handleAddonVoucherRemoved = useCallback((addonItemId: string) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel) return
+
+    current[addonItemId] = {
+      ...sel,
+      voucher: null,
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
 
   // Compute total guests counted for menu (combo limits)
   const totalCountedGuests = useMemo(() => {
@@ -404,6 +741,241 @@ export function AdminTentTabContent({
         />
       </div>
 
+      {/* Section 5: Add-ons (Common Items) */}
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-sm">5</span>
+          {locale === 'vi' ? 'Dịch vụ bổ sung' : 'Add-ons'}
+        </h3>
+
+        {addonsLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+            <span className="ml-2 text-sm text-gray-600">
+              {locale === 'vi' ? 'Đang tải dịch vụ bổ sung...' : 'Loading add-ons...'}
+            </span>
+          </div>
+        ) : addons.length === 0 ? (
+          <p className="text-sm text-gray-500 py-2">
+            {locale === 'vi' ? 'Không có dịch vụ bổ sung' : 'No add-ons available'}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {addons.map((addon) => {
+              const selection = tent.addonSelections[addon.addon_item_id]
+              const isSelected = selection?.selected || false
+
+              return (
+                <div
+                  key={addon.addon_item_id}
+                  className={`rounded-lg border p-3 transition-colors ${
+                    isSelected ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  {/* Addon Header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Package className="h-4 w-4 text-purple-600 shrink-0" />
+                      <span className="font-medium text-sm">{getAddonName(addon)}</span>
+                      {addon.is_required && (
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                          {locale === 'vi' ? 'Bắt buộc' : 'Required'}
+                        </Badge>
+                      )}
+                      {addon.price_percentage < 100 && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          {addon.price_percentage}%
+                        </Badge>
+                      )}
+                    </div>
+                    {!addon.is_required && (
+                      <Switch
+                        checked={isSelected}
+                        onCheckedChange={(checked) => handleAddonToggle(addon.addon_item_id, checked, addon)}
+                      />
+                    )}
+                  </div>
+
+                  {/* Addon Date - single date picker for inherit_parent */}
+                  {isSelected && addon.dates_setting === 'inherit_parent' && tent.dateRange?.from && tent.dateRange?.to && (() => {
+                    const parentFrom = format(tent.dateRange.from!, 'yyyy-MM-dd')
+                    const lastNight = new Date(tent.dateRange.to!)
+                    lastNight.setDate(lastNight.getDate() - 1)
+                    const parentMaxDate = format(lastNight, 'yyyy-MM-dd')
+
+                    return (
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="text-xs text-gray-600 shrink-0">{locale === 'vi' ? 'Ngày' : 'Date'}</span>
+                        <input
+                          type="date"
+                          className="w-32 text-xs border rounded px-2 py-1"
+                          value={selection?.dates?.from || parentFrom}
+                          min={parentFrom}
+                          max={parentMaxDate}
+                          onChange={(e) => handleAddonSingleDateChange(addon.addon_item_id, e.target.value)}
+                        />
+                      </div>
+                    )
+                  })()}
+
+                  {/* Addon Date - from/to for custom */}
+                  {isSelected && addon.dates_setting === 'custom' && (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600 shrink-0">{locale === 'vi' ? 'Từ ngày' : 'From'}</span>
+                        <input
+                          type="date"
+                          className="w-32 text-xs border rounded px-2 py-1"
+                          value={selection?.dates?.from || ''}
+                          min={addon.custom_start_date || undefined}
+                          max={selection?.dates?.to || addon.custom_end_date || undefined}
+                          onChange={(e) => handleAddonDateChange(addon.addon_item_id, 'from', e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600 shrink-0">{locale === 'vi' ? 'Đến ngày' : 'To'}</span>
+                        <input
+                          type="date"
+                          className="w-32 text-xs border rounded px-2 py-1"
+                          value={selection?.dates?.to || ''}
+                          min={selection?.dates?.from || addon.custom_start_date || undefined}
+                          max={addon.custom_end_date || undefined}
+                          onChange={(e) => handleAddonDateChange(addon.addon_item_id, 'to', e.target.value)}
+                        />
+                      </div>
+                      {addon.custom_start_date && addon.custom_end_date && (
+                        <p className="text-[10px] text-gray-400">
+                          {format(new Date(addon.custom_start_date), 'dd/MM/yyyy')} - {format(new Date(addon.custom_end_date), 'dd/MM/yyyy')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Addon Parameters */}
+                  {isSelected && addon.parameters.length > 0 && (() => {
+                    const addonPricing = addonPricingMap[addon.addon_item_id]
+                    return (
+                      <div className="space-y-2 mt-2">
+                        {addon.parameters.map((param) => {
+                          const qty = selection?.parameterQuantities[param.id] || 0
+                          const paramPrice = addonPricing?.parameterPricing[param.id]
+                          const pricingMode = addonPricing?.parameterPricingModes[param.id] || 'per_person'
+                          const isPerGroup = pricingMode === 'per_group'
+                          const paramTotal = paramPrice != null
+                            ? (isPerGroup ? paramPrice : paramPrice * qty)
+                            : null
+
+                          return (
+                            <div key={param.id}>
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className="text-xs text-gray-600">
+                                    {getAddonName(param)}
+                                  </span>
+                                  {addonPricing?.loading ? (
+                                    <div><Loader2 className="h-3 w-3 animate-spin text-gray-400" /></div>
+                                  ) : paramPrice != null && paramPrice > 0 ? (
+                                    <div className="text-xs text-gray-500">
+                                      {formatCurrency(paramPrice, locale, 'VND')}/{isPerGroup ? (locale === 'vi' ? 'nhóm' : 'group') : (locale === 'vi' ? 'người' : 'person')}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => handleAddonParamQtyChange(addon.addon_item_id, param.id, -1, addon)}
+                                    disabled={qty <= (param.min_quantity || 0)}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="text-sm font-medium w-6 text-center">{qty}</span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => handleAddonParamQtyChange(addon.addon_item_id, param.id, 1, addon)}
+                                    disabled={qty >= (param.max_quantity || 99)}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+
+                        {/* Addon total & voucher */}
+                        {!addonPricing?.loading && (() => {
+                          let addonTotal = 0
+                          addon.parameters.forEach((param) => {
+                            const qty = selection?.parameterQuantities[param.id] || 0
+                            const price = addonPricing?.parameterPricing[param.id] || 0
+                            const mode = addonPricing?.parameterPricingModes[param.id] || 'per_person'
+                            addonTotal += mode === 'per_group' ? price : price * qty
+                          })
+                          const voucherDiscount = selection?.voucher?.discountAmount || 0
+                          const addonFinalTotal = Math.max(0, addonTotal - voucherDiscount)
+                          return (
+                            <>
+                              {addonTotal > 0 && (
+                                <div className="flex justify-between items-center pt-2 mt-1 border-t border-purple-200">
+                                  <span className="text-xs text-gray-600">{locale === 'vi' ? 'Tổng dịch vụ' : 'Service total'}</span>
+                                  <span className="text-sm font-semibold text-purple-700">
+                                    {formatCurrency(addonTotal, locale, 'VND')}
+                                  </span>
+                                </div>
+                              )}
+
+                              {addonTotal > 0 && (
+                                <div className="mt-2">
+                                  <VoucherInput
+                                    itemId={addon.addon_item_id}
+                                    zoneId={zoneId}
+                                    totalAmount={addonTotal}
+                                    applicationType="common_item"
+                                    validationEndpoint="/api/glamping/validate-voucher"
+                                    locale={locale}
+                                    appliedVoucher={selection?.voucher ? {
+                                      id: selection.voucher.id,
+                                      code: selection.voucher.code,
+                                      name: '',
+                                      description: '',
+                                      discountType: selection.voucher.discountType,
+                                      discountValue: selection.voucher.discountValue,
+                                      discountAmount: selection.voucher.discountAmount,
+                                      isStackable: false,
+                                    } : null}
+                                    onVoucherApplied={(voucher) => handleAddonVoucherApplied(addon.addon_item_id, voucher)}
+                                    onVoucherRemoved={() => handleAddonVoucherRemoved(addon.addon_item_id)}
+                                  />
+                                </div>
+                              )}
+
+                              {voucherDiscount > 0 && addonTotal > 0 && (
+                                <div className="flex justify-between items-center pt-2 mt-1 border-t border-purple-200">
+                                  <span className="text-xs font-semibold text-gray-700">{locale === 'vi' ? 'Tổng sau voucher' : 'Total after voucher'}</span>
+                                  <span className="text-sm font-bold text-purple-700">
+                                    {formatCurrency(addonFinalTotal, locale, 'VND')}
+                                  </span>
+                                </div>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Tent Total Summary */}
       {tent.pricingBreakdown && (
         <Card className="bg-blue-50 border-blue-200">
@@ -458,6 +1030,34 @@ export function AdminTentTabContent({
                 )
               })()}
 
+              {/* Addon costs */}
+              {(() => {
+                const addonTotal = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
+                  if (!sel || !sel.selected) return sum
+                  return sum + (sel.totalPrice || 0)
+                }, 0)
+                const addonDiscount = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
+                  if (!sel || !sel.selected) return sum
+                  return sum + (sel.voucher?.discountAmount || 0)
+                }, 0)
+
+                if (addonTotal <= 0) return null
+                return (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">{locale === 'vi' ? 'Dịch vụ bổ sung' : 'Add-ons'}</span>
+                      <span className="font-medium">{formatCurrency(addonTotal, locale, 'VND')}</span>
+                    </div>
+                    {addonDiscount > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>{locale === 'vi' ? 'Voucher dịch vụ' : 'Add-on vouchers'}</span>
+                        <span>-{formatCurrency(addonDiscount, locale, 'VND')}</span>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+
               {/* Total */}
               <div className="border-t border-blue-300 pt-2 mt-2 flex justify-between font-bold text-base">
                 <span>{locale === 'vi' ? 'Tổng cộng' : 'Total'}</span>
@@ -477,7 +1077,15 @@ export function AdminTentTabContent({
                         .filter(p => p.quantity > 0 && p.voucher?.discountAmount)
                         .reduce((s, p) => s + (p.voucher?.discountAmount || 0), 0)
                     }, 0)
-                    return formatCurrency(accommodation - accDiscount + menuTotal - menuDiscount, locale, 'VND')
+                    const addonTotal = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
+                      if (!sel || !sel.selected) return sum
+                      return sum + (sel.totalPrice || 0)
+                    }, 0)
+                    const addonDiscount = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
+                      if (!sel || !sel.selected) return sum
+                      return sum + (sel.voucher?.discountAmount || 0)
+                    }, 0)
+                    return formatCurrency(accommodation - accDiscount + menuTotal - menuDiscount + addonTotal - addonDiscount, locale, 'VND')
                   })()}
                 </span>
               </div>

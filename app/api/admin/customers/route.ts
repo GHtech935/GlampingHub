@@ -157,8 +157,8 @@ export async function GET(request: NextRequest) {
       last_name: row.last_name,
       phone: row.phone,
       country: row.country,
-      total_bookings: row.total_bookings,
-      total_spent: parseFloat(row.total_spent || "0"),
+      total_bookings: parseInt(String(row.total_bookings || "0")),
+      total_spent: parseFloat(String(row.total_spent || "0")),
       last_booking_date: row.last_booking_date,
       created_at: row.created_at,
     }));

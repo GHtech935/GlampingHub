@@ -17,15 +17,39 @@ export async function PUT(
     }
 
     const isAdmin = session.role === "admin";
+    const isGlampingOwner = session.role === "glamping_owner";
     const isOwnerEditingSelf = (session.role === "owner" || session.role === "glamping_owner") && session.id === id;
 
-    if (!isAdmin && !isOwnerEditingSelf) {
+    const body = await request.json();
+
+    // Check if this is an email change request from glamping_owner
+    const isEmailChangeByGlampingOwner = isGlampingOwner && body.email !== undefined && session.id !== id;
+
+    if (!isAdmin && !isOwnerEditingSelf && !isEmailChangeByGlampingOwner) {
       return NextResponse.json({ error: "Unauthorized to update this user" }, { status: 403 });
     }
 
-    const hasUserCampsites = await tableExists('user_campsites');
+    // Authorization for glamping_owner changing email of other users
+    if (isEmailChangeByGlampingOwner) {
+      // Don't allow changing email of admin users
+      const targetUserResult = await pool.query('SELECT role FROM users WHERE id = $1', [id]);
+      if (targetUserResult.rows.length > 0 && targetUserResult.rows[0].role === 'admin') {
+        return NextResponse.json({ error: "Cannot change email of admin users" }, { status: 403 });
+      }
 
-    const body = await request.json();
+      // Check if target user shares at least one zone with the glamping_owner
+      const sharedZoneResult = await pool.query(
+        `SELECT COUNT(*) as cnt FROM user_glamping_zones ugz1
+         INNER JOIN user_glamping_zones ugz2 ON ugz1.zone_id = ugz2.zone_id
+         WHERE ugz1.user_id = $1 AND ugz2.user_id = $2`,
+        [session.id, id]
+      );
+      if (parseInt(sharedZoneResult.rows[0].cnt) === 0) {
+        return NextResponse.json({ error: "You can only change email of users in your zones" }, { status: 403 });
+      }
+    }
+
+    const hasUserCampsites = await tableExists('user_campsites');
 
     // If owner or glamping_owner is editing themselves, only allow specific fields
     if (isOwnerEditingSelf) {
@@ -44,6 +68,7 @@ export async function PUT(
     const {
       first_name,
       last_name,
+      email,
       phone,
       role,
       campsite_ids,  // Array of campsite IDs for operations/owner (DEPRECATED)
@@ -63,7 +88,7 @@ export async function PUT(
     const normalizedRole = role?.trim();
 
     const existingUserResult = await pool.query(
-      'SELECT role, permissions FROM users WHERE id = $1',
+      'SELECT role, permissions, email FROM users WHERE id = $1',
       [id]
     );
 
@@ -73,6 +98,23 @@ export async function PUT(
 
     const existingUser = existingUserResult.rows[0];
     const effectiveRole = normalizedRole || existingUser.role;
+
+    // Validate email if being changed
+    if (email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return NextResponse.json({ error: "Email không hợp lệ" }, { status: 400 });
+      }
+
+      // Check for duplicate email
+      const duplicateCheck = await pool.query(
+        'SELECT id FROM users WHERE email = $1 AND id != $2',
+        [email.toLowerCase().trim(), id]
+      );
+      if (duplicateCheck.rows.length > 0) {
+        return NextResponse.json({ error: "Email này đã được sử dụng bởi tài khoản khác" }, { status: 400 });
+      }
+    }
 
     // Validate bank account fields if provided
     if (owner_account_number !== undefined) {
@@ -111,6 +153,12 @@ export async function PUT(
     if (last_name !== undefined) {
       updates.push(`last_name = $${paramIndex}`);
       values.push(last_name);
+      paramIndex++;
+    }
+
+    if (email !== undefined) {
+      updates.push(`email = $${paramIndex}`);
+      values.push(email.toLowerCase().trim());
       paramIndex++;
     }
 
@@ -310,6 +358,13 @@ export async function PUT(
       role: role,
       updated_by: session.id
     };
+
+    // Log email change
+    if (email !== undefined && email.toLowerCase().trim() !== existingUser.email) {
+      activityMetadata.email_changed = true;
+      activityMetadata.old_email = existingUser.email;
+      activityMetadata.new_email = email.toLowerCase().trim();
+    }
 
     // Log bank account updates (mask account number for privacy)
     if (owner_bank_name !== undefined || owner_account_number !== undefined ||
