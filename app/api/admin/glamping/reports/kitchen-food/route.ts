@@ -27,13 +27,16 @@ export async function GET(request: NextRequest) {
     const values: any[] = [];
     let paramIndex = 1;
 
-    // Date filter - use serving_date from menu products
-    conditions.push(`bmp.serving_date = $${paramIndex}`);
+    // Store date parameter for later use in query
+    const dateParam = date;
     values.push(date);
     paramIndex++;
 
     // Only include active bookings (not cancelled, pending, or checked_out)
     conditions.push(`b.status NOT IN ('cancelled', 'pending', 'checked_out')`);
+
+    // Only include bookings where the selected date falls within the booking period
+    conditions.push(`b.check_in_date <= $1 AND b.check_out_date > $1`);
 
     // Zone access control
     if (accessibleZoneIds !== null) {
@@ -42,10 +45,10 @@ export async function GET(request: NextRequest) {
           summary: {
             date,
             totalTents: 0,
-            totalAdults: 0,
-            totalChildren: 0,
+            parametersSummary: [],
             aggregatedMenuItems: [],
             aggregatedCommonItems: [],
+            aggregatedAdditionalCosts: [],
           },
           data: [],
         });
@@ -70,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    // Main query: Get all menu products for the date with booking and tent info
+    // Main query: Get all tents with their menu products (including tents without products)
     const dataQuery = `
       SELECT
         b.id as booking_id,
@@ -89,11 +92,11 @@ export async function GET(request: NextRequest) {
         bmp.quantity,
         bmp.quantity * COALESCE(mi.min_guests, 1) as adjusted_quantity,
         bmp.notes
-      FROM glamping_booking_menu_products bmp
-      JOIN glamping_booking_tents bt ON bmp.booking_tent_id = bt.id
-      JOIN glamping_bookings b ON bmp.booking_id = b.id
+      FROM glamping_bookings b
+      JOIN glamping_booking_tents bt ON bt.booking_id = b.id
       JOIN glamping_items gi ON bt.item_id = gi.id
-      JOIN glamping_menu_items mi ON bmp.menu_item_id = mi.id
+      LEFT JOIN glamping_booking_menu_products bmp ON bmp.booking_tent_id = bt.id AND bmp.serving_date = $1
+      LEFT JOIN glamping_menu_items mi ON bmp.menu_item_id = mi.id
       LEFT JOIN customers c ON b.customer_id = c.id
       ${whereClause}
       ORDER BY b.booking_code, bt.display_order, mi.name
@@ -103,11 +106,11 @@ export async function GET(request: NextRequest) {
 
     // Fetch parameters for all tents
     const tentIds = [...new Set(dataResult.rows.map((r: any) => r.tent_id))];
-    let paramsByTentId = new Map<string, Array<{ label: string; quantity: number }>>();
+    let paramsByTentId = new Map<string, Array<{ label: string; quantity: number; countedForMenu?: boolean }>>();
 
     if (tentIds.length > 0) {
       const paramsResult = await client.query(
-        `SELECT bp.booking_tent_id, bp.label, bp.booked_quantity
+        `SELECT bp.booking_tent_id, bp.label, bp.booked_quantity, p.counted_for_menu
          FROM glamping_booking_parameters bp
          JOIN glamping_parameters p ON bp.parameter_id = p.id
          WHERE bp.booking_tent_id = ANY($1::uuid[])
@@ -121,6 +124,7 @@ export async function GET(request: NextRequest) {
         paramsByTentId.get(row.booking_tent_id)!.push({
           label: row.label,
           quantity: row.booked_quantity,
+          countedForMenu: row.counted_for_menu,
         });
       }
     }
@@ -163,6 +167,30 @@ export async function GET(request: NextRequest) {
       return String(value);
     };
 
+    // Fetch additional costs for all bookings
+    let additionalCostsByBookingId = new Map<string, Array<{ name: string; quantity: number; notes: string | null }>>();
+
+    if (bookingIds.length > 0) {
+      const additionalCostsResult = await client.query(
+        `SELECT ac.booking_id, ac.name, ac.quantity, ac.notes
+         FROM glamping_booking_additional_costs ac
+         WHERE ac.booking_id = ANY($1::uuid[])
+         ORDER BY ac.created_at`,
+        [bookingIds]
+      );
+
+      for (const row of additionalCostsResult.rows) {
+        if (!additionalCostsByBookingId.has(row.booking_id)) {
+          additionalCostsByBookingId.set(row.booking_id, []);
+        }
+        additionalCostsByBookingId.get(row.booking_id)!.push({
+          name: row.name,
+          quantity: row.quantity,
+          notes: row.notes,
+        });
+      }
+    }
+
     // Fetch common items (addons) for all bookings
     let commonItemsByTentId = new Map<string, Array<{ itemName: string; parameterName: string; quantity: number }>>();
 
@@ -195,6 +223,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Aggregated menu items summary query
+    // Build WHERE clause for summary that includes date filter
+    const summaryConditions = ['bmp.serving_date = $1', ...conditions];
+    const summaryWhereClause = `WHERE ${summaryConditions.join(" AND ")}`;
+
     const summaryQuery = `
       SELECT
         mi.name as menu_item_name,
@@ -206,7 +238,7 @@ export async function GET(request: NextRequest) {
       JOIN glamping_bookings b ON bmp.booking_id = b.id
       JOIN glamping_items gi ON bt.item_id = gi.id
       JOIN glamping_menu_items mi ON bmp.menu_item_id = mi.id
-      ${whereClause}
+      ${summaryWhereClause}
       GROUP BY mi.id, mi.name, mi.unit, mi.min_guests
       ORDER BY mi.name
     `;
@@ -237,6 +269,25 @@ export async function GET(request: NextRequest) {
       }));
     }
 
+    // Aggregated additional costs summary
+    let aggregatedAdditionalCosts: Array<{ name: string; totalQuantity: number }> = [];
+
+    if (bookingIds.length > 0) {
+      const additionalCostsSummaryResult = await client.query(
+        `SELECT ac.name, SUM(ac.quantity) as total_quantity
+         FROM glamping_booking_additional_costs ac
+         WHERE ac.booking_id = ANY($1::uuid[])
+         GROUP BY ac.name
+         ORDER BY ac.name`,
+        [bookingIds]
+      );
+
+      aggregatedAdditionalCosts = additionalCostsSummaryResult.rows.map((row: any) => ({
+        name: row.name,
+        totalQuantity: parseInt(row.total_quantity) || 0,
+      }));
+    }
+
     // Transform data into nested structure by booking
     const bookingsMap = new Map<string, {
       bookingId: string;
@@ -244,11 +295,12 @@ export async function GET(request: NextRequest) {
       bookerName: string;
       photoConsent: boolean | null;
       notes: Array<{ id: string; authorName: string; content: string; createdAt: string }>;
+      additionalCosts: Array<{ name: string; quantity: number; notes: string | null }>;
       tents: Map<string, {
         tentId: string;
         itemId: string;
         itemName: string;
-        parameters: Array<{ label: string; quantity: number }>;
+        parameters: Array<{ label: string; quantity: number; countedForMenu?: boolean }>;
         displayOrder: number;
         menuProducts: {
           menuItemId: string;
@@ -280,6 +332,7 @@ export async function GET(request: NextRequest) {
           bookerName: `${firstName} ${lastName}`.trim() || "Unknown",
           photoConsent: row.photo_consent,
           notes: notesByBookingId.get(bookingId) || [],
+          additionalCosts: additionalCostsByBookingId.get(bookingId) || [],
           tents: new Map(),
         });
       }
@@ -308,15 +361,18 @@ export async function GET(request: NextRequest) {
       }
 
       const tent = booking.tents.get(tentId)!;
-      tent.menuProducts.push({
-        menuItemId: row.menu_item_id,
-        menuItemName: getLocalizedString(row.menu_item_name),
-        menuItemUnit: getLocalizedString(row.menu_item_unit),
-        minGuests: row.min_guests ? parseInt(row.min_guests) : null,
-        quantity: row.quantity,
-        adjustedQuantity: parseInt(row.adjusted_quantity) || row.quantity,
-        notes: row.notes || null,
-      });
+      // Only add menu product if menu_item_id exists (not NULL from LEFT JOIN)
+      if (row.menu_item_id) {
+        tent.menuProducts.push({
+          menuItemId: row.menu_item_id,
+          menuItemName: getLocalizedString(row.menu_item_name),
+          menuItemUnit: getLocalizedString(row.menu_item_unit),
+          minGuests: row.min_guests ? parseInt(row.min_guests) : null,
+          quantity: row.quantity,
+          adjustedQuantity: parseInt(row.adjusted_quantity) || row.quantity,
+          notes: row.notes || null,
+        });
+      }
     }
 
     // Convert to array format
@@ -326,6 +382,7 @@ export async function GET(request: NextRequest) {
       bookerName: booking.bookerName,
       photoConsent: booking.photoConsent,
       notes: booking.notes,
+      additionalCosts: booking.additionalCosts,
       tentCount: booking.tents.size,
       tents: Array.from(booking.tents.values())
         .sort((a, b) => a.displayOrder - b.displayOrder)
@@ -360,6 +417,7 @@ export async function GET(request: NextRequest) {
         parametersSummary,
         aggregatedMenuItems,
         aggregatedCommonItems,
+        aggregatedAdditionalCosts,
       },
       data,
     });

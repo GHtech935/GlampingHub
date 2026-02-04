@@ -669,7 +669,7 @@ export async function POST(request: NextRequest) {
           } else {
             depositDue = depositValue;
           }
-          balanceDue = totalAmount - depositDue;
+          balanceDue = totalAmount;  // Full amount due since no payments made yet
         }
       }
 
@@ -1790,7 +1790,7 @@ export async function POST(request: NextRequest) {
           // fixed, per_day, per_hour, per_quantity
           depositDue = depositValue;
         }
-        balanceDue = totalAmount - depositDue;
+        balanceDue = totalAmount;  // Full amount due since no payments made yet
       }
     }
 

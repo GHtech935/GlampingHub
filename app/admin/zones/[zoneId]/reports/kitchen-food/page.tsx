@@ -39,12 +39,19 @@ interface MenuProduct {
 interface TentParameter {
   label: string;
   quantity: number;
+  countedForMenu?: boolean;
 }
 
 interface CommonItemRow {
   itemName: string;
   parameterName: string;
   quantity: number;
+}
+
+interface AdditionalCost {
+  name: string;
+  quantity: number;
+  notes: string | null;
 }
 
 interface TentData {
@@ -63,6 +70,7 @@ interface BookingData {
   photoConsent: boolean | null;
   tentCount: number;
   notes: BookingNote[];
+  additionalCosts: AdditionalCost[];
   tents: TentData[];
 }
 
@@ -90,12 +98,18 @@ interface Summary {
   parametersSummary: ParameterSummary[];
   aggregatedMenuItems: AggregatedMenuItem[];
   aggregatedCommonItems: AggregatedCommonItem[];
+  aggregatedAdditionalCosts: Array<{
+    name: string;
+    totalQuantity: number;
+  }>;
 }
 
 interface FlatRow {
   isFirstRowOfBooking: boolean;
   isFirstRowOfTent: boolean;
   isCommonItem: boolean;
+  isAdditionalCost: boolean;
+  isEmptyTent: boolean;
   bookingId: string;
   bookingCode: string;
   bookerName: string;
@@ -110,6 +124,7 @@ interface FlatRow {
   parameters: TentParameter[];
   notes: string | null;
   bookingNotes: BookingNote[];
+  guestCount?: number;
 }
 
 export default function KitchenFoodReportPage() {
@@ -193,55 +208,154 @@ export default function KitchenFoodReportPage() {
     const rows: FlatRow[] = [];
     data.forEach((booking) => {
       let isFirstRowOfBooking = true;
+      let isFirstTentInBooking = true;
+
       booking.tents.forEach((tent) => {
         let isFirstRowOfTent = true;
-        tent.menuProducts.forEach((product) => {
-          rows.push({
-            isFirstRowOfBooking,
-            isFirstRowOfTent,
-            isCommonItem: false,
-            bookingId: booking.bookingId,
-            bookingCode: booking.bookingCode,
-            bookerName: booking.bookerName,
-            photoConsent: booking.photoConsent,
-            tentCount: booking.tentCount,
-            itemName: tent.itemName,
-            menuItemName: product.menuItemName,
-            menuItemUnit: product.menuItemUnit || "",
-            minGuests: product.minGuests,
-            quantity: product.quantity,
-            adjustedQuantity: product.adjustedQuantity,
-            parameters: tent.parameters || [],
-            notes: product.notes,
-            bookingNotes: booking.notes || [],
+        const hasMenuProducts = tent.menuProducts && tent.menuProducts.length > 0;
+        const hasCommonItems = tent.commonItems && tent.commonItems.length > 0;
+
+        if (hasMenuProducts || hasCommonItems) {
+          // Process menu products
+          tent.menuProducts.forEach((product) => {
+            rows.push({
+              isFirstRowOfBooking,
+              isFirstRowOfTent,
+              isCommonItem: false,
+              isAdditionalCost: false,
+              isEmptyTent: false,
+              bookingId: booking.bookingId,
+              bookingCode: booking.bookingCode,
+              bookerName: booking.bookerName,
+              photoConsent: booking.photoConsent,
+              tentCount: booking.tentCount,
+              itemName: tent.itemName,
+              menuItemName: product.menuItemName,
+              menuItemUnit: product.menuItemUnit || "",
+              minGuests: product.minGuests,
+              quantity: product.quantity,
+              adjustedQuantity: product.adjustedQuantity,
+              parameters: tent.parameters || [],
+              notes: product.notes,
+              bookingNotes: booking.notes || [],
+            });
+            isFirstRowOfBooking = false;
+            isFirstRowOfTent = false;
           });
-          isFirstRowOfBooking = false;
-          isFirstRowOfTent = false;
-        });
-        // Common items after menu products
-        (tent.commonItems || []).forEach((ci) => {
+
+          // Common items after menu products
+          (tent.commonItems || []).forEach((ci) => {
+            rows.push({
+              isFirstRowOfBooking,
+              isFirstRowOfTent,
+              isCommonItem: true,
+              isAdditionalCost: false,
+              isEmptyTent: false,
+              bookingId: booking.bookingId,
+              bookingCode: booking.bookingCode,
+              bookerName: booking.bookerName,
+              photoConsent: booking.photoConsent,
+              tentCount: booking.tentCount,
+              itemName: tent.itemName,
+              menuItemName: ci.itemName,
+              menuItemUnit: ci.parameterName || "",
+              minGuests: null,
+              quantity: ci.quantity,
+              adjustedQuantity: ci.quantity,
+              parameters: tent.parameters || [],
+              notes: null,
+              bookingNotes: booking.notes || [],
+            });
+            isFirstRowOfBooking = false;
+            isFirstRowOfTent = false;
+          });
+
+          // Insert additional costs on first tent, after its products
+          if (isFirstTentInBooking && booking.additionalCosts && booking.additionalCosts.length > 0) {
+            booking.additionalCosts.forEach((cost) => {
+              rows.push({
+                isFirstRowOfBooking,
+                isFirstRowOfTent: false,
+                isCommonItem: false,
+                isAdditionalCost: true,
+                isEmptyTent: false,
+                bookingId: booking.bookingId,
+                bookingCode: booking.bookingCode,
+                bookerName: booking.bookerName,
+                photoConsent: booking.photoConsent,
+                tentCount: booking.tentCount,
+                itemName: tent.itemName,
+                menuItemName: cost.name,
+                menuItemUnit: "",
+                minGuests: null,
+                quantity: cost.quantity,
+                adjustedQuantity: cost.quantity,
+                parameters: tent.parameters || [],
+                notes: cost.notes,
+                bookingNotes: booking.notes || [],
+              });
+              isFirstRowOfBooking = false;
+            });
+          }
+        } else {
+          // Empty tent - no menu products or common items
+          const guestCount = (tent.parameters || [])
+            .filter(p => p.countedForMenu)
+            .reduce((sum, p) => sum + p.quantity, 0);
+
           rows.push({
             isFirstRowOfBooking,
-            isFirstRowOfTent,
-            isCommonItem: true,
+            isFirstRowOfTent: true,
+            isCommonItem: false,
+            isAdditionalCost: false,
+            isEmptyTent: true,
             bookingId: booking.bookingId,
             bookingCode: booking.bookingCode,
             bookerName: booking.bookerName,
             photoConsent: booking.photoConsent,
             tentCount: booking.tentCount,
             itemName: tent.itemName,
-            menuItemName: ci.itemName,
-            menuItemUnit: ci.parameterName || "",
+            menuItemName: "",
+            menuItemUnit: "",
             minGuests: null,
-            quantity: ci.quantity,
-            adjustedQuantity: ci.quantity,
+            quantity: 0,
+            adjustedQuantity: 0,
             parameters: tent.parameters || [],
             notes: null,
             bookingNotes: booking.notes || [],
+            guestCount,
           });
           isFirstRowOfBooking = false;
-          isFirstRowOfTent = false;
-        });
+
+          // Insert additional costs on first (empty) tent
+          if (isFirstTentInBooking && booking.additionalCosts && booking.additionalCosts.length > 0) {
+            booking.additionalCosts.forEach((cost) => {
+              rows.push({
+                isFirstRowOfBooking: false,
+                isFirstRowOfTent: false,
+                isCommonItem: false,
+                isAdditionalCost: true,
+                isEmptyTent: false,
+                bookingId: booking.bookingId,
+                bookingCode: booking.bookingCode,
+                bookerName: booking.bookerName,
+                photoConsent: booking.photoConsent,
+                tentCount: booking.tentCount,
+                itemName: tent.itemName,
+                menuItemName: cost.name,
+                menuItemUnit: "",
+                minGuests: null,
+                quantity: cost.quantity,
+                adjustedQuantity: cost.quantity,
+                parameters: tent.parameters || [],
+                notes: cost.notes,
+                bookingNotes: booking.notes || [],
+              });
+            });
+          }
+        }
+
+        isFirstTentInBooking = false;
       });
     });
     return rows;
@@ -371,6 +485,32 @@ export default function KitchenFoodReportPage() {
       worksheet.addRow([]);
     }
 
+    // Additional costs summary rows
+    if (summary.aggregatedAdditionalCosts && summary.aggregatedAdditionalCosts.length > 0) {
+      const acLabelRow = worksheet.addRow([locale === "vi" ? "CHI PHÍ BỔ SUNG" : "ADDITIONAL COSTS", "", ""]);
+      acLabelRow.getCell(1).font = { bold: true, color: { argb: 'FF7C3AED' } };
+      acLabelRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3E8FF' } };
+      acLabelRow.eachCell((cell, colNumber) => {
+        if (colNumber <= 3) {
+          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        }
+      });
+
+      summary.aggregatedAdditionalCosts.forEach((cost) => {
+        const row = worksheet.addRow([cost.name, cost.totalQuantity, ""]);
+        row.getCell(1).font = { color: { argb: 'FF7C3AED' } };
+        row.getCell(1).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        row.getCell(2).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        row.getCell(2).alignment = { horizontal: 'center' };
+        row.getCell(3).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        row.getCell(3).alignment = { horizontal: 'center' };
+      });
+
+      // Empty rows after additional costs
+      worksheet.addRow([]);
+      worksheet.addRow([]);
+    }
+
     // ===== DETAILED BOOKING TABLE =====
     // Get unique parameter labels for dynamic columns
     const allParamLabels = new Set<string>();
@@ -417,39 +557,113 @@ export default function KitchenFoodReportPage() {
 
     // Data rows - expand each booking with notes
     data.forEach((booking) => {
-      // Build flat product rows (menu products + common items) for this booking
-      const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean }; isFirstOfTent: boolean }[] = [];
-      booking.tents.forEach(tent => {
-        tent.menuProducts.forEach((product, idx) => {
-          menuProductRows.push({
-            tent,
-            product: {
-              menuItemName: product.menuItemName,
-              menuItemUnit: product.menuItemUnit,
-              minGuests: product.minGuests,
-              adjustedQuantity: product.adjustedQuantity,
-              notes: product.notes,
-              isCommonItem: false
-            },
-            isFirstOfTent: idx === 0
-          });
-        });
+      // Build flat product rows (menu products + common items + additional costs + empty tents) for this booking
+      const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean; isAdditionalCost: boolean; isEmptyTent: boolean; guestCount?: number }; isFirstOfTent: boolean }[] = [];
+      let isFirstTentInBooking = true;
 
-        // Add common items
-        (tent.commonItems || []).forEach((ci, idx) => {
+      booking.tents.forEach(tent => {
+        const hasMenuProducts = tent.menuProducts && tent.menuProducts.length > 0;
+        const hasCommonItems = tent.commonItems && tent.commonItems.length > 0;
+
+        if (hasMenuProducts || hasCommonItems) {
+          tent.menuProducts.forEach((product, idx) => {
+            menuProductRows.push({
+              tent,
+              product: {
+                menuItemName: product.menuItemName,
+                menuItemUnit: product.menuItemUnit,
+                minGuests: product.minGuests,
+                adjustedQuantity: product.adjustedQuantity,
+                notes: product.notes,
+                isCommonItem: false,
+                isAdditionalCost: false,
+                isEmptyTent: false
+              },
+              isFirstOfTent: idx === 0
+            });
+          });
+
+          // Add common items
+          (tent.commonItems || []).forEach((ci, idx) => {
+            menuProductRows.push({
+              tent,
+              product: {
+                menuItemName: ci.itemName,
+                menuItemUnit: ci.parameterName || "",
+                minGuests: null,
+                adjustedQuantity: ci.quantity,
+                notes: null,
+                isCommonItem: true,
+                isAdditionalCost: false,
+                isEmptyTent: false
+              },
+              isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+            });
+          });
+
+          // Add additional costs on first tent
+          if (isFirstTentInBooking && booking.additionalCosts && booking.additionalCosts.length > 0) {
+            booking.additionalCosts.forEach((cost) => {
+              menuProductRows.push({
+                tent,
+                product: {
+                  menuItemName: cost.name,
+                  menuItemUnit: "",
+                  minGuests: null,
+                  adjustedQuantity: cost.quantity,
+                  notes: cost.notes,
+                  isCommonItem: false,
+                  isAdditionalCost: true,
+                  isEmptyTent: false
+                },
+                isFirstOfTent: false
+              });
+            });
+          }
+        } else {
+          // Empty tent
+          const guestCount = (tent.parameters || [])
+            .filter(p => p.countedForMenu)
+            .reduce((sum, p) => sum + p.quantity, 0);
+
           menuProductRows.push({
             tent,
             product: {
-              menuItemName: ci.itemName,
-              menuItemUnit: ci.parameterName || "",
+              menuItemName: "",
+              menuItemUnit: "",
               minGuests: null,
-              adjustedQuantity: ci.quantity,
+              adjustedQuantity: 0,
               notes: null,
-              isCommonItem: true
+              isCommonItem: false,
+              isAdditionalCost: false,
+              isEmptyTent: true,
+              guestCount
             },
-            isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+            isFirstOfTent: true
           });
-        });
+
+          // Add additional costs on first (empty) tent
+          if (isFirstTentInBooking && booking.additionalCosts && booking.additionalCosts.length > 0) {
+            booking.additionalCosts.forEach((cost) => {
+              menuProductRows.push({
+                tent,
+                product: {
+                  menuItemName: cost.name,
+                  menuItemUnit: "",
+                  minGuests: null,
+                  adjustedQuantity: cost.quantity,
+                  notes: cost.notes,
+                  isCommonItem: false,
+                  isAdditionalCost: true,
+                  isEmptyTent: false
+                },
+                isFirstOfTent: false
+              });
+            });
+          }
+        }
+
+        isFirstTentInBooking = false;
       });
 
       // Update maxRows calculation
@@ -475,10 +689,21 @@ export default function KitchenFoodReportPage() {
         const combinedNotes = noteParts.join(" | ");
 
         // Display adjusted quantity and "combo 1 khách" unit if minGuests > 0
-        const displayQuantity = menuRow?.product.adjustedQuantity || "";
-        const displayUnit = menuRow?.product.minGuests && menuRow.product.minGuests > 0
-          ? "combo 1 khách"
-          : (menuRow?.product.menuItemUnit || "");
+        let displayQuantity: string | number = "";
+        let displayUnit = "";
+        let displayMenuItemName = "";
+
+        if (menuRow?.product.isEmptyTent) {
+          displayMenuItemName = locale === "vi" ? `${menuRow.product.guestCount} khách` : `${menuRow.product.guestCount} guests`;
+          displayQuantity = "";
+          displayUnit = "";
+        } else if (menuRow) {
+          displayMenuItemName = menuRow.product.menuItemName;
+          displayQuantity = menuRow.product.adjustedQuantity;
+          displayUnit = menuRow.product.minGuests && menuRow.product.minGuests > 0
+            ? "combo 1 khách"
+            : (menuRow.product.menuItemUnit || "");
+        }
 
         const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
         const dataRow = worksheet.addRow([
@@ -486,7 +711,7 @@ export default function KitchenFoodReportPage() {
           i === 0 ? booking.bookingCode : "",
           i === 0 ? booking.bookerName : "",
           menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
-          menuRow?.product.menuItemName || "",
+          displayMenuItemName,
           displayQuantity,
           displayUnit,
           ...paramValues,
@@ -501,6 +726,23 @@ export default function KitchenFoodReportPage() {
         // Highlight tent rows
         if (menuRow?.isFirstOfTent) {
           dataRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
+        }
+
+        // Highlight additional costs with purple
+        if (menuRow?.product.isAdditionalCost) {
+          dataRow.getCell(5).font = { color: { argb: 'FF7C3AED' }, bold: true };
+          dataRow.getCell(6).font = { color: { argb: 'FF7C3AED' }, bold: true };
+        }
+
+        // Highlight common items with blue
+        if (menuRow?.product.isCommonItem) {
+          dataRow.getCell(5).font = { color: { argb: 'FF1D4ED8' } };
+          dataRow.getCell(6).font = { color: { argb: 'FF1D4ED8' }, bold: true };
+        }
+
+        // Highlight empty tents with gray italic
+        if (menuRow?.product.isEmptyTent) {
+          dataRow.getCell(5).font = { color: { argb: 'FF9CA3AF' }, italic: true };
         }
       }
     });
@@ -544,38 +786,112 @@ export default function KitchenFoodReportPage() {
     // Build export data with expanded rows for booking notes
     const exportData: Record<string, any>[] = [];
     data.forEach((booking) => {
-      const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean }; isFirstOfTent: boolean }[] = [];
-      booking.tents.forEach(tent => {
-        tent.menuProducts.forEach((product, idx) => {
-          menuProductRows.push({
-            tent,
-            product: {
-              menuItemName: product.menuItemName,
-              menuItemUnit: product.menuItemUnit,
-              minGuests: product.minGuests,
-              adjustedQuantity: product.adjustedQuantity,
-              notes: product.notes,
-              isCommonItem: false
-            },
-            isFirstOfTent: idx === 0
-          });
-        });
+      const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean; isAdditionalCost: boolean; isEmptyTent: boolean; guestCount?: number }; isFirstOfTent: boolean }[] = [];
+      let isFirstTentInBooking = true;
 
-        // Add common items
-        (tent.commonItems || []).forEach((ci, idx) => {
+      booking.tents.forEach(tent => {
+        const hasMenuProducts = tent.menuProducts && tent.menuProducts.length > 0;
+        const hasCommonItems = tent.commonItems && tent.commonItems.length > 0;
+
+        if (hasMenuProducts || hasCommonItems) {
+          tent.menuProducts.forEach((product, idx) => {
+            menuProductRows.push({
+              tent,
+              product: {
+                menuItemName: product.menuItemName,
+                menuItemUnit: product.menuItemUnit,
+                minGuests: product.minGuests,
+                adjustedQuantity: product.adjustedQuantity,
+                notes: product.notes,
+                isCommonItem: false,
+                isAdditionalCost: false,
+                isEmptyTent: false
+              },
+              isFirstOfTent: idx === 0
+            });
+          });
+
+          // Add common items
+          (tent.commonItems || []).forEach((ci, idx) => {
+            menuProductRows.push({
+              tent,
+              product: {
+                menuItemName: ci.itemName,
+                menuItemUnit: ci.parameterName || "",
+                minGuests: null,
+                adjustedQuantity: ci.quantity,
+                notes: null,
+                isCommonItem: true,
+                isAdditionalCost: false,
+                isEmptyTent: false
+              },
+              isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+            });
+          });
+
+          // Add additional costs on first tent
+          if (isFirstTentInBooking && booking.additionalCosts && booking.additionalCosts.length > 0) {
+            booking.additionalCosts.forEach((cost) => {
+              menuProductRows.push({
+                tent,
+                product: {
+                  menuItemName: cost.name,
+                  menuItemUnit: "",
+                  minGuests: null,
+                  adjustedQuantity: cost.quantity,
+                  notes: cost.notes,
+                  isCommonItem: false,
+                  isAdditionalCost: true,
+                  isEmptyTent: false
+                },
+                isFirstOfTent: false
+              });
+            });
+          }
+        } else {
+          // Empty tent
+          const guestCount = (tent.parameters || [])
+            .filter(p => p.countedForMenu)
+            .reduce((sum, p) => sum + p.quantity, 0);
+
           menuProductRows.push({
             tent,
             product: {
-              menuItemName: ci.itemName,
-              menuItemUnit: ci.parameterName || "",
+              menuItemName: "",
+              menuItemUnit: "",
               minGuests: null,
-              adjustedQuantity: ci.quantity,
+              adjustedQuantity: 0,
               notes: null,
-              isCommonItem: true
+              isCommonItem: false,
+              isAdditionalCost: false,
+              isEmptyTent: true,
+              guestCount
             },
-            isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+            isFirstOfTent: true
           });
-        });
+
+          // Add additional costs on first (empty) tent
+          if (isFirstTentInBooking && booking.additionalCosts && booking.additionalCosts.length > 0) {
+            booking.additionalCosts.forEach((cost) => {
+              menuProductRows.push({
+                tent,
+                product: {
+                  menuItemName: cost.name,
+                  menuItemUnit: "",
+                  minGuests: null,
+                  adjustedQuantity: cost.quantity,
+                  notes: cost.notes,
+                  isCommonItem: false,
+                  isAdditionalCost: true,
+                  isEmptyTent: false
+                },
+                isFirstOfTent: false
+              });
+            });
+          }
+        }
+
+        isFirstTentInBooking = false;
       });
 
       const notesCount = booking.notes?.length || 0;
@@ -592,10 +908,25 @@ export default function KitchenFoodReportPage() {
         const combinedNotes = noteParts.join(" | ");
 
         // Display adjusted quantity and "combo 1 khách" unit if minGuests > 0
-        const displayQuantity = menuRow?.product.adjustedQuantity || "";
-        const displayUnit = menuRow?.product.minGuests && menuRow.product.minGuests > 0
-          ? "combo 1 khách"
-          : (menuRow?.product.menuItemUnit || "");
+        let displayQuantity: string | number = "";
+        let displayUnit = "";
+        let displayMenuItemName = "";
+
+        if (menuRow?.product.isEmptyTent) {
+          displayMenuItemName = locale === "vi" ? `${menuRow.product.guestCount} khách` : `${menuRow.product.guestCount} guests`;
+          displayQuantity = "";
+          displayUnit = "";
+        } else if (menuRow?.product.isAdditionalCost) {
+          displayMenuItemName = `${menuRow.product.menuItemName} (${locale === "vi" ? "Chi phí bổ sung" : "Additional cost"})`;
+          displayQuantity = menuRow.product.adjustedQuantity;
+          displayUnit = "";
+        } else if (menuRow) {
+          displayMenuItemName = menuRow.product.menuItemName;
+          displayQuantity = menuRow.product.adjustedQuantity;
+          displayUnit = menuRow.product.minGuests && menuRow.product.minGuests > 0
+            ? "combo 1 khách"
+            : (menuRow.product.menuItemUnit || "");
+        }
 
         const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
         const rowData: Record<string, any> = {
@@ -603,7 +934,7 @@ export default function KitchenFoodReportPage() {
           bookingCode: i === 0 ? booking.bookingCode : "",
           bookerName: i === 0 ? booking.bookerName : "",
           itemName: menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
-          menuItemName: menuRow?.product.menuItemName || "",
+          menuItemName: displayMenuItemName,
           quantity: displayQuantity,
           menuItemUnit: displayUnit,
           notes: combinedNotes,
@@ -671,6 +1002,9 @@ export default function KitchenFoodReportPage() {
           .bg-yellow { background-color: #FFFBEB; }
           .bg-blue-light { background-color: #DBEAFE; }
           .text-blue { color: #1D4ED8; }
+          .bg-purple-light { background-color: #F3E8FF; }
+          .text-purple { color: #7C3AED; }
+          .text-gray-light { color: #9CA3AF; }
           .menu-table { max-width: 400px; }
           .menu-table th { background-color: #F97316; }
           .common-table { max-width: 400px; }
@@ -744,6 +1078,26 @@ export default function KitchenFoodReportPage() {
         </table>
         ` : ''}
 
+        ${summary.aggregatedAdditionalCosts && summary.aggregatedAdditionalCosts.length > 0 ? `
+        <div class="section-title text-purple">${locale === "vi" ? "Chi phí bổ sung" : "Additional Costs"}</div>
+        <table class="common-table">
+          <thead>
+            <tr>
+              <th>${locale === "vi" ? "Tên chi phí" : "Cost Name"}</th>
+              <th class="text-center" style="width: 80px;">${tCols("quantity")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${summary.aggregatedAdditionalCosts.map(cost => `
+              <tr>
+                <td class="text-purple">${cost.name}</td>
+                <td class="text-center font-bold text-purple">${cost.totalQuantity}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ` : ''}
+
         <div class="section-title">${locale === "vi" ? "Chi tiết theo Booking" : "Booking Details"}</div>
         <table>
           <thead>
@@ -765,38 +1119,112 @@ export default function KitchenFoodReportPage() {
               // Build expanded rows for PDF
               const pdfRows: string[] = [];
               data.forEach((booking) => {
-                const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean }; isFirstOfTent: boolean }[] = [];
-                booking.tents.forEach(tent => {
-                  tent.menuProducts.forEach((product, idx) => {
-                    menuProductRows.push({
-                      tent,
-                      product: {
-                        menuItemName: product.menuItemName,
-                        menuItemUnit: product.menuItemUnit,
-                        minGuests: product.minGuests,
-                        adjustedQuantity: product.adjustedQuantity,
-                        notes: product.notes,
-                        isCommonItem: false
-                      },
-                      isFirstOfTent: idx === 0
-                    });
-                  });
+                const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean; isAdditionalCost: boolean; isEmptyTent: boolean; guestCount?: number }; isFirstOfTent: boolean }[] = [];
+                let isFirstTentInBooking = true;
 
-                  // Add common items
-                  (tent.commonItems || []).forEach((ci, idx) => {
+                booking.tents.forEach(tent => {
+                  const hasMenuProducts = tent.menuProducts && tent.menuProducts.length > 0;
+                  const hasCommonItems = tent.commonItems && tent.commonItems.length > 0;
+
+                  if (hasMenuProducts || hasCommonItems) {
+                    tent.menuProducts.forEach((product, idx) => {
+                      menuProductRows.push({
+                        tent,
+                        product: {
+                          menuItemName: product.menuItemName,
+                          menuItemUnit: product.menuItemUnit,
+                          minGuests: product.minGuests,
+                          adjustedQuantity: product.adjustedQuantity,
+                          notes: product.notes,
+                          isCommonItem: false,
+                          isAdditionalCost: false,
+                          isEmptyTent: false
+                        },
+                        isFirstOfTent: idx === 0
+                      });
+                    });
+
+                    // Add common items
+                    (tent.commonItems || []).forEach((ci, idx) => {
+                      menuProductRows.push({
+                        tent,
+                        product: {
+                          menuItemName: ci.itemName,
+                          menuItemUnit: ci.parameterName || "",
+                          minGuests: null,
+                          adjustedQuantity: ci.quantity,
+                          notes: null,
+                          isCommonItem: true,
+                          isAdditionalCost: false,
+                          isEmptyTent: false
+                        },
+                        isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+                      });
+                    });
+
+                    // Add additional costs on first tent
+                    if (isFirstTentInBooking && booking.additionalCosts && booking.additionalCosts.length > 0) {
+                      booking.additionalCosts.forEach((cost) => {
+                        menuProductRows.push({
+                          tent,
+                          product: {
+                            menuItemName: cost.name,
+                            menuItemUnit: "",
+                            minGuests: null,
+                            adjustedQuantity: cost.quantity,
+                            notes: cost.notes,
+                            isCommonItem: false,
+                            isAdditionalCost: true,
+                            isEmptyTent: false
+                          },
+                          isFirstOfTent: false
+                        });
+                      });
+                    }
+                  } else {
+                    // Empty tent
+                    const guestCount = (tent.parameters || [])
+                      .filter(p => p.countedForMenu)
+                      .reduce((sum, p) => sum + p.quantity, 0);
+
                     menuProductRows.push({
                       tent,
                       product: {
-                        menuItemName: ci.itemName,
-                        menuItemUnit: ci.parameterName || "",
+                        menuItemName: "",
+                        menuItemUnit: "",
                         minGuests: null,
-                        adjustedQuantity: ci.quantity,
+                        adjustedQuantity: 0,
                         notes: null,
-                        isCommonItem: true
+                        isCommonItem: false,
+                        isAdditionalCost: false,
+                        isEmptyTent: true,
+                        guestCount
                       },
-                      isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+                      isFirstOfTent: true
                     });
-                  });
+
+                    // Add additional costs on first (empty) tent
+                    if (isFirstTentInBooking && booking.additionalCosts && booking.additionalCosts.length > 0) {
+                      booking.additionalCosts.forEach((cost) => {
+                        menuProductRows.push({
+                          tent,
+                          product: {
+                            menuItemName: cost.name,
+                            menuItemUnit: "",
+                            minGuests: null,
+                            adjustedQuantity: cost.quantity,
+                            notes: cost.notes,
+                            isCommonItem: false,
+                            isAdditionalCost: true,
+                            isEmptyTent: false
+                          },
+                          isFirstOfTent: false
+                        });
+                      });
+                    }
+                  }
+
+                  isFirstTentInBooking = false;
                 });
 
                 const notesCount = booking.notes?.length || 0;
@@ -813,21 +1241,44 @@ export default function KitchenFoodReportPage() {
                   const combinedNotes = noteParts.join(' | ');
 
                   // Display adjusted quantity and "combo 1 khách" unit if minGuests > 0
-                  const displayQuantity = menuRow?.product.adjustedQuantity || '';
-                  const displayUnit = menuRow?.product.minGuests && menuRow.product.minGuests > 0
-                    ? "combo 1 khách"
-                    : (menuRow?.product.menuItemUnit || '');
+                  let displayQuantity = '';
+                  let displayUnit = '';
+                  let displayMenuItemName = '';
+                  let menuItemClass = '';
+
+                  if (menuRow?.product.isEmptyTent) {
+                    displayMenuItemName = locale === "vi" ? `${menuRow.product.guestCount} khách` : `${menuRow.product.guestCount} guests`;
+                    displayQuantity = '';
+                    displayUnit = '';
+                    menuItemClass = 'text-gray-light';
+                  } else if (menuRow?.product.isAdditionalCost) {
+                    displayMenuItemName = menuRow.product.menuItemName;
+                    displayQuantity = String(menuRow.product.adjustedQuantity);
+                    displayUnit = '';
+                    menuItemClass = 'text-purple font-bold';
+                  } else if (menuRow?.product.isCommonItem) {
+                    displayMenuItemName = menuRow.product.menuItemName;
+                    displayQuantity = String(menuRow.product.adjustedQuantity);
+                    displayUnit = menuRow.product.menuItemUnit;
+                    menuItemClass = 'text-blue';
+                  } else if (menuRow) {
+                    displayMenuItemName = menuRow.product.menuItemName;
+                    displayQuantity = String(menuRow.product.adjustedQuantity);
+                    displayUnit = menuRow.product.minGuests && menuRow.product.minGuests > 0
+                      ? "combo 1 khách"
+                      : (menuRow.product.menuItemUnit || '');
+                    menuItemClass = '';
+                  }
 
                   const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
-                  const isCommon = menuRow?.product.isCommonItem || false;
                   pdfRows.push(`
                     <tr>
                       <td class="text-center">${i === 0 ? booking.tentCount : ''}</td>
                       <td>${i === 0 ? booking.bookingCode : ''}</td>
                       <td>${i === 0 ? booking.bookerName : ''}</td>
                       <td class="${menuRow?.isFirstOfTent ? 'bg-yellow font-bold' : ''}">${menuRow?.isFirstOfTent ? menuRow.tent.itemName : ''}</td>
-                      <td class="${isCommon ? 'text-blue' : ''}">${menuRow?.product.menuItemName || ''}</td>
-                      <td class="text-center font-bold ${isCommon ? 'text-blue' : ''}">${displayQuantity}</td>
+                      <td class="${menuItemClass}">${displayMenuItemName}</td>
+                      <td class="text-center font-bold ${menuItemClass}">${displayQuantity}</td>
                       <td class="text-center">${displayUnit}</td>
                       ${paramLabels.map(label => {
                         if (!menuRow?.isFirstOfTent) return '<td class="text-center"></td>';
@@ -1023,6 +1474,39 @@ export default function KitchenFoodReportPage() {
             </div>
           </div>
         )}
+
+        {/* Aggregated Additional Costs Table */}
+        {summary && summary.aggregatedAdditionalCosts && summary.aggregatedAdditionalCosts.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <h3 className="text-sm font-medium text-purple-700 mb-3">{locale === "vi" ? "Chi phí bổ sung" : "Additional Costs"}</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-[300px] divide-y divide-gray-200 border border-purple-200 rounded-lg overflow-hidden">
+                <thead className="bg-purple-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-purple-800 uppercase tracking-wider">
+                      {locale === "vi" ? "Tên chi phí" : "Cost Name"}
+                    </th>
+                    <th className="px-4 py-2 text-center text-xs font-medium text-purple-800 uppercase tracking-wider w-24">
+                      {tCols("quantity")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {summary.aggregatedAdditionalCosts.map((cost, idx) => (
+                    <tr key={idx} className="hover:bg-purple-50/50">
+                      <td className="px-4 py-2 text-sm text-purple-900">
+                        {cost.name}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-center font-semibold text-purple-700">
+                        {cost.totalQuantity}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Display Date Header */}
@@ -1164,18 +1648,39 @@ export default function KitchenFoodReportPage() {
                       )}
 
                       {/* Menu Item */}
-                      <td className={`px-4 py-3 text-sm ${row.isCommonItem ? 'text-blue-700' : 'text-gray-900'}`}>
-                        {row.menuItemName}
+                      <td className={`px-4 py-3 text-sm ${
+                        row.isAdditionalCost ? 'text-purple-700 font-medium' :
+                        row.isCommonItem ? 'text-blue-700' :
+                        row.isEmptyTent ? 'text-gray-400 italic' :
+                        'text-gray-900'
+                      }`}>
+                        {row.isEmptyTent ? (
+                          <span>{locale === "vi" ? `${row.guestCount} khách` : `${row.guestCount} guests`}</span>
+                        ) : (
+                          <>
+                            {row.menuItemName}
+                            {row.isAdditionalCost && (
+                              <span className="text-xs text-purple-500 ml-2">
+                                ({locale === "vi" ? "Chi phí bổ sung" : "Additional cost"})
+                              </span>
+                            )}
+                          </>
+                        )}
                       </td>
 
                       {/* Quantity - display adjusted quantity */}
-                      <td className={`px-4 py-3 text-sm text-center font-semibold ${row.isCommonItem ? 'text-blue-700' : 'text-gray-900'}`}>
-                        {row.adjustedQuantity}
+                      <td className={`px-4 py-3 text-sm text-center font-semibold ${
+                        row.isAdditionalCost ? 'text-purple-700' :
+                        row.isCommonItem ? 'text-blue-700' :
+                        row.isEmptyTent ? 'text-gray-400' :
+                        'text-gray-900'
+                      }`}>
+                        {row.isEmptyTent ? '' : row.adjustedQuantity}
                       </td>
 
                       {/* Unit - display "combo 1 khách" if minGuests > 0 */}
                       <td className="px-4 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
-                        {row.minGuests && row.minGuests > 0 ? "combo 1 khách" : row.menuItemUnit}
+                        {row.isEmptyTent ? '' : (row.minGuests && row.minGuests > 0 ? "combo 1 khách" : row.menuItemUnit)}
                       </td>
 
                       {/* Notes - combined menu product notes and booking notes icon */}

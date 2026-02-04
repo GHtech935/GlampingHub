@@ -297,6 +297,15 @@ export async function recalculateGlampingBookingTotals(
   // so we only update the source columns; deposit/balance derived from the result
   const totalAmount = afterDiscount + taxAmount;
 
+  // Get total paid from successful payments (needed for balance calculation)
+  const paymentsResult = await client.query(
+    `SELECT COALESCE(SUM(amount), 0) as total_paid
+     FROM glamping_booking_payments
+     WHERE booking_id = $1 AND status IN ('successful', 'completed', 'paid')`,
+    [bookingId]
+  );
+  const totalPaid = parseFloat(paymentsResult.rows[0].total_paid);
+
   // Preserve the original deposit ratio instead of hardcoding 50%
   // Default to 100% (deposit = total, no balance) for admin pay_later bookings
   let depositRatio = 1;
@@ -305,7 +314,8 @@ export async function recalculateGlampingBookingTotals(
   }
 
   const depositDue = Math.round(totalAmount * depositRatio);
-  const balanceDue = totalAmount - depositDue;
+  // Calculate balanceDue based on actual payments, not deposit amount
+  const balanceDue = totalAmount - totalPaid;
 
   // Update booking totals (total_amount is generated — do not set it)
   await client.query(
@@ -321,23 +331,14 @@ export async function recalculateGlampingBookingTotals(
   );
 
   // ─── Auto-adjust payment_status based on total paid vs total amount ─────────
-  // 1. Get total paid from successful payments
-  const paymentsResult = await client.query(
-    `SELECT COALESCE(SUM(amount), 0) as total_paid
-     FROM glamping_booking_payments
-     WHERE booking_id = $1 AND status IN ('successful', 'completed', 'paid')`,
-    [bookingId]
-  );
-  const totalPaid = parseFloat(paymentsResult.rows[0].total_paid);
-
-  // 2. Get current payment_status
+  // Get current payment_status
   const currentStatusResult = await client.query(
     `SELECT payment_status FROM glamping_bookings WHERE id = $1`,
     [bookingId]
   );
   const currentPaymentStatus = currentStatusResult.rows[0].payment_status;
 
-  // 3. Determine new payment_status (only adjust if there have been payments)
+  // Determine new payment_status (only adjust if there have been payments)
   let newPaymentStatus = currentPaymentStatus;
   if (totalPaid > 0) {
     if (totalPaid >= totalAmount) {
@@ -347,7 +348,7 @@ export async function recalculateGlampingBookingTotals(
     }
   }
 
-  // 4. Update if payment_status changed
+  // Update if payment_status changed
   if (newPaymentStatus !== currentPaymentStatus) {
     await client.query(
       `UPDATE glamping_bookings SET payment_status = $2 WHERE id = $1`,
