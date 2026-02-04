@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ interface VoucherInputProps {
   validationEndpoint?: string; // Optional custom endpoint (default: /api/booking/validate-voucher)
   applicationType?: 'accommodation' | 'menu_only' | 'common_item' | 'all'; // Filter vouchers by type
   appliedVoucher?: AppliedVoucher | null; // Controlled component support
+  disabled?: boolean; // Disable input during loading or when invalid state
 
   // Callbacks
   onVoucherApplied: (voucherData: AppliedVoucher) => void;
@@ -54,6 +55,7 @@ export default function VoucherInput({
   validationEndpoint = "/api/booking/validate-voucher",
   applicationType = 'all',
   appliedVoucher: controlledAppliedVoucher,
+  disabled = false,
   onVoucherApplied,
   onVoucherRemoved,
 }: VoucherInputProps) {
@@ -67,6 +69,14 @@ export default function VoucherInput({
   const setAppliedVoucher = controlledAppliedVoucher !== undefined ?
     (voucher: AppliedVoucher | null) => { if (voucher) onVoucherApplied(voucher); else onVoucherRemoved(); } :
     setInternalAppliedVoucher;
+
+  // Sync internal state when appliedVoucher changes
+  useEffect(() => {
+    if (appliedVoucher) {
+      setCode("");
+      setError("");
+    }
+  }, [appliedVoucher]);
 
   // i18n labels
   const getTitleByType = () => {
@@ -177,20 +187,37 @@ export default function VoucherInput({
       {/* Applied Voucher Display */}
       {appliedVoucher ? (
         <>
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center justify-between gap-4">
-              {/* Left side: Icon + Badge + Discount info */}
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
-                <Badge variant="default" className="font-mono flex-shrink-0">
-                  {appliedVoucher.code}
-                </Badge>
-                <span className="text-sm text-green-700 truncate">
-                  {appliedVoucher.discountType === 'percentage'
-                    ? `(Giảm ${appliedVoucher.discountValue}%)`
-                    : `(Giảm ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(appliedVoucher.discountValue)})`
-                  }
-                </span>
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              {/* Left side: Icon + Info */}
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                <div className="flex-shrink-0 mt-0.5">
+                  <CheckCircle2 className="h-6 w-6 text-green-600" />
+                </div>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-green-700 uppercase tracking-wide">
+                      {labels.discount}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="font-mono font-bold text-base px-3 py-1 bg-white border-green-600 text-green-700 shadow-sm"
+                    >
+                      {appliedVoucher.code}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-green-700 font-medium">
+                    {appliedVoucher.discountType === 'percentage'
+                      ? `Giảm ${appliedVoucher.discountValue}%`
+                      : `Giảm ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(appliedVoucher.discountValue)}`
+                    }
+                  </p>
+                  {appliedVoucher.name && (
+                    <p className="text-xs text-green-600 truncate">
+                      {appliedVoucher.name}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Right side: Remove button */}
@@ -198,9 +225,10 @@ export default function VoucherInput({
                 size="sm"
                 variant="ghost"
                 onClick={handleRemoveVoucher}
-                className="flex-shrink-0"
+                className="flex-shrink-0 hover:bg-red-100 hover:text-red-600 transition-colors"
+                title="Xóa voucher"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </Button>
             </div>
           </div>
@@ -217,12 +245,12 @@ export default function VoucherInput({
                 setError("");
               }}
               onKeyDown={handleKeyDown}
-              disabled={loading}
+              disabled={loading || disabled}
               className="flex-1"
             />
             <Button
               onClick={handleApplyVoucher}
-              disabled={loading || !code.trim()}
+              disabled={loading || !code.trim() || disabled}
               className="flex-shrink-0"
             >
               {loading ? labels.checking : labels.apply}

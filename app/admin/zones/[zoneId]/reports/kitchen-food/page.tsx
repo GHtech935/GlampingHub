@@ -41,12 +41,19 @@ interface TentParameter {
   quantity: number;
 }
 
+interface CommonItemRow {
+  itemName: string;
+  parameterName: string;
+  quantity: number;
+}
+
 interface TentData {
   tentId: string;
   itemId: string;
   itemName: string;
   parameters: TentParameter[];
   menuProducts: MenuProduct[];
+  commonItems: CommonItemRow[];
 }
 
 interface BookingData {
@@ -66,6 +73,12 @@ interface AggregatedMenuItem {
   totalQuantity: number;
 }
 
+interface AggregatedCommonItem {
+  itemName: string;
+  parameterName: string;
+  totalQuantity: number;
+}
+
 interface ParameterSummary {
   label: string;
   quantity: number;
@@ -76,11 +89,13 @@ interface Summary {
   totalTents: number;
   parametersSummary: ParameterSummary[];
   aggregatedMenuItems: AggregatedMenuItem[];
+  aggregatedCommonItems: AggregatedCommonItem[];
 }
 
 interface FlatRow {
   isFirstRowOfBooking: boolean;
   isFirstRowOfTent: boolean;
+  isCommonItem: boolean;
   bookingId: string;
   bookingCode: string;
   bookerName: string;
@@ -184,6 +199,7 @@ export default function KitchenFoodReportPage() {
           rows.push({
             isFirstRowOfBooking,
             isFirstRowOfTent,
+            isCommonItem: false,
             bookingId: booking.bookingId,
             bookingCode: booking.bookingCode,
             bookerName: booking.bookerName,
@@ -197,6 +213,30 @@ export default function KitchenFoodReportPage() {
             adjustedQuantity: product.adjustedQuantity,
             parameters: tent.parameters || [],
             notes: product.notes,
+            bookingNotes: booking.notes || [],
+          });
+          isFirstRowOfBooking = false;
+          isFirstRowOfTent = false;
+        });
+        // Common items after menu products
+        (tent.commonItems || []).forEach((ci) => {
+          rows.push({
+            isFirstRowOfBooking,
+            isFirstRowOfTent,
+            isCommonItem: true,
+            bookingId: booking.bookingId,
+            bookingCode: booking.bookingCode,
+            bookerName: booking.bookerName,
+            photoConsent: booking.photoConsent,
+            tentCount: booking.tentCount,
+            itemName: tent.itemName,
+            menuItemName: ci.itemName,
+            menuItemUnit: ci.parameterName || "",
+            minGuests: null,
+            quantity: ci.quantity,
+            adjustedQuantity: ci.quantity,
+            parameters: tent.parameters || [],
+            notes: null,
             bookingNotes: booking.notes || [],
           });
           isFirstRowOfBooking = false;
@@ -222,7 +262,7 @@ export default function KitchenFoodReportPage() {
     data.forEach((booking) => {
       booking.tents.forEach((tent) => {
         const key = `${booking.bookingId}-${tent.tentId}`;
-        counts.set(key, tent.menuProducts.length);
+        counts.set(key, tent.menuProducts.length + (tent.commonItems || []).length);
       });
     });
     return counts;
@@ -305,6 +345,32 @@ export default function KitchenFoodReportPage() {
     worksheet.addRow([]);
     worksheet.addRow([]);
 
+    // Common items summary rows
+    if (summary.aggregatedCommonItems && summary.aggregatedCommonItems.length > 0) {
+      const ciLabelRow = worksheet.addRow([locale === "vi" ? "ITEM CHUNG" : "COMMON ITEMS", "", ""]);
+      ciLabelRow.getCell(1).font = { bold: true, color: { argb: 'FF1D4ED8' } };
+      ciLabelRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+      ciLabelRow.eachCell((cell, colNumber) => {
+        if (colNumber <= 3) {
+          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        }
+      });
+
+      summary.aggregatedCommonItems.forEach((item) => {
+        const row = worksheet.addRow([item.itemName, item.totalQuantity, item.parameterName || ""]);
+        row.getCell(1).font = { color: { argb: 'FF1D4ED8' } };
+        row.getCell(1).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        row.getCell(2).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        row.getCell(2).alignment = { horizontal: 'center' };
+        row.getCell(3).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        row.getCell(3).alignment = { horizontal: 'center' };
+      });
+
+      // Empty rows after common items
+      worksheet.addRow([]);
+      worksheet.addRow([]);
+    }
+
     // ===== DETAILED BOOKING TABLE =====
     // Get unique parameter labels for dynamic columns
     const allParamLabels = new Set<string>();
@@ -351,18 +417,44 @@ export default function KitchenFoodReportPage() {
 
     // Data rows - expand each booking with notes
     data.forEach((booking) => {
-      // Determine the max rows needed: max of (menu products count, notes count, 1)
-      const menuProductCount = booking.tents.reduce((sum, tent) => sum + tent.menuProducts.length, 0);
-      const notesCount = booking.notes?.length || 0;
-      const maxRows = Math.max(menuProductCount, notesCount, 1);
-
-      // Build flat menu product rows for this booking
-      const menuProductRows: { tent: typeof booking.tents[0]; product: typeof booking.tents[0]['menuProducts'][0]; isFirstOfTent: boolean }[] = [];
+      // Build flat product rows (menu products + common items) for this booking
+      const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean }; isFirstOfTent: boolean }[] = [];
       booking.tents.forEach(tent => {
         tent.menuProducts.forEach((product, idx) => {
-          menuProductRows.push({ tent, product, isFirstOfTent: idx === 0 });
+          menuProductRows.push({
+            tent,
+            product: {
+              menuItemName: product.menuItemName,
+              menuItemUnit: product.menuItemUnit,
+              minGuests: product.minGuests,
+              adjustedQuantity: product.adjustedQuantity,
+              notes: product.notes,
+              isCommonItem: false
+            },
+            isFirstOfTent: idx === 0
+          });
+        });
+
+        // Add common items
+        (tent.commonItems || []).forEach((ci, idx) => {
+          menuProductRows.push({
+            tent,
+            product: {
+              menuItemName: ci.itemName,
+              menuItemUnit: ci.parameterName || "",
+              minGuests: null,
+              adjustedQuantity: ci.quantity,
+              notes: null,
+              isCommonItem: true
+            },
+            isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+          });
         });
       });
+
+      // Update maxRows calculation
+      const notesCount = booking.notes?.length || 0;
+      const maxRows = Math.max(menuProductRows.length, notesCount, 1);
 
       // Generate export rows
       for (let i = 0; i < maxRows; i++) {
@@ -452,10 +544,37 @@ export default function KitchenFoodReportPage() {
     // Build export data with expanded rows for booking notes
     const exportData: Record<string, any>[] = [];
     data.forEach((booking) => {
-      const menuProductRows: { tent: typeof booking.tents[0]; product: typeof booking.tents[0]['menuProducts'][0]; isFirstOfTent: boolean }[] = [];
+      const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean }; isFirstOfTent: boolean }[] = [];
       booking.tents.forEach(tent => {
         tent.menuProducts.forEach((product, idx) => {
-          menuProductRows.push({ tent, product, isFirstOfTent: idx === 0 });
+          menuProductRows.push({
+            tent,
+            product: {
+              menuItemName: product.menuItemName,
+              menuItemUnit: product.menuItemUnit,
+              minGuests: product.minGuests,
+              adjustedQuantity: product.adjustedQuantity,
+              notes: product.notes,
+              isCommonItem: false
+            },
+            isFirstOfTent: idx === 0
+          });
+        });
+
+        // Add common items
+        (tent.commonItems || []).forEach((ci, idx) => {
+          menuProductRows.push({
+            tent,
+            product: {
+              menuItemName: ci.itemName,
+              menuItemUnit: ci.parameterName || "",
+              minGuests: null,
+              adjustedQuantity: ci.quantity,
+              notes: null,
+              isCommonItem: true
+            },
+            isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+          });
         });
       });
 
@@ -550,8 +669,12 @@ export default function KitchenFoodReportPage() {
           .font-bold { font-weight: bold; }
           .bg-orange-light { background-color: #FFEDD5; }
           .bg-yellow { background-color: #FFFBEB; }
+          .bg-blue-light { background-color: #DBEAFE; }
+          .text-blue { color: #1D4ED8; }
           .menu-table { max-width: 400px; }
           .menu-table th { background-color: #F97316; }
+          .common-table { max-width: 400px; }
+          .common-table th { background-color: #3B82F6; }
           .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #E5E7EB; font-size: 10px; color: #9CA3AF; display: flex; justify-content: space-between; }
           @media print {
             body { padding: 10px; }
@@ -599,6 +722,28 @@ export default function KitchenFoodReportPage() {
           </tbody>
         </table>
 
+        ${summary.aggregatedCommonItems && summary.aggregatedCommonItems.length > 0 ? `
+        <div class="section-title text-blue">${locale === "vi" ? "Item chung" : "Common Items"}</div>
+        <table class="common-table">
+          <thead>
+            <tr>
+              <th>${tCols("menuItem")}</th>
+              <th class="text-center" style="width: 80px;">${tCols("quantity")}</th>
+              <th class="text-center" style="width: 80px;">${tCols("unit")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${summary.aggregatedCommonItems.map(item => `
+              <tr>
+                <td class="text-blue">${item.itemName}</td>
+                <td class="text-center font-bold text-blue">${item.totalQuantity}</td>
+                <td class="text-center">${item.parameterName || ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ` : ''}
+
         <div class="section-title">${locale === "vi" ? "Chi tiết theo Booking" : "Booking Details"}</div>
         <table>
           <thead>
@@ -620,10 +765,37 @@ export default function KitchenFoodReportPage() {
               // Build expanded rows for PDF
               const pdfRows: string[] = [];
               data.forEach((booking) => {
-                const menuProductRows: { tent: typeof booking.tents[0]; product: typeof booking.tents[0]['menuProducts'][0]; isFirstOfTent: boolean }[] = [];
+                const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean }; isFirstOfTent: boolean }[] = [];
                 booking.tents.forEach(tent => {
                   tent.menuProducts.forEach((product, idx) => {
-                    menuProductRows.push({ tent, product, isFirstOfTent: idx === 0 });
+                    menuProductRows.push({
+                      tent,
+                      product: {
+                        menuItemName: product.menuItemName,
+                        menuItemUnit: product.menuItemUnit,
+                        minGuests: product.minGuests,
+                        adjustedQuantity: product.adjustedQuantity,
+                        notes: product.notes,
+                        isCommonItem: false
+                      },
+                      isFirstOfTent: idx === 0
+                    });
+                  });
+
+                  // Add common items
+                  (tent.commonItems || []).forEach((ci, idx) => {
+                    menuProductRows.push({
+                      tent,
+                      product: {
+                        menuItemName: ci.itemName,
+                        menuItemUnit: ci.parameterName || "",
+                        minGuests: null,
+                        adjustedQuantity: ci.quantity,
+                        notes: null,
+                        isCommonItem: true
+                      },
+                      isFirstOfTent: tent.menuProducts.length === 0 && idx === 0
+                    });
                   });
                 });
 
@@ -647,14 +819,15 @@ export default function KitchenFoodReportPage() {
                     : (menuRow?.product.menuItemUnit || '');
 
                   const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
+                  const isCommon = menuRow?.product.isCommonItem || false;
                   pdfRows.push(`
                     <tr>
                       <td class="text-center">${i === 0 ? booking.tentCount : ''}</td>
                       <td>${i === 0 ? booking.bookingCode : ''}</td>
                       <td>${i === 0 ? booking.bookerName : ''}</td>
                       <td class="${menuRow?.isFirstOfTent ? 'bg-yellow font-bold' : ''}">${menuRow?.isFirstOfTent ? menuRow.tent.itemName : ''}</td>
-                      <td>${menuRow?.product.menuItemName || ''}</td>
-                      <td class="text-center font-bold">${displayQuantity}</td>
+                      <td class="${isCommon ? 'text-blue' : ''}">${menuRow?.product.menuItemName || ''}</td>
+                      <td class="text-center font-bold ${isCommon ? 'text-blue' : ''}">${displayQuantity}</td>
                       <td class="text-center">${displayUnit}</td>
                       ${paramLabels.map(label => {
                         if (!menuRow?.isFirstOfTent) return '<td class="text-center"></td>';
@@ -811,6 +984,45 @@ export default function KitchenFoodReportPage() {
             </div>
           </div>
         )}
+
+        {/* Aggregated Common Items Table */}
+        {summary && summary.aggregatedCommonItems && summary.aggregatedCommonItems.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <h3 className="text-sm font-medium text-blue-700 mb-3">{locale === "vi" ? "Item chung" : "Common Items"}</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-[300px] divide-y divide-gray-200 border border-blue-200 rounded-lg overflow-hidden">
+                <thead className="bg-blue-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-blue-800 uppercase tracking-wider">
+                      {tCols("menuItem")}
+                    </th>
+                    <th className="px-4 py-2 text-center text-xs font-medium text-blue-800 uppercase tracking-wider w-24">
+                      {tCols("quantity")}
+                    </th>
+                    <th className="px-4 py-2 text-center text-xs font-medium text-blue-800 uppercase tracking-wider w-24">
+                      {tCols("unit")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {summary.aggregatedCommonItems.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-blue-50/50">
+                      <td className="px-4 py-2 text-sm text-blue-900">
+                        {item.itemName}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-center font-semibold text-blue-700">
+                        {item.totalQuantity}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-center text-gray-600 whitespace-nowrap">
+                        {item.parameterName || ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Display Date Header */}
@@ -952,10 +1164,12 @@ export default function KitchenFoodReportPage() {
                       )}
 
                       {/* Menu Item */}
-                      <td className="px-4 py-3 text-sm text-gray-900">{row.menuItemName}</td>
+                      <td className={`px-4 py-3 text-sm ${row.isCommonItem ? 'text-blue-700' : 'text-gray-900'}`}>
+                        {row.menuItemName}
+                      </td>
 
                       {/* Quantity - display adjusted quantity */}
-                      <td className="px-4 py-3 text-sm text-gray-900 text-center font-semibold">
+                      <td className={`px-4 py-3 text-sm text-center font-semibold ${row.isCommonItem ? 'text-blue-700' : 'text-gray-900'}`}>
                         {row.adjustedQuantity}
                       </td>
 

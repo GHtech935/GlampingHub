@@ -21,7 +21,8 @@ export interface AddonSelection {
   selected: boolean;
   quantity: number;
   parameterQuantities: Record<string, number>;
-  dates?: { from: string; to: string }; // for custom dates
+  dates?: { from: string; to: string }; // for custom dates (range for pricing)
+  selectedDate?: string; // single date selected by customer (YYYY-MM-DD)
   voucher?: {
     code: string;
     id: string;

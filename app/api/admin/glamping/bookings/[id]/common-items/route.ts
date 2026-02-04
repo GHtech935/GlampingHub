@@ -37,6 +37,7 @@ export async function POST(
       bookingTentId,
       addonItemId,
       addonDates, // { from, to } or undefined
+      selectedDate, // Single date selected by customer (YYYY-MM-DD) or undefined
       parameters, // Array<{ parameterId, quantity, unitPrice, pricingMode? }>
       voucher, // { code, id, discountAmount, discountType, discountValue } or undefined
     } = body;
@@ -61,15 +62,21 @@ export async function POST(
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    // Verify booking tent exists
+    // Verify booking tent exists and get tent's item_id
     const tentResult = await client.query(
-      `SELECT id FROM glamping_booking_tents WHERE id = $1 AND booking_id = $2`,
+      `SELECT id, item_id FROM glamping_booking_tents WHERE id = $1 AND booking_id = $2`,
       [bookingTentId, bookingId]
     );
 
     if (tentResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: "Booking tent not found" }, { status: 404 });
+    }
+
+    const tentItemId = tentResult.rows[0]?.item_id;
+    if (!tentItemId) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: "Tent item not found" }, { status: 404 });
     }
 
     // Get addon item info
@@ -99,16 +106,23 @@ export async function POST(
       const pricingMode = param.pricingMode || 'per_person';
       await client.query(
         `INSERT INTO glamping_booking_items
-         (booking_id, booking_tent_id, item_id, parameter_id, quantity, unit_price, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         (booking_id, booking_tent_id, item_id, addon_item_id, parameter_id, quantity, unit_price, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           bookingId,
           bookingTentId,
+          tentItemId,
           addonItemId,
           param.parameterId,
           param.quantity,
           param.unitPrice,
-          JSON.stringify({ type: 'addon', pricingMode, dates: addonDates || null, voucher: voucherMeta }),
+          JSON.stringify({
+            type: 'addon',
+            pricingMode,
+            dates: addonDates || null,
+            selectedDate: selectedDate || null,
+            voucher: voucherMeta
+          }),
         ]
       );
     }
@@ -165,9 +179,10 @@ export async function PUT(
 
     const { id: bookingId } = await params;
     const body = await request.json();
-    const { itemId, bookingTentId, addonDates, parameters, voucher } = body;
+    const { itemId, bookingTentId, addonDates, selectedDate, parameters, voucher } = body;
     // parameters: Array<{ parameterId, quantity }>
     // addonDates: { from, to } | undefined
+    // selectedDate: Single date selected by customer (YYYY-MM-DD) | undefined
     // voucher: { code, id, discountAmount, discountType, discountValue } | undefined
 
     if (!itemId || !parameters || !Array.isArray(parameters)) {
@@ -220,6 +235,11 @@ export async function PUT(
       // Update dates if provided
       if (addonDates !== undefined) {
         updatedMetadata.dates = addonDates;
+      }
+
+      // Update selectedDate if provided
+      if (selectedDate !== undefined) {
+        updatedMetadata.selectedDate = selectedDate;
       }
 
       // Update voucher if provided

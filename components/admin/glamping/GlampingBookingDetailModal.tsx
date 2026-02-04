@@ -321,7 +321,9 @@ export function GlampingBookingDetailModal({
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to update guest info");
+      if (!response.ok) {
+        throw new Error("Failed to update guest info");
+      }
 
       toast.success(locale === 'vi' ? 'Đã cập nhật thông tin khách' : 'Guest info updated');
       setIsEditingGuest(false);

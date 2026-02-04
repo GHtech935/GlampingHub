@@ -669,7 +669,8 @@
             "summary": {
                 "date": "Date",
                 "totalTents": "Total Tents",
-                "menuItemsSummary": "Menu Items Summary"
+                "menuItemsSummary": "Menu Items Summary",
+                "commonItemsLabel": "Common Items"
             },
             "columns": {
                 "tentCount": "Tents",

@@ -1097,7 +1097,7 @@ export function ConfirmationItemsList({
                             <div
                               key={addon.addon_item_id}
                               className={`rounded-lg border p-3 transition-colors ${
-                                isSelected ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'
+                                isSelected ? 'border-blue-300 bg-white' : 'border-gray-200 bg-white'
                               }`}
                             >
                               {/* Addon Header */}

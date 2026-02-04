@@ -669,7 +669,8 @@
             "summary": {
                 "date": "Ngày",
                 "totalTents": "Tổng lều",
-                "menuItemsSummary": "Tổng hợp món ăn"
+                "menuItemsSummary": "Tổng hợp món ăn",
+                "commonItemsLabel": "Item chung"
             },
             "columns": {
                 "tentCount": "Số lều",

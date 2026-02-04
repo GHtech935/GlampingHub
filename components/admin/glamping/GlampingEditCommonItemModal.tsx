@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -106,6 +106,9 @@ export function GlampingEditCommonItemModal({
   // Pricing state
   const [pricingLoading, setPricingLoading] = useState(false);
 
+  // Ref for tracking previous parameters to optimize fetches
+  const prevParametersRef = useRef(parameters);
+
   // Voucher state
   const [voucher, setVoucher] = useState<{
     code: string;
@@ -141,13 +144,28 @@ export function GlampingEditCommonItemModal({
   useEffect(() => {
     if (!addonConfig) return;
 
+    // Create stable comparison key
+    const currentKey = parameters.map(p => `${p.parameterId}:${p.quantity}`).join(',');
+    const prevKey = prevParametersRef.current.map(p => `${p.parameterId}:${p.quantity}`).join(',');
+
+    // Skip if quantities haven't changed
+    if (currentKey === prevKey && parameters.every(p => p.unitPrice > 0)) {
+      return;
+    }
+
     const hasQuantity = parameters.some(p => p.quantity > 0);
-    if (!hasQuantity) return;
+    if (!hasQuantity) {
+      prevParametersRef.current = parameters;
+      return;
+    }
 
     const effectiveCheckIn = addonDates?.from || item.tentCheckInDate;
     const effectiveCheckOut = addonDates?.to || item.tentCheckOutDate;
 
     if (!effectiveCheckIn || !effectiveCheckOut) return;
+
+    // Update ref immediately
+    prevParametersRef.current = parameters;
 
     const fetchPricing = async () => {
       setPricingLoading(true);
@@ -191,7 +209,7 @@ export function GlampingEditCommonItemModal({
 
     const timer = setTimeout(fetchPricing, 300);
     return () => clearTimeout(timer);
-  }, [addonConfig, addonDates, item.tentCheckInDate, item.tentCheckOutDate, item.itemId, parameters.map(p => `${p.parameterId}:${p.quantity}`).join(',')]);
+  }, [addonConfig, addonDates, item.tentCheckInDate, item.tentCheckOutDate, item.itemId, parameters]);
 
   const calculatedTotal = useMemo(() =>
     parameters.reduce(
@@ -235,6 +253,11 @@ export function GlampingEditCommonItemModal({
     try {
       setSaving(true);
 
+      // Extract selectedDate for inherit_parent mode (single date selection)
+      const selectedDate = (datesSetting === 'inherit_parent' && addonDates?.from)
+        ? addonDates.from
+        : undefined;
+
       const res = await fetch(
         `/api/admin/glamping/bookings/${item.bookingId}/common-items`,
         {
@@ -244,7 +267,8 @@ export function GlampingEditCommonItemModal({
             itemId: item.itemId,
             bookingTentId: item.bookingTentId,
             addonDates: addonDates || undefined,
-            voucher: voucher || undefined,
+            selectedDate: selectedDate,
+            voucher: voucher,
             parameters: parameters.map(p => ({
               parameterId: p.parameterId,
               quantity: p.quantity,
@@ -372,12 +396,20 @@ export function GlampingEditCommonItemModal({
                           />
                         )}
                         <span className="text-xs text-gray-400">&times;</span>
-                        <span className="text-sm text-gray-700 w-28 text-right tabular-nums">
-                          {pricingLoading ? '...' : formatCurrency(param.unitPrice)}
+                        <span className="text-sm text-gray-700 w-28 text-right tabular-nums flex items-center justify-end">
+                          {pricingLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                          ) : (
+                            formatCurrency(param.unitPrice)
+                          )}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-500 w-24 text-right">
-                        = {pricingLoading ? '...' : formatCurrency(rowTotal)}
+                      <span className="text-xs text-gray-500 w-24 text-right flex items-center justify-end">
+                        = {pricingLoading ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-gray-400 ml-1" />
+                        ) : (
+                          formatCurrency(rowTotal)
+                        )}
                       </span>
                     </div>
                   );
@@ -391,8 +423,15 @@ export function GlampingEditCommonItemModal({
             <div className="bg-blue-50 rounded-lg p-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Tạm tính</span>
-                <span className="font-medium">
-                  {pricingLoading ? t.loadingPricing : formatCurrency(calculatedTotal)}
+                <span className="font-medium flex items-center gap-2">
+                  {pricingLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">{t.loadingPricing}</span>
+                    </>
+                  ) : (
+                    formatCurrency(calculatedTotal)
+                  )}
                 </span>
               </div>
             </div>

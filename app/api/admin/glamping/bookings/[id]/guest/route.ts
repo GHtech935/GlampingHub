@@ -51,66 +51,98 @@ export async function PATCH(
 
     await client.query('BEGIN');
 
-    // Update customer info
-    if (booking.customer_id) {
-      const customerUpdates: string[] = [];
-      const customerValues: any[] = [];
-      let paramIndex = 1;
+    // Find or create customer by email, then reassign booking if needed
+    let targetCustomerId = booking.customer_id; // Default to current customer
 
-      if (firstName !== undefined) {
-        customerUpdates.push(`first_name = $${paramIndex}`);
-        customerValues.push(firstName);
-        paramIndex++;
-      }
+    if (email !== undefined && email !== '') {
+      // Find customer with new email
+      const customerResult = await client.query(
+        `SELECT id FROM customers WHERE email = $1`,
+        [email]
+      );
 
-      if (lastName !== undefined) {
-        customerUpdates.push(`last_name = $${paramIndex}`);
-        customerValues.push(lastName);
-        paramIndex++;
-      }
-
-      if (phone !== undefined) {
-        customerUpdates.push(`phone = $${paramIndex}`);
-        customerValues.push(phone);
-        paramIndex++;
-      }
-
-      if (country !== undefined) {
-        customerUpdates.push(`country = $${paramIndex}`);
-        customerValues.push(country);
-        paramIndex++;
-      }
-
-      if (address !== undefined) {
-        customerUpdates.push(`address_line1 = $${paramIndex}`);
-        customerValues.push(address);
-        paramIndex++;
-      }
-
-      if (email !== undefined) {
-        customerUpdates.push(`email = $${paramIndex}`);
-        customerValues.push(email);
-        paramIndex++;
-      }
-
-      if (customerUpdates.length > 0) {
-        customerUpdates.push(`updated_at = NOW()`);
-        customerValues.push(booking.customer_id);
-
-        await client.query(
-          `UPDATE customers
-           SET ${customerUpdates.join(', ')}
-           WHERE id = $${paramIndex}`,
-          customerValues
+      if (customerResult.rows.length > 0) {
+        // Email exists -> Use existing customer
+        targetCustomerId = customerResult.rows[0].id;
+      } else {
+        // Email doesn't exist -> Create new customer
+        const newCustomerResult = await client.query(
+          `INSERT INTO customers (email, first_name, last_name, phone, country, address_line1, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+           RETURNING id`,
+          [
+            email,
+            firstName !== undefined ? firstName : '',
+            lastName !== undefined ? lastName : '',
+            phone !== undefined ? phone : '',
+            country !== undefined ? country : 'Vietnam',
+            address !== undefined ? address : ''
+          ]
         );
+        targetCustomerId = newCustomerResult.rows[0].id;
       }
     }
 
-    // Update guest_name on booking if name changed
-    if (firstName !== undefined || lastName !== undefined) {
+    // Update booking customer reference if changed
+    if (targetCustomerId !== booking.customer_id) {
+      await client.query(
+        `UPDATE glamping_bookings SET customer_id = $1, updated_at = NOW() WHERE id = $2`,
+        [targetCustomerId, id]
+      );
+    }
+
+    // Update target customer info if provided
+    const customerUpdates: string[] = [];
+    const customerValues: any[] = [];
+    let paramIndex = 1;
+
+    if (firstName !== undefined) {
+      customerUpdates.push(`first_name = $${paramIndex}`);
+      customerValues.push(firstName);
+      paramIndex++;
+    }
+
+    if (lastName !== undefined) {
+      customerUpdates.push(`last_name = $${paramIndex}`);
+      customerValues.push(lastName);
+      paramIndex++;
+    }
+
+    if (phone !== undefined) {
+      customerUpdates.push(`phone = $${paramIndex}`);
+      customerValues.push(phone);
+      paramIndex++;
+    }
+
+    if (country !== undefined) {
+      customerUpdates.push(`country = $${paramIndex}`);
+      customerValues.push(country);
+      paramIndex++;
+    }
+
+    if (address !== undefined) {
+      customerUpdates.push(`address_line1 = $${paramIndex}`);
+      customerValues.push(address);
+      paramIndex++;
+    }
+
+    if (customerUpdates.length > 0) {
+      customerUpdates.push(`updated_at = NOW()`);
+      customerValues.push(targetCustomerId);
+
+      await client.query(
+        `UPDATE customers
+         SET ${customerUpdates.join(', ')}
+         WHERE id = $${paramIndex}`,
+        customerValues
+      );
+    }
+
+    // Update guest_name on booking from target customer
+    if (firstName !== undefined || lastName !== undefined || targetCustomerId !== booking.customer_id) {
       const currentCustomer = await client.query(
         `SELECT first_name, last_name FROM customers WHERE id = $1`,
-        [booking.customer_id]
+        [targetCustomerId]
       );
       if (currentCustomer.rows.length > 0) {
         const newFirst = firstName !== undefined ? firstName : currentCustomer.rows[0].first_name || '';

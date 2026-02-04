@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Check, ChevronDown, ChevronUp, Edit2, Minus, Plus, Package, MousePointerClick } from 'lucide-react';
@@ -211,6 +211,9 @@ export function CartItemInlineEditForm({
   // Without this, syncing pricing back into addonSelections triggers another fetch.
   const isSyncingPricingRef = React.useRef(false);
 
+  // Track previous addon selections to detect which addon changed
+  const prevAddonSelectionsRef = React.useRef(formState.addonSelections);
+
   // Fetch pricing for selected addons
   React.useEffect(() => {
     // Skip API call if this addonSelections update is from pricing sync (not user action).
@@ -228,25 +231,68 @@ export function CartItemInlineEditForm({
 
     if (selectedAddons.length === 0) {
       setAddonPricingMap({});
+      prevAddonSelectionsRef.current = formState.addonSelections;
       return;
     }
 
-    // Determine dates for each addon and fetch pricing
-    const fetchAllAddonPricing = async () => {
-      const newMap: typeof addonPricingMap = {};
+    // Detect which addons changed (quantities or dates changed)
+    const changedAddonIds: string[] = [];
+    const currentSelections = formState.addonSelections;
+    const prevSelections = prevAddonSelectionsRef.current;
 
-      // Mark all as loading
-      selectedAddons.forEach((addon) => {
+    selectedAddons.forEach((addon) => {
+      const curr = currentSelections[addon.addon_item_id];
+      const prev = prevSelections?.[addon.addon_item_id];
+
+      // Check if addon was just selected or quantities/dates changed
+      if (!prev ||
+          JSON.stringify(curr?.parameterQuantities) !== JSON.stringify(prev?.parameterQuantities) ||
+          JSON.stringify(curr?.dates) !== JSON.stringify(prev?.dates)) {
+        changedAddonIds.push(addon.addon_item_id);
+      }
+    });
+
+    // Check if any addons were deselected and need to be removed from pricing map
+    const selectedAddonIds = new Set(selectedAddons.map(a => a.addon_item_id));
+    const deselectedAddonIds = Object.keys(addonPricingMap).filter(id => !selectedAddonIds.has(id));
+
+    // If addons were deselected, clean up their pricing
+    if (deselectedAddonIds.length > 0) {
+      const cleanedMap = { ...addonPricingMap };
+      deselectedAddonIds.forEach(id => delete cleanedMap[id]);
+      setAddonPricingMap(cleanedMap);
+      prevAddonSelectionsRef.current = currentSelections;
+      if (changedAddonIds.length === 0) return;
+    }
+
+    // If nothing changed, skip fetch
+    if (changedAddonIds.length === 0) {
+      return;
+    }
+
+    // Only fetch addons that changed
+    const addonsToFetch = addons.filter(a => changedAddonIds.includes(a.addon_item_id));
+
+    // Update ref immediately to prevent re-fetching same changes
+    prevAddonSelectionsRef.current = currentSelections;
+
+    // Determine dates for each addon and fetch pricing
+    const fetchChangedAddonPricing = async () => {
+      // Preserve existing pricing for addons that didn't change
+      const newMap: typeof addonPricingMap = { ...addonPricingMap };
+
+      // Mark only changed addons as loading (ensure full structure)
+      addonsToFetch.forEach((addon) => {
         newMap[addon.addon_item_id] = {
-          parameterPricing: {},
-          parameterPricingModes: {},
+          parameterPricing: newMap[addon.addon_item_id]?.parameterPricing || {},
+          parameterPricingModes: newMap[addon.addon_item_id]?.parameterPricingModes || {},
           loading: true,
         };
       });
       setAddonPricingMap({ ...newMap });
 
       await Promise.all(
-        selectedAddons.map(async (addon) => {
+        addonsToFetch.map(async (addon) => {
           const sel = formState.addonSelections[addon.addon_item_id];
           if (!sel) return;
 
@@ -317,7 +363,7 @@ export function CartItemInlineEditForm({
       setAddonPricingMap({ ...newMap });
     };
 
-    const timer = setTimeout(fetchAllAddonPricing, 800);
+    const timer = setTimeout(fetchChangedAddonPricing, 800);
     return () => clearTimeout(timer);
   }, [addons, formState.addonSelections, formState.dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -493,6 +539,7 @@ export function CartItemInlineEditForm({
     current[addonItemId] = {
       ...sel,
       dates: { from: value, to: format(nextDay, 'yyyy-MM-dd') },
+      selectedDate: value, // Store the original single date selected by customer
     };
     formState.setAddonSelections(current);
   }, [formState]);
@@ -831,8 +878,8 @@ export function CartItemInlineEditForm({
                             <div className="space-y-2 mt-2">
                               {addon.parameters.map((param) => {
                                 const qty = selection?.parameterQuantities[param.id] || 0;
-                                const paramPrice = addonPricing?.parameterPricing[param.id];
-                                const pricingMode = addonPricing?.parameterPricingModes[param.id] || 'per_person';
+                                const paramPrice = addonPricing?.parameterPricing?.[param.id];
+                                const pricingMode = addonPricing?.parameterPricingModes?.[param.id] || 'per_person';
                                 const isPerGroup = pricingMode === 'per_group';
                                 const paramTotal = paramPrice != null
                                   ? (isPerGroup ? paramPrice : paramPrice * qty)
@@ -845,13 +892,15 @@ export function CartItemInlineEditForm({
                                         <span className="text-xs text-gray-600">
                                           {getParamName(param)}
                                         </span>
-                                        {addonPricing?.loading ? (
-                                          <div><Loader2 className="h-3 w-3 animate-spin text-gray-400" /></div>
-                                        ) : paramPrice != null && paramPrice > 0 ? (
-                                          <div className="text-xs text-gray-500">
-                                            {formatCurrency(paramPrice)}/{isPerGroup ? t('inlineEdit.perGroup') : t('inlineEdit.perPerson')}
-                                          </div>
-                                        ) : null}
+                                        <div className="text-xs text-gray-500 min-h-[20px] flex items-center">
+                                          {addonPricing?.loading ? (
+                                            <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                                          ) : paramPrice != null && paramPrice > 0 ? (
+                                            `${formatCurrency(paramPrice)}/${isPerGroup ? t('inlineEdit.perGroup') : t('inlineEdit.perPerson')}`
+                                          ) : (
+                                            <span className="text-gray-400">-</span>
+                                          )}
+                                        </div>
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <Button
@@ -882,59 +931,75 @@ export function CartItemInlineEditForm({
                               })}
 
                               {/* Addon total & voucher */}
-                              {!addonPricing?.loading && (() => {
+                              {(() => {
+                                // Calculate addon total
                                 let addonTotal = 0;
-                                addon.parameters.forEach((param) => {
-                                  const qty = selection?.parameterQuantities[param.id] || 0;
-                                  const price = addonPricing?.parameterPricing[param.id] || 0;
-                                  const mode = addonPricing?.parameterPricingModes[param.id] || 'per_person';
-                                  addonTotal += mode === 'per_group' ? price : price * qty;
-                                });
+                                if (!addonPricing?.loading) {
+                                  addon.parameters.forEach((param) => {
+                                    const qty = selection?.parameterQuantities[param.id] || 0;
+                                    const price = addonPricing?.parameterPricing?.[param.id] || 0;
+                                    const mode = addonPricing?.parameterPricingModes?.[param.id] || 'per_person';
+                                    addonTotal += mode === 'per_group' ? price : price * qty;
+                                  });
+                                }
+
+                                // Create stable appliedVoucher object
+                                const memoizedAppliedVoucher = selection?.voucher ? {
+                                  id: selection.voucher.id,
+                                  code: selection.voucher.code,
+                                  name: '',
+                                  description: '',
+                                  discountType: selection.voucher.discountType,
+                                  discountValue: selection.voucher.discountValue,
+                                  discountAmount: selection.voucher.discountAmount,
+                                  isStackable: false
+                                } : null;
+
                                 const voucherDiscount = selection?.voucher?.discountAmount || 0;
                                 const addonFinalTotal = Math.max(0, addonTotal - voucherDiscount);
+
                                 return (
                                   <>
-                                    {addonTotal > 0 && (
+                                    {(addonPricing?.loading || addonTotal > 0) && (
                                       <div className="flex justify-between items-center pt-2 mt-1 border-t border-purple-200">
                                         <span className="text-xs text-gray-600">{t('inlineEdit.serviceTotal')}</span>
                                         <span className="text-sm font-semibold text-purple-700">
-                                          {formatCurrency(addonTotal)}
+                                          {addonPricing?.loading ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                                          ) : (
+                                            formatCurrency(addonTotal)
+                                          )}
                                         </span>
                                       </div>
                                     )}
 
-                                    {/* Voucher input for addon */}
-                                    {addonTotal > 0 && (
-                                      <div className="mt-2">
-                                        <VoucherInput
-                                          itemId={addon.addon_item_id}
-                                          zoneId={item.zoneId}
-                                          totalAmount={addonTotal}
-                                          applicationType="common_item"
-                                          validationEndpoint="/api/glamping/validate-voucher"
-                                          locale={locale}
-                                          appliedVoucher={selection?.voucher ? {
-                                            id: selection.voucher.id,
-                                            code: selection.voucher.code,
-                                            name: '',
-                                            description: '',
-                                            discountType: selection.voucher.discountType,
-                                            discountValue: selection.voucher.discountValue,
-                                            discountAmount: selection.voucher.discountAmount,
-                                            isStackable: false
-                                          } : null}
-                                          onVoucherApplied={(voucher) => handleAddonVoucherApplied(addon.addon_item_id, voucher)}
-                                          onVoucherRemoved={() => handleAddonVoucherRemoved(addon.addon_item_id)}
-                                        />
-                                      </div>
-                                    )}
+                                    {/* Voucher input for addon - always rendered */}
+                                    <div className="mt-2">
+                                      <VoucherInput
+                                        key={addon.addon_item_id}
+                                        itemId={addon.addon_item_id}
+                                        zoneId={item.zoneId}
+                                        totalAmount={addonTotal}
+                                        applicationType="common_item"
+                                        validationEndpoint="/api/glamping/validate-voucher"
+                                        locale={locale}
+                                        appliedVoucher={memoizedAppliedVoucher}
+                                        onVoucherApplied={(voucher) => handleAddonVoucherApplied(addon.addon_item_id, voucher)}
+                                        onVoucherRemoved={() => handleAddonVoucherRemoved(addon.addon_item_id)}
+                                        disabled={addonPricing?.loading || addonTotal === 0}
+                                      />
+                                    </div>
 
                                     {/* Final total after voucher */}
-                                    {voucherDiscount > 0 && addonTotal > 0 && (
+                                    {(addonPricing?.loading || (voucherDiscount > 0 && addonTotal > 0)) && (
                                       <div className="flex justify-between items-center pt-2 mt-1 border-t border-purple-200">
                                         <span className="text-xs font-semibold text-gray-700">{t('inlineEdit.grandTotal')}</span>
                                         <span className="text-sm font-bold text-purple-700">
-                                          {formatCurrency(addonFinalTotal)}
+                                          {addonPricing?.loading ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                                          ) : (
+                                            formatCurrency(addonFinalTotal)
+                                          )}
                                         </span>
                                       </div>
                                     )}

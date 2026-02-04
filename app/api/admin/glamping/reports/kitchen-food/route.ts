@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
             totalAdults: 0,
             totalChildren: 0,
             aggregatedMenuItems: [],
+            aggregatedCommonItems: [],
           },
           data: [],
         });
@@ -152,6 +153,47 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Helper to get localized string
+    const getLocalizedString = (value: any): string => {
+      if (!value) return "";
+      if (typeof value === "string") return value;
+      if (typeof value === "object") {
+        return value.vi || value.en || Object.values(value)[0] || "";
+      }
+      return String(value);
+    };
+
+    // Fetch common items (addons) for all bookings
+    let commonItemsByTentId = new Map<string, Array<{ itemName: string; parameterName: string; quantity: number }>>();
+
+    if (bookingIds.length > 0) {
+      const commonItemsResult = await client.query(
+        `SELECT bi.booking_id, bi.booking_tent_id, bi.addon_item_id, bi.parameter_id, bi.quantity,
+                addon_item.name as item_name, p.name as parameter_name
+         FROM glamping_booking_items bi
+         LEFT JOIN glamping_items addon_item ON bi.addon_item_id = addon_item.id
+         LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
+         WHERE bi.booking_id = ANY($1::uuid[])
+           AND bi.metadata->>'type' = 'addon'
+         ORDER BY bi.booking_tent_id, addon_item.name, bi.created_at`,
+        [bookingIds]
+      );
+
+      for (const row of commonItemsResult.rows) {
+        const tentId = row.booking_tent_id;
+        if (!tentId) continue;
+        if (!commonItemsByTentId.has(tentId)) {
+          commonItemsByTentId.set(tentId, []);
+        }
+
+        commonItemsByTentId.get(tentId)!.push({
+          itemName: getLocalizedString(row.item_name),
+          parameterName: getLocalizedString(row.parameter_name),
+          quantity: row.quantity,
+        });
+      }
+    }
+
     // Aggregated menu items summary query
     const summaryQuery = `
       SELECT
@@ -171,15 +213,29 @@ export async function GET(request: NextRequest) {
 
     const summaryResult = await client.query(summaryQuery, values);
 
-    // Helper to get localized string
-    const getLocalizedString = (value: any): string => {
-      if (!value) return "";
-      if (typeof value === "string") return value;
-      if (typeof value === "object") {
-        return value.vi || value.en || Object.values(value)[0] || "";
-      }
-      return String(value);
-    };
+    // Aggregated common items summary
+    let aggregatedCommonItems: Array<{ itemName: string; parameterName: string; totalQuantity: number }> = [];
+
+    if (bookingIds.length > 0) {
+      const commonSummaryResult = await client.query(
+        `SELECT addon_item.name as item_name, p.name as parameter_name,
+                SUM(bi.quantity) as total_quantity
+         FROM glamping_booking_items bi
+         LEFT JOIN glamping_items addon_item ON bi.addon_item_id = addon_item.id
+         LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
+         WHERE bi.booking_id = ANY($1::uuid[])
+           AND bi.metadata->>'type' = 'addon'
+         GROUP BY addon_item.name, p.name
+         ORDER BY addon_item.name, p.name`,
+        [bookingIds]
+      );
+
+      aggregatedCommonItems = commonSummaryResult.rows.map((row: any) => ({
+        itemName: getLocalizedString(row.item_name),
+        parameterName: getLocalizedString(row.parameter_name),
+        totalQuantity: parseInt(row.total_quantity) || 0,
+      }));
+    }
 
     // Transform data into nested structure by booking
     const bookingsMap = new Map<string, {
@@ -203,6 +259,7 @@ export async function GET(request: NextRequest) {
           adjustedQuantity: number;
           notes: string | null;
         }[];
+        commonItems: Array<{ itemName: string; parameterName: string; quantity: number }>;
       }>;
     }>();
 
@@ -238,6 +295,7 @@ export async function GET(request: NextRequest) {
           parameters: tentParams,
           displayOrder: row.display_order || 0,
           menuProducts: [],
+          commonItems: commonItemsByTentId.get(tentId) || [],
         });
 
         // Count unique tents and aggregate parameters
@@ -277,6 +335,7 @@ export async function GET(request: NextRequest) {
           itemName: tent.itemName,
           parameters: tent.parameters,
           menuProducts: tent.menuProducts,
+          commonItems: tent.commonItems,
         })),
     }));
 
@@ -300,6 +359,7 @@ export async function GET(request: NextRequest) {
         totalTents: uniqueTentIds.size,
         parametersSummary,
         aggregatedMenuItems,
+        aggregatedCommonItems,
       },
       data,
     });

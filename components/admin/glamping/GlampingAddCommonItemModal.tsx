@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -159,6 +159,9 @@ export function GlampingAddCommonItemModal({
   const [parameterPricingModes, setParameterPricingModes] = useState<Record<string, 'per_person' | 'per_group'>>({});
   const [pricingLoading, setPricingLoading] = useState(false);
 
+  // Ref for tracking previous quantities to optimize fetches
+  const prevQuantitiesRef = useRef(parameterQuantities);
+
   // Voucher state
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
 
@@ -258,11 +261,27 @@ export function GlampingAddCommonItemModal({
     if (!selectedAddonId || !selectedTent) {
       setParameterPricing({});
       setParameterPricingModes({});
+      prevQuantitiesRef.current = parameterQuantities;
+      return;
+    }
+
+    // Detect which parameters changed
+    const prevQty = prevQuantitiesRef.current;
+    const hasChanges = JSON.stringify(parameterQuantities) !== JSON.stringify(prevQty);
+
+    if (!hasChanges && Object.keys(parameterPricing).length > 0) {
+      // Already have pricing and no changes - skip fetch
       return;
     }
 
     const hasQuantity = Object.values(parameterQuantities).some(q => q > 0);
-    if (!hasQuantity) return;
+    if (!hasQuantity) {
+      prevQuantitiesRef.current = parameterQuantities;
+      return;
+    }
+
+    // Update ref immediately to prevent re-fetch
+    prevQuantitiesRef.current = parameterQuantities;
 
     const fetchPricing = async () => {
       setPricingLoading(true);
@@ -362,6 +381,11 @@ export function GlampingAddCommonItemModal({
           pricingMode: parameterPricingModes[paramId] || 'per_person',
         }));
 
+      // For inherit_parent mode (single date), extract the selected date from addonDates.from
+      const selectedDate = (selectedAddon?.dates_setting === 'inherit_parent' && addonDates?.from)
+        ? addonDates.from
+        : undefined;
+
       const res = await fetch(`/api/admin/glamping/bookings/${bookingId}/common-items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -369,6 +393,7 @@ export function GlampingAddCommonItemModal({
           bookingTentId: selectedTentId,
           addonItemId: selectedAddonId,
           addonDates: addonDates || undefined,
+          selectedDate: selectedDate,
           parameters: paramsForApi,
           voucher: appliedVoucher ? {
             code: appliedVoucher.code,
@@ -533,12 +558,20 @@ export function GlampingAddCommonItemModal({
                           className="w-16 h-8 text-sm text-center"
                         />
                         <span className="text-xs text-gray-400">&times;</span>
-                        <span className="text-sm text-gray-700 w-28 text-right tabular-nums">
-                          {pricingLoading ? '...' : formatCurrency(unitPrice)}
+                        <span className="text-sm text-gray-700 w-28 text-right tabular-nums flex items-center justify-end">
+                          {pricingLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                          ) : (
+                            formatCurrency(unitPrice)
+                          )}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-500 w-24 text-right">
-                        = {pricingLoading ? '...' : formatCurrency(rowTotal)}
+                      <span className="text-xs text-gray-500 w-24 text-right flex items-center justify-end">
+                        = {pricingLoading ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-gray-400 ml-1" />
+                        ) : (
+                          formatCurrency(rowTotal)
+                        )}
                       </span>
                     </div>
                   );
@@ -571,8 +604,15 @@ export function GlampingAddCommonItemModal({
               <CardContent className="p-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">{t.total}</span>
-                  <span className="font-medium text-purple-700">
-                    {pricingLoading ? t.loadingPricing : formatCurrency(totalCost)}
+                  <span className="font-medium text-purple-700 flex items-center gap-2">
+                    {pricingLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm">{t.loadingPricing}</span>
+                      </>
+                    ) : (
+                      formatCurrency(totalCost)
+                    )}
                   </span>
                 </div>
                 {appliedVoucher && appliedVoucher.discountAmount > 0 && (

@@ -1041,13 +1041,14 @@ export async function POST(request: NextRequest) {
                 booking_id,
                 booking_tent_id,
                 item_id,
+                addon_item_id,
                 parameter_id,
                 allocation_type,
                 quantity,
                 unit_price,
                 metadata
               )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             `;
 
             // Save each addon parameter as a booking item with real unit_price
@@ -1063,6 +1064,7 @@ export async function POST(request: NextRequest) {
                   await client.query(addonInsertQuery, [
                     booking.id,
                     tentId,
+                    itemData.itemId,
                     addon.addonItemId,
                     paramId,
                     'per_night',
@@ -1072,6 +1074,7 @@ export async function POST(request: NextRequest) {
                       type: 'addon',
                       parentItemId: itemData.itemId,
                       dates: addon.dates || null,
+                      selectedDate: addon.selectedDate || null,
                       pricingMode,
                       voucher: addonVoucher?.voucherCode ? {
                         code: addonVoucher.voucherCode,
@@ -1089,6 +1092,7 @@ export async function POST(request: NextRequest) {
               await client.query(addonInsertQuery, [
                 booking.id,
                 tentId,
+                itemData.itemId,
                 addon.addonItemId,
                 null,
                 'per_night',
@@ -1098,6 +1102,7 @@ export async function POST(request: NextRequest) {
                   type: 'addon',
                   parentItemId: itemData.itemId,
                   dates: addon.dates || null,
+                  selectedDate: addon.selectedDate || null,
                   voucher: addonVoucher?.voucherCode ? {
                     code: addonVoucher.voucherCode,
                     id: addonVoucher.voucherId,

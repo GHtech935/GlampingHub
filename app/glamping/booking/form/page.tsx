@@ -721,7 +721,7 @@ function GlampingBookingFormContent() {
             }
           }
 
-          // Build addon selections payload (include pricing + voucher)
+          // Build addon selections payload (include pricing + voucher + selectedDate)
           const addonPayload = item.addonSelections
             ? Object.values(item.addonSelections)
                 .filter(sel => sel.selected)
@@ -730,6 +730,7 @@ function GlampingBookingFormContent() {
                   quantity: sel.quantity,
                   parameterQuantities: sel.parameterQuantities,
                   dates: sel.dates || undefined,
+                  selectedDate: sel.selectedDate || undefined,
                   totalPrice: sel.totalPrice || 0,
                   parameterPricing: sel.parameterPricing || {},
                   voucher: sel.voucher ? {
