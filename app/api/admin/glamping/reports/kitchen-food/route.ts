@@ -110,11 +110,12 @@ export async function GET(request: NextRequest) {
 
     if (tentIds.length > 0) {
       const paramsResult = await client.query(
-        `SELECT bp.booking_tent_id, bp.label, bp.booked_quantity, p.counted_for_menu
+        `SELECT bp.booking_tent_id, bp.label, bp.booked_quantity, p.counted_for_menu, p.display_order
          FROM glamping_booking_parameters bp
          JOIN glamping_parameters p ON bp.parameter_id = p.id
          WHERE bp.booking_tent_id = ANY($1::uuid[])
-           AND (p.visibility IS NULL OR p.visibility != 'hidden')`,
+           AND (p.visibility IS NULL OR p.visibility != 'hidden')
+         ORDER BY p.display_order ASC, p.name ASC`,
         [tentIds]
       );
       for (const row of paramsResult.rows) {

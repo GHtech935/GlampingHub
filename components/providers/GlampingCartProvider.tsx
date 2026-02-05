@@ -37,6 +37,9 @@ export interface AddonSelection {
     pricingMode: string;     // 'per_person' | 'per_group'
     paramName: string;       // Parameter name for display
   }>;
+  // Price override fields (for admin manual booking)
+  priceOverride?: number;      // Manual override price
+  usePriceOverride?: boolean;  // Whether to use override
 }
 
 export interface GlampingCartItem {

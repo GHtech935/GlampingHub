@@ -82,6 +82,12 @@ export function GlampingPaymentSection({
     if (isSubmitting) {
       return t('processing')
     }
+
+    // Check if grand total is 0 (free booking)
+    if (grandTotal === 0) {
+      return t('createFreeBookingNow')
+    }
+
     if (paymentMethod === "pay_later") {
       if (!hasDepositValue) {
         return locale === 'vi' ? 'Đặt phòng ngay' : 'Book Now'

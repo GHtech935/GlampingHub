@@ -148,12 +148,12 @@ export function PitchTypeSelectorAdmin({
               </p>
 
               {/* Price */}
-              {price !== undefined && price > 0 && (
+              {price !== undefined && (
                 <p className={cn(
                   "text-xs mt-1",
                   isSelected ? "text-primary/80" : "text-gray-500"
                 )}>
-                  {new Intl.NumberFormat('vi-VN').format(price)}đ
+                  {price === 0 ? (locale === 'vi' ? 'Miễn phí' : 'Free') : `${new Intl.NumberFormat('vi-VN').format(price)}đ`}
                 </p>
               )}
             </div>

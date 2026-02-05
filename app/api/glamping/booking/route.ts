@@ -9,6 +9,22 @@ import {
 import { validateVoucherDirect } from '@/lib/voucher-validation';
 
 /**
+ * Validate date of birth format (MM-DD)
+ */
+function validateMonthDay(dateOfBirth: string | undefined): boolean {
+  if (!dateOfBirth) return true; // Optional field
+
+  // Check format MM-DD
+  const mmddPattern = /^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
+  if (!mmddPattern.test(dateOfBirth)) return false;
+
+  // Validate day is valid for month
+  const [month, day] = dateOfBirth.split('-').map(Number);
+  const maxDays = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= maxDays[month - 1];
+}
+
+/**
  * Check if an item is available for booking in the given date range
  * Considers inventory_quantity and unlimited_inventory settings
  */
@@ -133,6 +149,16 @@ export async function POST(request: NextRequest) {
         client.release();
         return NextResponse.json(
           { error: 'Missing required fields for multi-item booking' },
+          { status: 400 }
+        );
+      }
+
+      // Validate date of birth format (MM-DD)
+      if (dateOfBirth && !validateMonthDay(dateOfBirth)) {
+        await client.query('ROLLBACK');
+        client.release();
+        return NextResponse.json(
+          { error: 'Invalid date of birth format. Expected MM-DD format (e.g., 03-25)' },
           { status: 400 }
         );
       }
@@ -831,7 +857,7 @@ export async function POST(request: NextRequest) {
         customerId,
         `${resolvedGuestFirstName} ${resolvedGuestLastName}`.trim(),
         'confirmed',
-        'pending',
+        totalAmount === 0 ? 'fully_paid' : 'pending', // Auto-set to fully_paid for free bookings
         earliestCheckIn.toISOString().split('T')[0],
         latestCheckOut.toISOString().split('T')[0],
         JSON.stringify({ adults: totalAdults, children: totalChildren }),
@@ -1051,6 +1077,27 @@ export async function POST(request: NextRequest) {
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             `;
 
+            // Calculate total price (use override if provided)
+            let calculatedTotal = 0;
+            if (addon.parameterPricing) {
+              Object.entries(addon.parameterPricing).forEach(([paramId, pricing]: [string, any]) => {
+                const qty = addon.parameterQuantities?.[paramId] || 0;
+                const unitPrice = pricing?.unitPrice || 0;
+                const pricingMode = pricing?.pricingMode || 'per_person';
+                const isPerGroup = pricingMode === 'per_group';
+                calculatedTotal += isPerGroup ? unitPrice : unitPrice * qty;
+              });
+            } else {
+              calculatedTotal = addon.totalPrice || 0;
+            }
+
+            // Apply override if provided
+            const finalTotal = addon.priceOverride !== undefined && addon.priceOverride !== null
+              ? addon.priceOverride
+              : calculatedTotal;
+
+            console.log(`[Add-on ${addon.addonItemId}] Calculated: ${calculatedTotal}, Override: ${addon.priceOverride}, Final: ${finalTotal}`);
+
             // Save each addon parameter as a booking item with real unit_price
             const addonParamEntries = Object.entries(addon.parameterQuantities || {});
             if (addonParamEntries.length > 0) {
@@ -1058,8 +1105,14 @@ export async function POST(request: NextRequest) {
                 if ((qty as number) > 0) {
                   // Get unit price from client-supplied parameterPricing
                   const paramPricing = addon.parameterPricing?.[paramId];
-                  const unitPrice = paramPricing?.unitPrice || 0;
+                  let unitPrice = paramPricing?.unitPrice || 0;
                   const pricingMode = paramPricing?.pricingMode || 'per_person';
+
+                  // If override is provided, distribute it proportionally across parameters
+                  if (addon.priceOverride !== undefined && addon.priceOverride !== null && calculatedTotal > 0) {
+                    const ratio = finalTotal / calculatedTotal;
+                    unitPrice = unitPrice * ratio;
+                  }
 
                   await client.query(addonInsertQuery, [
                     booking.id,
@@ -1076,6 +1129,7 @@ export async function POST(request: NextRequest) {
                       dates: addon.dates || null,
                       selectedDate: addon.selectedDate || null,
                       pricingMode,
+                      priceOverride: addon.priceOverride, // Store override info
                       voucher: addonVoucher?.voucherCode ? {
                         code: addonVoucher.voucherCode,
                         id: addonVoucher.voucherId,
@@ -1097,12 +1151,13 @@ export async function POST(request: NextRequest) {
                 null,
                 'per_night',
                 addon.quantity || 1,
-                addon.totalPrice || 0,
+                finalTotal, // Use final total (with override if provided)
                 JSON.stringify({
                   type: 'addon',
                   parentItemId: itemData.itemId,
                   dates: addon.dates || null,
                   selectedDate: addon.selectedDate || null,
+                  priceOverride: addon.priceOverride, // Store override info
                   voucher: addonVoucher?.voucherCode ? {
                     code: addonVoucher.voucherCode,
                     id: addonVoucher.voucherId,
@@ -1160,8 +1215,8 @@ export async function POST(request: NextRequest) {
         null,
         'confirmed',
         null,
-        'pending',
-        `Multi-item booking created with ${items.length} items`,
+        totalAmount === 0 ? 'fully_paid' : 'pending',
+        totalAmount === 0 ? `Free booking created (0 VND) - ${items.length} items` : `Multi-item booking created with ${items.length} items`,
       ]);
 
       // Step 15: Increment voucher usage for each unique voucher
@@ -1210,7 +1265,8 @@ export async function POST(request: NextRequest) {
       // Note: paymentRequired already calculated above for paymentExpiresAt
       let redirectUrl = `/glamping/booking/confirmation/${booking.id}`;
 
-      if (paymentRequired) {
+      // Skip payment page if total amount is 0
+      if (paymentRequired && totalAmount > 0) {
         redirectUrl = `/glamping/booking/payment/${booking.id}`;
       }
 
@@ -1394,6 +1450,16 @@ export async function POST(request: NextRequest) {
       client.release();
       return NextResponse.json(
         { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Validate date of birth format (MM-DD)
+    if (dateOfBirth && !validateMonthDay(dateOfBirth)) {
+      await client.query('ROLLBACK');
+      client.release();
+      return NextResponse.json(
+        { error: 'Invalid date of birth format. Expected MM-DD format (e.g., 03-25)' },
         { status: 400 }
       );
     }
@@ -1840,7 +1906,7 @@ export async function POST(request: NextRequest) {
       customerId,
       `${guestFirstName} ${guestLastName}`.trim(),
       'confirmed',
-      'pending',
+      totalAmount === 0 ? 'fully_paid' : 'pending', // Auto-set to fully_paid for free bookings
       checkInDate,
       checkOutDate,
       JSON.stringify({ adults, children }),
@@ -2040,8 +2106,8 @@ export async function POST(request: NextRequest) {
       null,
       'confirmed',
       null,
-      'pending',
-      'Booking created and confirmed',
+      totalAmount === 0 ? 'fully_paid' : 'pending',
+      totalAmount === 0 ? 'Free booking created (0 VND)' : 'Booking created and confirmed',
     ]);
 
     // Increment voucher usage for each unique voucher used
@@ -2073,7 +2139,8 @@ export async function POST(request: NextRequest) {
     // Note: paymentRequired already calculated above for paymentExpiresAt
     let redirectUrl = `/glamping/booking/confirmation/${booking.id}`;
 
-    if (paymentRequired) {
+    // Skip payment page if total amount is 0
+    if (paymentRequired && totalAmount > 0) {
       redirectUrl = `/glamping/booking/payment/${booking.id}`;
     }
 

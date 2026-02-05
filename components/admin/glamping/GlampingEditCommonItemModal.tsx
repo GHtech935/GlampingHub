@@ -11,10 +11,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import VoucherInput, { type AppliedVoucher } from '@/components/booking/VoucherInput';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import type { Locale } from "@/lib/i18n-utils";
 import type { CommonItemEditData } from "./types";
 
@@ -51,6 +52,11 @@ const texts = {
     addonDateFrom: 'Từ ngày',
     addonDateTo: 'Đến ngày',
     loadingPricing: 'Đang tính giá...',
+    overrideTotal: 'Ghi đè thành tiền',
+    removeOverride: 'Bỏ ghi đè',
+    overrideHint: 'Nhập tổng tiền...',
+    calculatedPrice: 'Giá tính toán',
+    subtotal: 'Tạm tính',
   },
   en: {
     title: 'Edit Common Item',
@@ -68,6 +74,11 @@ const texts = {
     addonDateFrom: 'From Date',
     addonDateTo: 'To Date',
     loadingPricing: 'Calculating price...',
+    overrideTotal: 'Override Total',
+    removeOverride: 'Remove override',
+    overrideHint: 'Enter total...',
+    calculatedPrice: 'Calculated',
+    subtotal: 'Subtotal',
   },
 };
 
@@ -108,6 +119,10 @@ export function GlampingEditCommonItemModal({
 
   // Ref for tracking previous parameters to optimize fetches
   const prevParametersRef = useRef(parameters);
+
+  // Price override state
+  const [priceOverride, setPriceOverride] = useState<number | null>(item.priceOverride || null);
+  const [showPriceOverride, setShowPriceOverride] = useState(!!item.priceOverride);
 
   // Voucher state
   const [voucher, setVoucher] = useState<{
@@ -222,10 +237,13 @@ export function GlampingEditCommonItemModal({
     [parameters]
   );
 
+  // Use override if set, otherwise use calculated
+  const effectiveTotal = priceOverride !== null ? priceOverride : calculatedTotal;
+
   const finalTotal = useMemo(() => {
     const discount = voucher?.discountAmount || 0;
-    return Math.max(0, calculatedTotal - discount);
-  }, [calculatedTotal, voucher]);
+    return Math.max(0, effectiveTotal - discount);
+  }, [effectiveTotal, voucher]);
 
   const updateParameterQuantity = (index: number, value: number) => {
     setParameters(prev => {
@@ -269,6 +287,7 @@ export function GlampingEditCommonItemModal({
             addonDates: addonDates || undefined,
             selectedDate: selectedDate,
             voucher: voucher,
+            priceOverride: priceOverride,
             parameters: parameters.map(p => ({
               parameterId: p.parameterId,
               quantity: p.quantity,
@@ -395,22 +414,28 @@ export function GlampingEditCommonItemModal({
                             className="w-16 h-8 text-sm text-center"
                           />
                         )}
-                        <span className="text-xs text-gray-400">&times;</span>
-                        <span className="text-sm text-gray-700 w-28 text-right tabular-nums flex items-center justify-end">
-                          {pricingLoading ? (
-                            <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                        {priceOverride === null && (
+                          <>
+                            <span className="text-xs text-gray-400">&times;</span>
+                            <span className="text-sm text-gray-700 w-28 text-right tabular-nums flex items-center justify-end">
+                              {pricingLoading ? (
+                                <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                              ) : (
+                                formatCurrency(param.unitPrice)
+                              )}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {priceOverride === null && (
+                        <span className="text-xs text-gray-500 w-24 text-right flex items-center justify-end">
+                          = {pricingLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin text-gray-400 ml-1" />
                           ) : (
-                            formatCurrency(param.unitPrice)
+                            formatCurrency(rowTotal)
                           )}
                         </span>
-                      </div>
-                      <span className="text-xs text-gray-500 w-24 text-right flex items-center justify-end">
-                        = {pricingLoading ? (
-                          <Loader2 className="h-3 w-3 animate-spin text-gray-400 ml-1" />
-                        ) : (
-                          formatCurrency(rowTotal)
-                        )}
-                      </span>
+                      )}
                     </div>
                   );
                 })}
@@ -422,7 +447,7 @@ export function GlampingEditCommonItemModal({
           {calculatedTotal > 0 && (
             <div className="bg-blue-50 rounded-lg p-3">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Tạm tính</span>
+                <span className="text-gray-600">{t.subtotal}</span>
                 <span className="font-medium flex items-center gap-2">
                   {pricingLoading ? (
                     <>
@@ -430,20 +455,70 @@ export function GlampingEditCommonItemModal({
                       <span className="text-sm">{t.loadingPricing}</span>
                     </>
                   ) : (
-                    formatCurrency(calculatedTotal)
+                    formatCurrency(effectiveTotal)
                   )}
                 </span>
               </div>
             </div>
           )}
 
+          {/* Price Override Section */}
+          <div className="space-y-2">
+            {!showPriceOverride ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowPriceOverride(true);
+                  setPriceOverride(calculatedTotal);
+                }}
+                className="w-full"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {t.overrideTotal}
+              </Button>
+            ) : (
+              <div className="border rounded-md p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">
+                    {t.overrideTotal}
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowPriceOverride(false);
+                      setPriceOverride(null);
+                    }}
+                    className="h-6 w-6 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <CurrencyInput
+                  value={priceOverride || 0}
+                  onValueChange={(val) => setPriceOverride(val || null)}
+                  locale={locale}
+                  placeholder={t.overrideHint}
+                />
+
+                <p className="text-xs text-muted-foreground">
+                  {locale === 'vi' ? 'Để trống để tự tính' : 'Leave empty for auto-calc'}
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Voucher Input */}
-          {calculatedTotal > 0 && (
+          {effectiveTotal > 0 && (
             <div>
               <VoucherInput
                 itemId={item.itemId}
                 zoneId={item.zoneId || ''}
-                totalAmount={calculatedTotal}
+                totalAmount={effectiveTotal}
                 applicationType="common_item"
                 validationEndpoint="/api/glamping/validate-voucher"
                 locale={locale}

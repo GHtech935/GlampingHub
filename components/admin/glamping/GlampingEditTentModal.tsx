@@ -9,15 +9,27 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { CurrencyInput } from "@/components/ui/currency-input";
-import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/utils";
 import { toast } from "react-hot-toast";
-import { CheckCircle2, X, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import type { Locale } from "@/lib/i18n-utils";
 import type { TentEditData } from "./types";
+import { GlampingTentFormSections } from "./GlampingTentFormSections";
+import type { AppliedVoucher } from "@/components/booking/VoucherInput";
+import type { MultilingualText } from "@/lib/i18n-utils";
+
+interface GlampingParameter {
+  id: string;
+  parameter_id: string;
+  name: MultilingualText | string;
+  color_code: string;
+  controls_inventory: boolean;
+  sets_pricing: boolean;
+  min_quantity?: number;
+  max_quantity?: number;
+  counted_for_menu?: boolean;
+}
 
 interface GlampingEditTentModalProps {
   isOpen: boolean;
@@ -30,54 +42,20 @@ interface GlampingEditTentModalProps {
 const texts = {
   vi: {
     title: 'Chỉnh sửa lều',
-    checkIn: 'Ngày check-in',
-    checkOut: 'Ngày check-out',
-    parameters: 'Thông số giá',
-    paramName: 'Loại',
-    paramQty: 'SL',
-    paramPrice: 'Đơn giá',
-    subtotal: 'Tạm tính',
-    subtotalOverride: 'Ghi đè tạm tính',
-    subtotalOverrideHint: 'Để trống để tự tính',
-    voucher: 'Mã voucher',
-    voucherApply: 'Áp dụng',
-    voucherRemove: 'Xoá voucher',
-    voucherPlaceholder: 'Nhập mã voucher',
-    voucherApplied: 'Đã áp dụng',
     save: 'Lưu thay đổi',
     cancel: 'Huỷ',
     saving: 'Đang lưu...',
     saveSuccess: 'Đã cập nhật lều',
     saveFailed: 'Không thể cập nhật',
-    nights: 'đêm',
-    calculatedTotal: 'Tổng tính',
-    discount: 'Giảm giá',
     pricingError: 'Không thể tải giá. Vui lòng thử lại.',
   },
   en: {
     title: 'Edit Tent',
-    checkIn: 'Check-in Date',
-    checkOut: 'Check-out Date',
-    parameters: 'Pricing Parameters',
-    paramName: 'Type',
-    paramQty: 'Qty',
-    paramPrice: 'Unit Price',
-    subtotal: 'Subtotal',
-    subtotalOverride: 'Subtotal Override',
-    subtotalOverrideHint: 'Leave empty for auto-calc',
-    voucher: 'Voucher Code',
-    voucherApply: 'Apply',
-    voucherRemove: 'Remove',
-    voucherPlaceholder: 'Enter voucher code',
-    voucherApplied: 'Applied',
     save: 'Save Changes',
     cancel: 'Cancel',
     saving: 'Saving...',
     saveSuccess: 'Tent updated',
     saveFailed: 'Failed to update',
-    nights: 'nights',
-    calculatedTotal: 'Calculated Total',
-    discount: 'Discount',
     pricingError: 'Failed to load pricing. Please try again.',
   },
 };
@@ -110,27 +88,115 @@ export function GlampingEditTentModal({
   const [parameters, setParameters] = useState(
     tent.parameters.map(p => ({ ...p }))
   );
-  const [subtotalOverride, setSubtotalOverride] = useState<number | undefined>(undefined);
-  const [showSubtotalOverride, setShowSubtotalOverride] = useState(false);
-  const [voucherCode, setVoucherCode] = useState<string | null>(tent.voucherCode || null);
-  const [newVoucherCode, setNewVoucherCode] = useState('');
-  const [voucherRemoved, setVoucherRemoved] = useState(false);
-  const [discountAmount, setDiscountAmount] = useState(tent.discountAmount || 0);
-  const [validatingVoucher, setValidatingVoucher] = useState(false);
+  // Initialize override state from tent props
+  const [subtotalOverride, setSubtotalOverride] = useState<number | undefined>(
+    tent.priceOverride !== null && tent.priceOverride !== undefined
+      ? tent.priceOverride
+      : undefined
+  );
+  const [showSubtotalOverride, setShowSubtotalOverride] = useState(
+    tent.priceOverride !== null && tent.priceOverride !== undefined
+  );
+  const [specialRequests, setSpecialRequests] = useState(tent.specialRequests || '');
+  const [accommodationVoucher, setAccommodationVoucher] = useState<AppliedVoucher | null>(
+    tent.voucherCode ? {
+      id: '',
+      code: tent.voucherCode,
+      name: '',
+      description: '',
+      discountType: tent.discountType || 'percentage',
+      discountValue: tent.discountValue || 0,
+      discountAmount: tent.discountAmount || 0,
+      isStackable: false,
+    } : null
+  );
   const [saving, setSaving] = useState(false);
 
+  // Add parameter fetching state
+  // Initialize with tent.parameters data (convert structure to match GlampingParameter)
+  const [itemParameters, setItemParameters] = useState<GlampingParameter[]>(() =>
+    tent.parameters.map(p => ({
+      id: p.parameterId,
+      parameter_id: p.parameterId,
+      name: p.parameterName || '',
+      color_code: '',
+      controls_inventory: false,
+      sets_pricing: true,
+      min_quantity: 0,
+      max_quantity: 99,
+      counted_for_menu: false,
+    }))
+  );
+  const [loadingParameters, setLoadingParameters] = useState(false);
+
+  // Add DateRange state for calendar
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => ({
+    from: new Date(tent.checkInDate),
+    to: new Date(tent.checkOutDate)
+  }));
+
+  // Sync DateRange → string dates for API calls
+  useEffect(() => {
+    if (dateRange?.from && dateRange?.to) {
+      setCheckInDate(format(dateRange.from, 'yyyy-MM-dd'))
+      setCheckOutDate(format(dateRange.to, 'yyyy-MM-dd'))
+    }
+  }, [dateRange]);
+
+  // Fetch item details when modal opens
+  useEffect(() => {
+    if (!isOpen || !tent.itemId) return;
+
+    const fetchItemDetails = async () => {
+      setLoadingParameters(true);
+      try {
+        const response = await fetch(`/api/glamping/items/${tent.itemId}/details`);
+        if (!response.ok) throw new Error('Failed to fetch item details');
+
+        const data = await response.json();
+        const fetchedParams = data.parameters || [];
+
+        // Merge fetched parameters with stored quantities
+        const mergedParams = fetchedParams.map((param: any) => {
+          const storedParam = tent.parameters.find(p => p.parameterId === (param.parameter_id || param.id));
+          return {
+            id: param.parameter_id || param.id,
+            parameter_id: param.parameter_id || param.id,
+            name: param.name,
+            color_code: param.color_code || '',
+            controls_inventory: param.controls_inventory || false,
+            sets_pricing: param.sets_pricing || true,
+            min_quantity: param.min_quantity || 0,
+            max_quantity: param.max_quantity || 99,
+            counted_for_menu: param.counted_for_menu || false,
+            // Preserve stored quantity if exists
+            quantity: storedParam?.quantity || param.min_quantity || 0,
+          };
+        });
+
+        setItemParameters(mergedParams);
+
+        // Update parameters state: use mergedParams quantities (which already merged stored + fetched)
+        // Convert to the format expected by parameters state (with parameterId field)
+        setParameters(mergedParams.map((mp: any) => ({
+          parameterId: mp.parameter_id || mp.id,
+          parameterName: typeof mp.name === 'string' ? mp.name : (mp.name?.vi || ''),
+          quantity: mp.quantity || 0,
+          unitPrice: 0, // Will be fetched from pricing API
+        })));
+      } catch (error) {
+        console.error('Error fetching item details:', error);
+      } finally {
+        setLoadingParameters(false);
+      }
+    };
+
+    fetchItemDetails();
+  }, [isOpen, tent.itemId, tent.parameters]);
+
   // Pricing state fetched from API
-  const [parameterPricing, setParameterPricing] = useState<Record<string, number>>(() => {
-    // Initialize from existing data: unitPrice * nights = total per unit for all nights
-    const initial: Record<string, number> = {};
-    const nights = Math.max(1, Math.round(
-      (new Date(tent.checkOutDate).getTime() - new Date(tent.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
-    ));
-    tent.parameters.forEach(p => {
-      initial[p.parameterId] = p.unitPrice * nights;
-    });
-    return initial;
-  });
+  // Start empty and let API fetch populate it
+  const [parameterPricing, setParameterPricing] = useState<Record<string, number>>({});
   const [parameterPricingModes, setParameterPricingModes] = useState<Record<string, 'per_person' | 'per_group'>>({});
   const [loadingPricing, setLoadingPricing] = useState(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
@@ -194,6 +260,7 @@ export function GlampingEditTentModal({
     } catch (error) {
       console.error('Fetch pricing failed:', error);
       setPricingError(t.pricingError);
+      setParameterPricing({}); // Clear pricing on error
     } finally {
       setLoadingPricing(false);
     }
@@ -215,56 +282,6 @@ export function GlampingEditTentModal({
     };
   }, [fetchPricing]);
 
-  const updateParameterQuantity = (index: number, value: number) => {
-    setParameters(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], quantity: value };
-      return updated;
-    });
-  };
-
-  const handleRemoveVoucher = () => {
-    setVoucherCode(null);
-    setVoucherRemoved(true);
-    setDiscountAmount(0);
-  };
-
-  const handleApplyVoucher = async () => {
-    const code = newVoucherCode.trim();
-    if (!code) return;
-
-    setValidatingVoucher(true);
-    try {
-      const res = await fetch('/api/glamping/validate-voucher', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code,
-          totalAmount: calculatedSubtotal,
-          itemId: tent.itemId,
-          checkIn: checkInDate,
-          checkOut: checkOutDate,
-          applicationType: 'accommodation',
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error || (locale === 'vi' ? 'Mã voucher không hợp lệ' : 'Invalid voucher code'));
-        return;
-      }
-
-      setVoucherCode(code);
-      setNewVoucherCode('');
-      setVoucherRemoved(false);
-      setDiscountAmount(data.discountAmount || 0);
-    } catch (error) {
-      toast.error(locale === 'vi' ? 'Không thể xác thực voucher' : 'Failed to validate voucher');
-    } finally {
-      setValidatingVoucher(false);
-    }
-  };
 
   const handleSave = async () => {
     try {
@@ -279,17 +296,25 @@ export function GlampingEditTentModal({
           unitPrice: parameterPricing[p.parameterId] || p.unitPrice,
           pricingMode: parameterPricingModes[p.parameterId] || 'per_person',
         })),
+        specialRequests,
       };
 
-      if (subtotalOverride !== undefined) {
+      // Handle subtotal override
+      // If toggle is ON and value is set, send the override
+      // If toggle is OFF (was previously ON), send null to clear it
+      if (showSubtotalOverride && subtotalOverride !== undefined) {
         body.subtotalOverride = subtotalOverride;
+      } else if (!showSubtotalOverride && tent.priceOverride !== null && tent.priceOverride !== undefined) {
+        // User turned off override that was previously set - send null to clear it
+        body.subtotalOverride = null;
       }
 
       // Handle voucher changes
       const originalVoucher = tent.voucherCode || null;
-      if (voucherCode !== originalVoucher) {
-        body.voucherCode = voucherCode;
-        body.discountAmount = discountAmount;
+      const currentVoucher = accommodationVoucher?.code || null;
+      if (currentVoucher !== originalVoucher) {
+        body.voucherCode = currentVoucher;
+        body.discountAmount = accommodationVoucher?.discountAmount || 0;
       }
 
       const res = await fetch(
@@ -316,12 +341,9 @@ export function GlampingEditTentModal({
     }
   };
 
-  // Determine if a voucher is currently applied (original voucher exists and not removed)
-  const hasAppliedVoucher = voucherCode !== null && voucherCode !== '';
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {t.title}: {tent.itemName}
@@ -329,196 +351,84 @@ export function GlampingEditTentModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Dates */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>{t.checkIn}</Label>
-              <Input
-                type="date"
-                value={checkInDate}
-                onChange={(e) => setCheckInDate(e.target.value)}
-                className="mt-1"
-              />
+          {pricingError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              ⚠️ {pricingError}
             </div>
-            <div>
-              <Label>{t.checkOut}</Label>
-              <Input
-                type="date"
-                value={checkOutDate}
-                onChange={(e) => setCheckOutDate(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-          </div>
+          )}
 
-          <div className="text-sm text-gray-500">
-            {nights} {t.nights}
-          </div>
-
-          {/* Parameters */}
-          {parameters.length > 0 && (
-            <div>
-              <Label className="mb-2 block">{t.parameters}</Label>
-              {pricingError && (
-                <p className="text-xs text-red-600 mb-2">{pricingError}</p>
-              )}
-              <div className="space-y-2">
-                {parameters.map((param, idx) => {
-                  const pricePerUnit = parameterPricing[param.parameterId] || 0;
-                  const mode = parameterPricingModes[param.parameterId] || 'per_person';
-                  const rowTotal = mode === 'per_group' ? pricePerUnit : param.quantity * pricePerUnit;
-                  const isPerGroup = mode === 'per_group';
-                  return (
-                    <div key={param.parameterId} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
-                      <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">
-                        {param.parameterName}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          value={param.quantity}
-                          onChange={(e) => updateParameterQuantity(idx, parseInt(e.target.value) || 0)}
-                          className="w-16 h-8 text-sm text-center"
-                        />
-                        {!isPerGroup && (
-                          <>
-                            <span className="text-xs text-gray-400">×</span>
-                            <span className="text-sm text-gray-700 w-28 text-right tabular-nums">
-                              {loadingPricing ? '...' : formatCurrency(pricePerUnit)}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-500 w-24 text-right">
-                        = {loadingPricing ? '...' : formatCurrency(rowTotal)}
-                        {isPerGroup && (
-                          <span className="ml-1 text-blue-600">
-                            ({locale === 'vi' ? 'trọn gói' : 'flat'})
-                          </span>
-                        )}
-                      </span>
-                    </div>
+          <GlampingTentFormSections
+            mode="edit"
+            zoneId={tent.zoneId || ''}
+            itemId={tent.itemId}
+            bookingId={tent.bookingId}
+            locale={locale}
+            disabled={saving}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            parameters={itemParameters}
+            loadingParameters={loadingParameters}
+            parameterQuantities={(() => {
+              const result = Object.fromEntries(
+                itemParameters.map(ip => {
+                  // Use current parameters state for quantity (updated by user input)
+                  // parameters uses 'parameterId', itemParameters uses 'parameter_id'
+                  const currentParam = parameters.find(
+                    p => p.parameterId === (ip.parameter_id || ip.id)
                   );
-                })}
-              </div>
-            </div>
-          )}
+                  return [ip.parameter_id || ip.id, currentParam?.quantity || 0];
+                })
+              );
+              return result;
+            })()}
+            onQuantitiesChange={(quantities) => {
+              // Update parameters state with new quantities
+              // quantities keys use 'parameter_id' format, parameters uses 'parameterId'
+              setParameters(prev => {
+                // Update existing parameters
+                const updated = prev.map(p => ({
+                  ...p,
+                  quantity: quantities[p.parameterId] || 0
+                }));
 
-          {/* Calculated total */}
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">{t.calculatedTotal}</span>
-              <span className="font-medium flex items-center gap-2">
-                {loadingPricing && (
-                  <span className="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600" />
-                )}
-                {formatCurrency(calculatedSubtotal)}
-              </span>
-            </div>
-            {discountAmount > 0 && (
-              <div className="flex justify-between text-sm mt-1">
-                <span className="text-gray-600">{t.discount}</span>
-                <span className="text-red-600">-{formatCurrency(discountAmount)}</span>
-              </div>
-            )}
-          </div>
+                // Add any new parameters from itemParameters that aren't in prev
+                const existingIds = new Set(prev.map(p => p.parameterId));
+                const newParams = itemParameters
+                  .filter(ip => !existingIds.has(ip.parameter_id || ip.id))
+                  .map(ip => ({
+                    parameterId: ip.parameter_id || ip.id,
+                    parameterName: typeof ip.name === 'string' ? ip.name : (ip.name?.vi || ''),
+                    quantity: quantities[ip.parameter_id || ip.id] || 0,
+                    unitPrice: 0,
+                  }));
 
-          {/* Subtotal override */}
-          {showSubtotalOverride ? (
-            <div>
-              <div className="flex items-center justify-between">
-                <Label>{t.subtotalOverride}</Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowSubtotalOverride(false);
-                    setSubtotalOverride(undefined);
-                  }}
-                  className="h-6 px-2 text-xs text-gray-400 hover:text-red-600"
-                >
-                  <X className="h-3 w-3 mr-1" />
-                  {locale === 'vi' ? 'Bỏ ghi đè' : 'Remove override'}
-                </Button>
-              </div>
-              <CurrencyInput
-                value={subtotalOverride}
-                onValueChange={(val) => setSubtotalOverride(val)}
-                placeholder={t.subtotalOverrideHint}
-                className="mt-1"
-              />
-            </div>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSubtotalOverride(true)}
-              className="w-full text-gray-500"
-            >
-              {t.subtotalOverride}
-            </Button>
-          )}
-
-          {/* Voucher */}
-          <div>
-            <Label>{t.voucher}</Label>
-            {hasAppliedVoucher ? (
-              /* State A: Voucher applied — green badge with remove button */
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-1 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <Badge variant="outline" className="font-mono">
-                    {voucherCode}
-                  </Badge>
-                  {discountAmount > 0 && (
-                    <span className="text-sm text-green-700">
-                      (-{formatCurrency(discountAmount)})
-                    </span>
-                  )}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRemoveVoucher}
-                  className="h-7 w-7 p-0 text-gray-400 hover:text-red-600"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              /* State B: No voucher — input + apply button */
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value={newVoucherCode}
-                  onChange={(e) => setNewVoucherCode(e.target.value)}
-                  placeholder={t.voucherPlaceholder}
-                  className="flex-1"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleApplyVoucher();
-                    }
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleApplyVoucher}
-                  disabled={!newVoucherCode.trim() || validatingVoucher}
-                >
-                  {validatingVoucher ? <Loader2 className="h-4 w-4 animate-spin" /> : t.voucherApply}
-                </Button>
-              </div>
-            )}
-          </div>
+                return [...updated, ...newParams];
+              });
+            }}
+            parameterPricing={parameterPricing}
+            parameterPricingModes={parameterPricingModes}
+            pricingLoading={loadingPricing}
+            accommodationVoucher={accommodationVoucher}
+            onVoucherApplied={(voucher) => setAccommodationVoucher(voucher)}
+            onVoucherRemoved={() => setAccommodationVoucher(null)}
+            accommodationCost={calculatedSubtotal}
+            specialRequests={specialRequests}
+            onSpecialRequestsChange={setSpecialRequests}
+            nights={nights}
+            totalAfterVoucher={calculatedSubtotal - (accommodationVoucher?.discountAmount || 0)}
+            showSubtotalOverride={showSubtotalOverride}
+            subtotalOverride={subtotalOverride}
+            onSubtotalOverrideChange={setSubtotalOverride}
+            onToggleSubtotalOverride={() => setShowSubtotalOverride(!showSubtotalOverride)}
+            calculatedSubtotal={calculatedSubtotal}
+          />
         </div>
 
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={onClose} disabled={saving}>
             {t.cancel}
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving || loadingPricing || !!pricingError}>
             {saving ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />

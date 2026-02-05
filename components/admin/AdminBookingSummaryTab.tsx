@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { MonthDayPicker } from '@/components/ui/month-day-picker'
 import type { AdminTentItem } from './AdminTentTabContent'
 
 interface Customer {
@@ -190,23 +191,17 @@ export function AdminBookingSummaryTab({
         </h3>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Date of Birth */}
+          {/* Date of Birth - Month and Day only */}
           <div className="space-y-2">
-            <Label htmlFor="date-of-birth">
-              {locale === 'vi' ? 'Ngày sinh/tháng sinh' : 'Date of Birth'}
-            </Label>
-            <Input
-              id="date-of-birth"
-              type="date"
+            <MonthDayPicker
               value={dateOfBirth}
-              onChange={(e) => onDateOfBirthChange(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              {locale === 'vi'
+              onChange={onDateOfBirthChange}
+              label={locale === 'vi' ? 'Ngày sinh/tháng sinh' : 'Date of Birth'}
+              helperText={locale === 'vi'
                 ? 'Để có thể nhận các ưu đãi vào ngày sinh nhật cùng Trại trong tương lai'
                 : 'To receive birthday offers in the future'
               }
-            </p>
+            />
           </div>
 
           {/* Social Media URL */}
@@ -366,17 +361,28 @@ export function AdminBookingSummaryTab({
                     {(() => {
                       const addonTotal = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
                         if (!sel || !sel.selected) return sum
-                        return sum + (sel.totalPrice || 0)
+                        // Use override if set, otherwise use calculated totalPrice
+                        const effectivePrice = sel.usePriceOverride && sel.priceOverride !== undefined
+                          ? sel.priceOverride
+                          : (sel.totalPrice || 0)
+                        return sum + effectivePrice
                       }, 0)
                       const addonDiscount = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
                         if (!sel || !sel.selected) return sum
                         return sum + (sel.voucher?.discountAmount || 0)
                       }, 0)
+                      const hasOverrides = Object.values(tent.addonSelections || {}).some(s => s.selected && s.usePriceOverride)
+
                       if (addonTotal <= 0) return null
                       return (
                         <>
                           <div className="flex justify-between">
-                            <span className="text-gray-600">{locale === 'vi' ? 'Dịch vụ bổ sung' : 'Add-ons'}</span>
+                            <span className="text-gray-600">
+                              {locale === 'vi' ? 'Dịch vụ bổ sung' : 'Add-ons'}
+                              {hasOverrides && (
+                                <span className="ml-1 text-xs text-blue-600">*</span>
+                              )}
+                            </span>
                             <span>{formatCurrency(addonTotal, locale)}</span>
                           </div>
                           {addonDiscount > 0 && (
@@ -384,6 +390,11 @@ export function AdminBookingSummaryTab({
                               <span>{locale === 'vi' ? 'Voucher dịch vụ' : 'Add-on vouchers'}</span>
                               <span>-{formatCurrency(addonDiscount, locale)}</span>
                             </div>
+                          )}
+                          {hasOverrides && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              * {locale === 'vi' ? 'Có dịch vụ đã ghi đè giá' : 'Some add-ons have overridden prices'}
+                            </p>
                           )}
                         </>
                       )
@@ -426,7 +437,11 @@ export function AdminBookingSummaryTab({
                 const totalAddonsCost = tents.reduce((sum, t) => {
                   return sum + Object.values(t.addonSelections || {}).reduce((s, sel) => {
                     if (!sel || !sel.selected) return s
-                    return s + (sel.totalPrice || 0)
+                    // Use override if set, otherwise use calculated totalPrice
+                    const effectivePrice = sel.usePriceOverride && sel.priceOverride !== undefined
+                      ? sel.priceOverride
+                      : (sel.totalPrice || 0)
+                    return s + effectivePrice
                   }, 0)
                 }, 0)
                 const totalAddonsDiscount = tents.reduce((sum, t) => {

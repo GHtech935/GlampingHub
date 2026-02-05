@@ -181,6 +181,15 @@ export async function GET(
 
     const paymentsResult = await client.query(paymentsQuery, [id]);
 
+    // Fetch additional costs
+    const additionalCostsQuery = `
+      SELECT id, name
+      FROM glamping_booking_additional_costs
+      WHERE booking_id = $1
+      ORDER BY created_at DESC
+    `;
+    const additionalCostsResult = await client.query(additionalCostsQuery, [id]);
+
     // Fetch booking parameters
     const paramsQuery = `
       SELECT
@@ -294,6 +303,10 @@ export async function GET(
       updatedAt: row.updated_at,
       confirmedAt: row.confirmed_at,
       cancelledAt: row.cancelled_at,
+      additionalCosts: additionalCostsResult.rows.map(ac => ({
+        id: ac.id,
+        name: ac.name,
+      })),
     };
 
     return NextResponse.json(booking);

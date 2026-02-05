@@ -68,6 +68,7 @@ interface GlampingBookingFinancialTabProps {
   currentPaymentStatus?: string;
   currentStaffName?: string;
   onRefresh?: () => void;
+  refreshTrigger?: number; // Increment to force refetch
 }
 
 interface PricingItem {
@@ -98,6 +99,7 @@ export function GlampingBookingFinancialTab({
   currentPaymentStatus,
   currentStaffName,
   onRefresh,
+  refreshTrigger,
 }: GlampingBookingFinancialTabProps) {
   const paymentStatus = currentPaymentStatus || booking.paymentStatus;
 
@@ -203,6 +205,12 @@ export function GlampingBookingFinancialTab({
     voucherCode: string;
     discountAmount: number;
   }>>([]);
+  // Per-tent price override data from pricing-details API
+  const [tentOverrides, setTentOverrides] = useState<Array<{
+    tentId: string;
+    calculatedSubtotal: number;
+    overrideSubtotal: number;
+  }>>([]);
   const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
   const [showVatPaymentDialog, setShowVatPaymentDialog] = useState(false);
   const [vatPaymentMethod, setVatPaymentMethod] = useState<string>('cash');
@@ -219,7 +227,12 @@ export function GlampingBookingFinancialTab({
     const fetchPricingDetails = async () => {
       setLoadingItems(true);
       try {
-        const response = await fetch(`/api/admin/glamping/bookings/${booking.id}/pricing-details`);
+        const response = await fetch(`/api/admin/glamping/bookings/${booking.id}/pricing-details`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
         if (response.ok) {
           const data = await response.json();
           console.log('[Financial Tab] Pricing data:', data);
@@ -292,6 +305,30 @@ export function GlampingBookingFinancialTab({
             });
           }
 
+          // Add addon items (common items)
+          if (data.addonItems && data.addonItems.length > 0) {
+            data.addonItems.forEach((addon: any) => {
+              const subtotal = addon.subtotal || 0;
+              const addonTaxRate = isTaxEnabled ? (addon.taxRate || 0) : 0;
+              const taxAmount = isTaxEnabled ? (addon.taxAmount || 0) : 0;
+              itemsList.push({
+                id: `addon-${counter++}`,
+                type: 'addon',
+                name: addon.name || 'Item chung',
+                description: addon.parameterName || '',
+                quantity: addon.quantity || 1,
+                unitPrice: addon.unitPrice || 0,
+                subtotal: subtotal,
+                taxRate: addonTaxRate,
+                taxAmount: taxAmount,
+                totalWithTax: subtotal + taxAmount,
+                bookingTentId: addon.bookingTentId || null,
+                voucherCode: addon.voucherCode || null,
+                discountAmount: addon.discountAmount || 0,
+              });
+            });
+          }
+
           setItems(itemsList);
           setTaxInvoiceRequired(isTaxEnabled);
 
@@ -299,12 +336,24 @@ export function GlampingBookingFinancialTab({
           if (data.tentDiscounts && data.tentDiscounts.length > 0) {
             setTentDiscounts(data.tentDiscounts);
           }
+
+          // Store per-tent override data
+          if (data.tentOverrides && data.tentOverrides.length > 0) {
+            setTentOverrides(data.tentOverrides);
+          } else {
+            setTentOverrides([]);
+          }
         } else {
           console.error('[Financial Tab] API error:', response.status);
         }
 
         // Fetch additional costs
-        const additionalCostsResponse = await fetch(`/api/admin/glamping/bookings/${booking.id}/additional-costs`);
+        const additionalCostsResponse = await fetch(`/api/admin/glamping/bookings/${booking.id}/additional-costs`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
         if (additionalCostsResponse.ok) {
           const additionalCostsData = await additionalCostsResponse.json();
           setAdditionalCosts(additionalCostsData.additionalCosts || []);
@@ -317,7 +366,7 @@ export function GlampingBookingFinancialTab({
     };
 
     fetchPricingDetails();
-  }, [booking.id, booking.pricing.subtotalAmount, booking.taxRate]);
+  }, [booking.id, booking.pricing.subtotalAmount, booking.taxRate, refreshTrigger]);
 
   // Calculate totals (including additional costs)
   const additionalCostsSubtotal = additionalCosts.reduce((sum, c) => sum + c.totalPrice, 0);
@@ -413,22 +462,129 @@ export function GlampingBookingFinancialTab({
 
   // Handle export invoice
   const handleExportInvoice = (invoiceNotes?: string) => {
-    const invoiceItems = items.map(item => {
-      return {
-        name: item.name,
-        description: item.description || '',
-        quantity: item.quantity,
-        originalUnitPrice: item.unitPrice,
-        unitPrice: item.unitPrice,
-        subtotal: item.subtotal,
-        discount: 0,
-        finalPrice: item.subtotal,
-        taxRate: item.taxRate,
-        taxAmount: item.taxAmount,
-        total: item.totalWithTax,
-        totalWithTax: item.totalWithTax,
-      };
-    });
+    // Build invoice items, handling tent overrides
+    const invoiceItems: Array<{
+      name: string;
+      description: string;
+      quantity: number;
+      originalUnitPrice: number;
+      unitPrice: number;
+      subtotal: number;
+      discount: number;
+      finalPrice: number;
+      taxRate: number;
+      taxAmount: number;
+      total: number;
+      totalWithTax: number;
+    }> = [];
+
+    // Process by tent if we have booking periods
+    if (bookingPeriods && bookingPeriods.length > 0) {
+      bookingPeriods.forEach((period) => {
+        const tentId = period.tentId;
+        const tentOverride = tentOverrides.find(to => to.tentId === tentId);
+
+        if (tentOverride) {
+          // For tents with price override, add single row with override price
+          // Calculate tax for override amount if VAT is enabled
+          const tentItems = items.filter(i => i.bookingTentId === tentId && i.type === 'accommodation');
+          const avgTaxRate = tentItems.length > 0
+            ? tentItems.reduce((sum, i) => sum + i.taxRate, 0) / tentItems.length
+            : 0;
+          const overrideTax = taxInvoiceRequired ? tentOverride.overrideSubtotal * (avgTaxRate / 100) : 0;
+
+          invoiceItems.push({
+            name: period.itemName,
+            description: locale === 'vi' ? '(Đã ghi đè giá)' : '(Price Override)',
+            quantity: 1,
+            originalUnitPrice: tentOverride.overrideSubtotal,
+            unitPrice: tentOverride.overrideSubtotal,
+            subtotal: tentOverride.overrideSubtotal,
+            discount: 0,
+            finalPrice: tentOverride.overrideSubtotal,
+            taxRate: avgTaxRate,
+            taxAmount: overrideTax,
+            total: tentOverride.overrideSubtotal + overrideTax,
+            totalWithTax: tentOverride.overrideSubtotal + overrideTax,
+          });
+
+          // Still add products/addons for this tent (non-accommodation items)
+          const tentNonAccomItems = items.filter(i => i.bookingTentId === tentId && i.type !== 'accommodation');
+          tentNonAccomItems.forEach(item => {
+            invoiceItems.push({
+              name: item.name,
+              description: item.description || '',
+              quantity: item.quantity,
+              originalUnitPrice: item.unitPrice,
+              unitPrice: item.unitPrice,
+              subtotal: item.subtotal,
+              discount: 0,
+              finalPrice: item.subtotal,
+              taxRate: item.taxRate,
+              taxAmount: item.taxAmount,
+              total: item.totalWithTax,
+              totalWithTax: item.totalWithTax,
+            });
+          });
+        } else {
+          // No override - add all individual items for this tent
+          const tentItems = items.filter(i => i.bookingTentId === tentId);
+          tentItems.forEach(item => {
+            invoiceItems.push({
+              name: item.name,
+              description: item.description || '',
+              quantity: item.quantity,
+              originalUnitPrice: item.unitPrice,
+              unitPrice: item.unitPrice,
+              subtotal: item.subtotal,
+              discount: 0,
+              finalPrice: item.subtotal,
+              taxRate: item.taxRate,
+              taxAmount: item.taxAmount,
+              total: item.totalWithTax,
+              totalWithTax: item.totalWithTax,
+            });
+          });
+        }
+      });
+
+      // Add shared items (items without bookingTentId)
+      const sharedItemsList = items.filter(i => !i.bookingTentId);
+      sharedItemsList.forEach(item => {
+        invoiceItems.push({
+          name: item.name,
+          description: item.description || '',
+          quantity: item.quantity,
+          originalUnitPrice: item.unitPrice,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal,
+          discount: 0,
+          finalPrice: item.subtotal,
+          taxRate: item.taxRate,
+          taxAmount: item.taxAmount,
+          total: item.totalWithTax,
+          totalWithTax: item.totalWithTax,
+        });
+      });
+    } else {
+      // Fallback: no booking periods, just use all items directly
+      items.forEach(item => {
+        invoiceItems.push({
+          name: item.name,
+          description: item.description || '',
+          quantity: item.quantity,
+          originalUnitPrice: item.unitPrice,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal,
+          discount: 0,
+          finalPrice: item.subtotal,
+          taxRate: item.taxRate,
+          taxAmount: item.taxAmount,
+          total: item.totalWithTax,
+          totalWithTax: item.totalWithTax,
+        });
+      });
+    }
 
     // Add additional costs to invoice items
     const additionalCostItems = additionalCosts.map(cost => {
@@ -496,7 +652,12 @@ export function GlampingBookingFinancialTab({
     setShowAddCostModal(false);
     // Refetch additional costs
     try {
-      const response = await fetch(`/api/admin/glamping/bookings/${booking.id}/additional-costs`);
+      const response = await fetch(`/api/admin/glamping/bookings/${booking.id}/additional-costs`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       if (response.ok) {
         const data = await response.json();
         setAdditionalCosts(data.additionalCosts || []);
@@ -571,10 +732,14 @@ export function GlampingBookingFinancialTab({
                               {/* Tent pricing rows */}
                               {tentPricingItems.length > 0 ? (
                                 (() => {
-                                  // Check if any product items have servingDate
-                                  const hasServingDates = tentPricingItems.some(i => i.type === 'product' && i.servingDate);
+                                  // Check if this tent has a price override
+                                  const tentOverride = tentOverrides.find(to => to.tentId === tentId);
+
+                                  // Check if any product/addon items have servingDate
+                                  const hasServingDates = tentPricingItems.some(i => (i.type === 'product' || i.type === 'addon') && i.servingDate);
                                   const accommodationItems = tentPricingItems.filter(i => i.type === 'accommodation');
-                                  const productItems = tentPricingItems.filter(i => i.type === 'product');
+                                  // Include addon items together with products for display
+                                  const productItems = tentPricingItems.filter(i => i.type === 'product' || i.type === 'addon');
 
                                   // Group products by servingDate if per-night data exists
                                   const dateGroups: Record<string, PricingItem[]> = {};
@@ -590,76 +755,98 @@ export function GlampingBookingFinancialTab({
 
                                   return (
                                     <>
-                                      {/* Accommodation items first */}
-                                      {accommodationItems.map((item) => {
-                                        rowIndex++;
-                                        return (
-                                          <React.Fragment key={item.id}>
-                                            <tr className="bg-white">
-                                              <td className="px-3 py-2 text-gray-600 text-xs">{rowIndex}</td>
-                                              <td className="px-3 py-2">
-                                                <div className="font-medium text-gray-900 text-sm">{item.name}</div>
-                                                {item.description && (
-                                                  <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
-                                                )}
-                                              </td>
-                                              <td className="px-3 py-2 text-center text-sm">{item.quantity}</td>
-                                              <td className="px-3 py-2 text-right text-sm">{formatCurrency(item.unitPrice)}</td>
-                                              <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(item.subtotal)}</td>
-                                            </tr>
-                                            {item.voucherCode && item.discountAmount && item.discountAmount > 0 && (
-                                              <tr className="bg-green-50">
-                                                <td></td>
-                                                <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-green-600">
-                                                  <span className="inline-flex items-center gap-1">
-                                                    ↳ Voucher
-                                                    <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-mono">
-                                                      {item.voucherCode}
+                                      {/* If tent has price override, show single row with override price */}
+                                      {tentOverride ? (
+                                        <tr className="bg-white">
+                                          <td className="px-3 py-2 text-gray-600 text-xs">1</td>
+                                          <td className="px-3 py-2">
+                                            <div className="font-medium text-gray-900 text-sm flex items-center gap-2">
+                                              {period.itemName}
+                                              <Badge className="bg-purple-100 text-purple-700 text-xs px-1.5 py-0.5">
+                                                {locale === 'vi' ? 'Đã ghi đè giá' : 'Price Override'}
+                                              </Badge>
+                                            </div>
+                                          </td>
+                                          <td className="px-3 py-2 text-center text-sm">1</td>
+                                          <td className="px-3 py-2 text-right text-sm">{formatCurrency(tentOverride.overrideSubtotal)}</td>
+                                          <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(tentOverride.overrideSubtotal)}</td>
+                                        </tr>
+                                      ) : (
+                                        /* Accommodation items first (no override) */
+                                        accommodationItems.map((item) => {
+                                          rowIndex++;
+                                          return (
+                                            <React.Fragment key={item.id}>
+                                              <tr className="bg-white">
+                                                <td className="px-3 py-2 text-gray-600 text-xs">{rowIndex}</td>
+                                                <td className="px-3 py-2">
+                                                  <div className="font-medium text-gray-900 text-sm">{item.name}</div>
+                                                  {item.description && (
+                                                    <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+                                                  )}
+                                                </td>
+                                                <td className="px-3 py-2 text-center text-sm">{item.quantity}</td>
+                                                <td className="px-3 py-2 text-right text-sm">{formatCurrency(item.unitPrice)}</td>
+                                                <td className="px-3 py-2 text-right font-medium text-sm">{formatCurrency(item.subtotal)}</td>
+                                              </tr>
+                                              {item.voucherCode && item.discountAmount && item.discountAmount > 0 && (
+                                                <tr className="bg-green-50">
+                                                  <td></td>
+                                                  <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-green-600">
+                                                    <span className="inline-flex items-center gap-1">
+                                                      ↳ Voucher
+                                                      <span className="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-mono">
+                                                        {item.voucherCode}
+                                                      </span>
                                                     </span>
-                                                  </span>
-                                                </td>
-                                                <td className="px-3 py-1 text-right text-xs font-medium text-green-600">
-                                                  -{formatCurrency(item.discountAmount)}
-                                                </td>
-                                              </tr>
-                                            )}
-                                            {taxInvoiceRequired && item.taxAmount > 0 && (
-                                              <tr className="bg-blue-50">
-                                                <td></td>
-                                                <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-blue-600">
-                                                  ↳ VAT ({item.taxRate}%)
-                                                </td>
-                                                <td className="px-3 py-1 text-right text-xs text-blue-600">
-                                                  {formatCurrency(item.taxAmount)}
-                                                </td>
-                                              </tr>
-                                            )}
-                                          </React.Fragment>
-                                        );
-                                      })}
+                                                  </td>
+                                                  <td className="px-3 py-1 text-right text-xs font-medium text-green-600">
+                                                    -{formatCurrency(item.discountAmount)}
+                                                  </td>
+                                                </tr>
+                                              )}
+                                              {taxInvoiceRequired && item.taxAmount > 0 && (
+                                                <tr className="bg-blue-50">
+                                                  <td></td>
+                                                  <td colSpan={3} className="px-3 py-1 pl-8 text-xs text-blue-600">
+                                                    ↳ VAT ({item.taxRate}%)
+                                                  </td>
+                                                  <td className="px-3 py-1 text-right text-xs text-blue-600">
+                                                    {formatCurrency(item.taxAmount)}
+                                                  </td>
+                                                </tr>
+                                              )}
+                                            </React.Fragment>
+                                          );
+                                        })
+                                      )}
 
                                       {/* Product items - grouped by date if per-night, or flat */}
                                       {hasServingDates ? (
                                         Object.entries(dateGroups)
                                           .sort(([a], [b]) => a.localeCompare(b))
                                           .map(([dateKey, dateProducts]) => {
-                                            const dateLabel = dateKey === '_no_date'
-                                              ? (locale === 'vi' ? 'Không xác định ngày' : 'No date')
-                                              : new Date(dateKey.substring(0, 10) + 'T12:00:00').toLocaleDateString(locale === 'vi' ? 'vi-VN' : 'en-US', {
+                                            // Skip date header for items without date
+                                            const showDateHeader = dateKey !== '_no_date';
+                                            const dateLabel = showDateHeader
+                                              ? new Date(dateKey.substring(0, 10) + 'T12:00:00').toLocaleDateString(locale === 'vi' ? 'vi-VN' : 'en-US', {
                                                   day: '2-digit', month: '2-digit', year: 'numeric'
-                                                });
+                                                })
+                                              : '';
 
                                             return (
                                               <React.Fragment key={dateKey}>
-                                                <tr className="bg-gray-50">
-                                                  <td></td>
-                                                  <td colSpan={4} className="px-3 py-1.5 text-xs font-medium text-gray-600">
-                                                    <span className="inline-flex items-center gap-1">
-                                                      <CalendarDays className="h-3 w-3" />
-                                                      {dateLabel}
-                                                    </span>
-                                                  </td>
-                                                </tr>
+                                                {showDateHeader && (
+                                                  <tr className="bg-gray-50">
+                                                    <td></td>
+                                                    <td colSpan={4} className="px-3 py-1.5 text-xs font-medium text-gray-600">
+                                                      <span className="inline-flex items-center gap-1">
+                                                        <CalendarDays className="h-3 w-3" />
+                                                        {dateLabel}
+                                                      </span>
+                                                    </td>
+                                                  </tr>
+                                                )}
                                                 {dateProducts.map((item) => {
                                                   rowIndex++;
                                                   return (
@@ -771,9 +958,19 @@ export function GlampingBookingFinancialTab({
                               {/* Item Subtotal/Tax/Total - Calculate discount conditions for footer display */}
                               {(() => {
                                 const tentDiscountInfo = tentDiscounts.find(td => td.tentId === tentId);
+                                const tentOverride = tentOverrides.find(to => to.tentId === tentId);
                                 const hasTentVoucher = tentDiscountInfo && tentDiscountInfo.discountAmount > 0;
                                 const hasVat = taxInvoiceRequired && itemTax > 0;
                                 const tentDiscountAmount = tentDiscountInfo?.discountAmount || 0;
+
+                                // When there's an override, use override value for accommodation subtotal
+                                // Products/addons are still calculated normally
+                                const accommodationSubtotal = tentOverride
+                                  ? tentOverride.overrideSubtotal
+                                  : tentPricingItems.filter(i => i.type === 'accommodation').reduce((sum, i) => sum + i.subtotal, 0);
+                                const productSubtotal = tentPricingItems.filter(i => i.type !== 'accommodation').reduce((sum, i) => sum + i.subtotal, 0);
+                                const effectiveSubtotal = accommodationSubtotal + productSubtotal;
+                                const effectiveTotal = effectiveSubtotal + itemTax;
 
                                 return (
                                   <>
@@ -784,7 +981,7 @@ export function GlampingBookingFinancialTab({
                                           {locale === 'vi' ? 'Tổng' : 'Subtotal'}:
                                         </td>
                                         <td className="px-3 py-2 text-right font-semibold text-sm">
-                                          {formatCurrency(itemSubtotal - itemProductDiscounts)}
+                                          {formatCurrency(effectiveSubtotal - itemProductDiscounts)}
                                         </td>
                                       </tr>
                                     )}
@@ -830,7 +1027,7 @@ export function GlampingBookingFinancialTab({
                                         {locale === 'vi' ? 'Tổng' : 'Total'}:
                                       </td>
                                       <td className={cn('px-3 py-2 text-right font-bold', colorScheme.text)}>
-                                        {formatCurrency(itemTotal - tentDiscountAmount - itemProductDiscounts)}
+                                        {formatCurrency(effectiveTotal - tentDiscountAmount - itemProductDiscounts)}
                                       </td>
                                     </tr>
                                   </>

@@ -40,6 +40,7 @@ export async function POST(
       selectedDate, // Single date selected by customer (YYYY-MM-DD) or undefined
       parameters, // Array<{ parameterId, quantity, unitPrice, pricingMode? }>
       voucher, // { code, id, discountAmount, discountType, discountValue } or undefined
+      priceOverride, // number | null | undefined
     } = body;
 
     if (!addonItemId || !bookingTentId || !parameters || !Array.isArray(parameters) || parameters.length === 0) {
@@ -121,7 +122,8 @@ export async function POST(
             pricingMode,
             dates: addonDates || null,
             selectedDate: selectedDate || null,
-            voucher: voucherMeta
+            voucher: voucherMeta,
+            priceOverride: priceOverride !== undefined ? priceOverride : null,
           }),
         ]
       );
@@ -179,11 +181,12 @@ export async function PUT(
 
     const { id: bookingId } = await params;
     const body = await request.json();
-    const { itemId, bookingTentId, addonDates, selectedDate, parameters, voucher } = body;
+    const { itemId, bookingTentId, addonDates, selectedDate, parameters, voucher, priceOverride } = body;
     // parameters: Array<{ parameterId, quantity }>
     // addonDates: { from, to } | undefined
     // selectedDate: Single date selected by customer (YYYY-MM-DD) | undefined
     // voucher: { code, id, discountAmount, discountType, discountValue } | undefined
+    // priceOverride: number | null | undefined
 
     if (!itemId || !parameters || !Array.isArray(parameters)) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -258,6 +261,13 @@ export async function PUT(
         }
       }
 
+      // Update priceOverride if provided (set to null to remove)
+      if (priceOverride !== undefined) {
+        updatedMetadata.priceOverride = priceOverride;
+        // Backward compat: Remove old field if it exists
+        delete updatedMetadata.subtotalOverride;
+      }
+
       // Update the row
       await client.query(
         `UPDATE glamping_booking_items
@@ -277,6 +287,18 @@ export async function PUT(
         changes.push(`Removed voucher: ${oldVoucher.code}`);
       } else if (voucher && oldVoucher && voucher.code !== oldVoucher.code) {
         changes.push(`Changed voucher: ${oldVoucher.code} → ${voucher.code}`);
+      }
+    }
+
+    // Track override changes
+    if (priceOverride !== undefined) {
+      const oldOverride = existingRows.rows[0]?.metadata?.priceOverride || existingRows.rows[0]?.metadata?.subtotalOverride;
+      if (priceOverride !== null && !oldOverride) {
+        changes.push(`Added price override: ${priceOverride.toLocaleString()}`);
+      } else if (priceOverride === null && oldOverride) {
+        changes.push('Removed price override');
+      } else if (priceOverride !== null && oldOverride && priceOverride !== oldOverride) {
+        changes.push(`Changed override: ${oldOverride} → ${priceOverride.toLocaleString()}`);
       }
     }
 

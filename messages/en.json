@@ -246,7 +246,7 @@
         "specialRequestsPlaceholder": "Tell us about any special requirements, accessibility needs, dietary restrictions, or any other information that will help us make your stay more comfortable...",
         "specialRequestsHelper": "We will send this message from you to the site and they will do their best to meet your requests. Some requests may incur additional costs.",
         "dateOfBirth": "Date of birth",
-        "dateOfBirthHelper": "Please fill in your date of birth to receive special offers on your birthday with the Camp in the future!",
+        "dateOfBirthHelper": "Please select your birth month and day to receive birthday offers from the Camp",
         "socialMediaUrl": "Personal Facebook/Instagram profile link",
         "socialMediaUrlHelper": "The Camp will send confirmation notifications to guests via social media before check-in",
         "photoConsent": "Store memories with the Camp (random photos)",
@@ -349,6 +349,7 @@
         "bookingFailed": "Booking failed",
         "payNow": "Pay now",
         "submitting": "Processing...",
+        "createFreeBookingNow": "Create Free Booking Now",
         "validation": {
             "emailInvalid": "Invalid email",
             "firstNameRequired": "Please enter first name",
@@ -356,7 +357,9 @@
             "countryRequired": "Please select country",
             "phoneInvalid": "Invalid phone number",
             "termsRequired": "You must agree to the booking terms",
-            "dateOfBirthRequired": "Please enter date of birth",
+            "dateOfBirthRequired": "Please select date of birth",
+            "dateOfBirthInvalid": "Invalid date of birth format",
+            "dateOfBirthInvalidDay": "Day is invalid for selected month",
             "socialMediaUrlRequired": "Please enter Facebook/Instagram link",
             "referralSourceRequired": "Please select referral source"
         },
@@ -3856,22 +3859,36 @@
                 "allSubtitle": "View and manage events from all zones",
                 "addNew": "Add Event",
                 "search": "Search events...",
+                "loading": "Loading...",
                 "noResults": "No events found",
+                "itemsCount": "{count} items",
+                "default": "Default",
                 "zoneLabel": "Zone",
                 "allZones": "All Zones",
                 "zoneColumn": "Zone",
                 "filters": {
+                    "dateFilter": "Date filter",
+                    "allDates": "All Dates",
+                    "upcoming": "Upcoming",
+                    "active": "Active",
+                    "past": "Past",
                     "statusFilter": "Status",
                     "allStatus": "All Status",
                     "typeFilter": "Type",
                     "allTypes": "All Types"
                 },
                 "table": {
+                    "id": "ID",
                     "name": "Name",
                     "type": "Type",
                     "dates": "Dates",
+                    "applyTo": "Apply To",
+                    "startDate": "Start Date",
+                    "endDate": "End Date",
+                    "pricing": "Pricing",
                     "recurrence": "Recurrence",
                     "items": "Items",
+                    "rules": "Rules",
                     "status": "Status",
                     "actions": "Actions"
                 },
@@ -3884,7 +3901,8 @@
                     "one_time": "One Time",
                     "weekly": "Weekly",
                     "monthly": "Monthly",
-                    "yearly": "Yearly"
+                    "yearly": "Yearly",
+                    "always": "Always"
                 },
                 "status": {
                     "active": "Active",
@@ -3908,6 +3926,14 @@
                     "message": "Are you sure you want to delete this event?",
                     "confirm": "Delete",
                     "cancel": "Cancel"
+                },
+                "messages": {
+                    "error": "Error",
+                    "loadFailed": "Failed to load events",
+                    "deleteConfirm": "Are you sure you want to delete this event?",
+                    "deleteSuccess": "Event deleted successfully",
+                    "deleteFailed": "Failed to delete event",
+                    "success": "Success"
                 }
             },
             "menu": {

@@ -35,8 +35,16 @@ const createBookingFormSchema = (t: any) => {
     postcode: z.string().optional(),
     createPassword: z.string().optional(),
 
-    // New customer info fields
-    dateOfBirth: z.string().min(1, t('validation.dateOfBirthRequired')),
+    // New customer info fields - MM-DD format
+    dateOfBirth: z.string()
+      .min(1, t('validation.dateOfBirthRequired'))
+      .regex(/^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/, t('validation.dateOfBirthInvalid'))
+      .refine((val) => {
+        // Validate day is valid for the month
+        const [month, day] = val.split('-').map(Number)
+        const maxDays = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        return day <= maxDays[month - 1]
+      }, t('validation.dateOfBirthInvalidDay')),
     socialMediaUrl: z.string().optional(),
     photoConsent: z.boolean().default(true),
     referralSource: z.string().optional(),

@@ -17,6 +17,8 @@ interface BookingOverviewCardProps {
   locale: string;
   bookingCheckIn?: string;
   bookingCheckOut?: string;
+  commonItemNames?: string[];
+  additionalCostNames?: string[];
 }
 
 export function BookingOverviewCard({
@@ -25,6 +27,8 @@ export function BookingOverviewCard({
   locale,
   bookingCheckIn,
   bookingCheckOut,
+  commonItemNames,
+  additionalCostNames,
 }: BookingOverviewCardProps) {
   const { getColorForItem } = useItemColor();
 
@@ -111,6 +115,38 @@ export function BookingOverviewCard({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Common Items (Item chung) */}
+      {commonItemNames && commonItemNames.length > 0 && (
+        <div className="pt-3 border-t">
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            {locale === 'vi' ? 'Item chung:' : 'Common items:'}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {commonItemNames.map((name, index) => (
+              <span key={index} className="text-sm text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Additional Costs (Chi phí phát sinh) */}
+      {additionalCostNames && additionalCostNames.length > 0 && (
+        <div className="pt-3 border-t">
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            {locale === 'vi' ? 'Chi phí phát sinh:' : 'Additional costs:'}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {additionalCostNames.map((name, index) => (
+              <span key={index} className="text-sm text-gray-600 bg-orange-50 px-2 py-0.5 rounded">
+                {name}
+              </span>
+            ))}
           </div>
         </div>
       )}

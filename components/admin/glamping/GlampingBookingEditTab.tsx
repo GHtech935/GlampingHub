@@ -42,6 +42,7 @@ interface TentItem {
   discountValue?: number;
   discountAmount: number;
   totalGuests: number;
+  priceOverride?: number | null;
   parameters: Array<{
     parameterId: string;
     parameterName: string;
@@ -93,6 +94,7 @@ interface CommonItemData {
   voucherCode: string | null;
   discountAmount: number;
   dates: { from: string; to: string } | null;
+  priceOverride?: number | null;
 }
 
 interface EditItemsData {
@@ -349,6 +351,7 @@ export function GlampingBookingEditTab({
       voucherCode: item.voucherCode,
       discountAmount: item.discountAmount,
       zoneId: zoneId,
+      priceOverride: item.priceOverride,
     });
   };
 
@@ -358,13 +361,17 @@ export function GlampingBookingEditTab({
       bookingId: booking.id,
       itemId: tent.itemId,
       itemName: tent.itemName,
+      zoneId: zoneId,
       checkInDate: tent.checkInDate,
       checkOutDate: tent.checkOutDate,
       nights: tent.nights,
       subtotal: tent.subtotal,
       specialRequests: tent.specialRequests,
       voucherCode: tent.voucherCode,
+      discountType: tent.discountType,
+      discountValue: tent.discountValue,
       discountAmount: tent.discountAmount,
+      priceOverride: tent.priceOverride,
       parameters: tent.parameters,
     });
   };
@@ -529,7 +536,14 @@ export function GlampingBookingEditTab({
                 {data.tents.map((tent) => (
                   <tr key={tent.id} className="border-b hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{tent.itemName}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium text-gray-900">{tent.itemName}</div>
+                        {tent.priceOverride !== null && tent.priceOverride !== undefined && (
+                          <Badge variant="secondary" className="text-xs">
+                            {locale === 'vi' ? 'Đã ghi đè' : 'Overridden'}
+                          </Badge>
+                        )}
+                      </div>
                       <div className="text-xs text-gray-500 mt-0.5">
                         {tent.parameters.map(p => `${p.parameterName}: ${p.quantity}`).join(', ')}
                       </div>
@@ -831,6 +845,11 @@ export function GlampingBookingEditTab({
                             {tent && data.tents.length > 1 && (
                               <div className="text-sm text-gray-600">({tent.itemName})</div>
                             )}
+                            {item.priceOverride !== null && item.priceOverride !== undefined && (
+                              <Badge variant="secondary" className="text-xs">
+                                {locale === 'vi' ? 'Đã ghi đè' : 'Overridden'}
+                              </Badge>
+                            )}
                           </div>
                           {item.voucherCode && (
                             <div className="mt-1">
@@ -934,7 +953,10 @@ export function GlampingBookingEditTab({
                           )}
                         </td>
                         <td className="px-3 py-2 text-right text-sm text-gray-900 w-36">
-                          {formatCurrency(paramTotal)}
+                          {item.priceOverride === null || item.priceOverride === undefined
+                            ? formatCurrency(paramTotal)
+                            : <span className="text-gray-400">-</span>
+                          }
                         </td>
                         <td className="px-3 py-2 w-44"></td>
                       </tr>

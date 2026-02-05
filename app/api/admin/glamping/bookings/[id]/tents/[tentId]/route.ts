@@ -135,19 +135,27 @@ export async function PUT(
       }
     }
 
+    // Determine subtotal_override value
+    // If subtotalOverride is explicitly set, store it; if null/undefined, clear it
+    const subtotalOverrideValue = subtotalOverride !== undefined && subtotalOverride !== null
+      ? subtotalOverride
+      : null;
+
     // Update tent row (nights is a generated column — do not set it)
+    // subtotal stores the calculated value, subtotal_override stores the manual override
     await client.query(
       `UPDATE glamping_booking_tents SET
          item_id = $3,
          check_in_date = $4,
          check_out_date = $5,
          subtotal = $6,
-         special_requests = $7,
-         voucher_code = $8,
-         voucher_id = $9,
-         discount_type = $10,
-         discount_value = $11,
-         discount_amount = $12
+         subtotal_override = $7,
+         special_requests = $8,
+         voucher_code = $9,
+         voucher_id = $10,
+         discount_type = $11,
+         discount_value = $12,
+         discount_amount = $13
        WHERE id = $1 AND booking_id = $2`,
       [
         tentId,
@@ -155,7 +163,8 @@ export async function PUT(
         itemId || oldTent.item_id,
         checkInDate || oldTent.check_in_date,
         checkOutDate || oldTent.check_out_date,
-        subtotal,
+        subtotal, // Always store calculated subtotal
+        subtotalOverrideValue, // Store override separately (can be null)
         specialRequests !== undefined ? specialRequests : oldTent.special_requests,
         finalVoucherCode,
         voucherId,
@@ -167,14 +176,29 @@ export async function PUT(
 
     // Update booking items (parameters) if provided
     if (parameters && Array.isArray(parameters) && parameters.length > 0) {
-      // Delete old booking items for this tent
+      // Delete old booking items and parameters for this tent
       await client.query(
         `DELETE FROM glamping_booking_items WHERE booking_tent_id = $1`,
         [tentId]
       );
+      await client.query(
+        `DELETE FROM glamping_booking_parameters WHERE booking_tent_id = $1`,
+        [tentId]
+      );
 
-      // Insert new booking items
+      // Fetch parameter details to get label and controls_inventory
+      const parameterIds = parameters.map(p => p.parameterId);
+      const paramDetailsResult = await client.query(
+        `SELECT id, name, controls_inventory FROM glamping_parameters WHERE id = ANY($1)`,
+        [parameterIds]
+      );
+      const paramDetailsMap = new Map(
+        paramDetailsResult.rows.map(p => [p.id, { name: p.name, controls_inventory: p.controls_inventory }])
+      );
+
+      // Insert new booking items and parameters
       for (const param of parameters) {
+        // Insert into glamping_booking_items
         await client.query(
           `INSERT INTO glamping_booking_items
            (booking_id, booking_tent_id, item_id, parameter_id, quantity, unit_price, metadata)
@@ -193,6 +217,24 @@ export async function PUT(
             }),
           ]
         );
+
+        // Insert into glamping_booking_parameters (for guest count tracking)
+        const paramDetails = paramDetailsMap.get(param.parameterId);
+        if (paramDetails) {
+          await client.query(
+            `INSERT INTO glamping_booking_parameters
+             (booking_id, booking_tent_id, parameter_id, label, booked_quantity, controls_inventory)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              bookingId,
+              tentId,
+              param.parameterId,
+              paramDetails.name,
+              param.quantity,
+              paramDetails.controls_inventory || false,
+            ]
+          );
+        }
       }
     }
 

@@ -131,7 +131,7 @@ export default function EventsPage({ params }: { params: Promise<{ zoneId: strin
   };
 
   const getRecurrenceLabel = (recurrence: string) => {
-    const recurrenceKey = recurrence as 'one_time' | 'weekly' | 'monthly' | 'yearly';
+    const recurrenceKey = recurrence as 'one_time' | 'weekly' | 'monthly' | 'yearly' | 'always';
     return t(`recurrence.${recurrenceKey}`, { defaultValue: recurrence });
   };
 
@@ -215,6 +215,7 @@ export default function EventsPage({ params }: { params: Promise<{ zoneId: strin
               <TableHead>{t("table.applyTo")}</TableHead>
               <TableHead>{t("table.startDate")}</TableHead>
               <TableHead>{t("table.endDate")}</TableHead>
+              <TableHead>{t("table.recurrence")}</TableHead>
               <TableHead>{t("table.pricing")}</TableHead>
               <TableHead>{t("table.type")}</TableHead>
               <TableHead>{t("table.rules")}</TableHead>
@@ -224,13 +225,13 @@ export default function EventsPage({ params }: { params: Promise<{ zoneId: strin
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
+                <TableCell colSpan={9} className="text-center py-8">
                   {t("loading")}
                 </TableCell>
               </TableRow>
             ) : filteredEvents.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                   {t("noResults")}
                 </TableCell>
               </TableRow>
@@ -243,6 +244,7 @@ export default function EventsPage({ params }: { params: Promise<{ zoneId: strin
                   </TableCell>
                   <TableCell className="text-gray-600">{formatDate(event.start_date)}</TableCell>
                   <TableCell className="text-gray-600">{formatDate(event.end_date)}</TableCell>
+                  <TableCell className="text-gray-600">{getRecurrenceLabel(event.recurrence)}</TableCell>
                   <TableCell className="text-gray-600">{event.pricing_type || '–'}</TableCell>
                   <TableCell>{getTypeBadge(event.type)}</TableCell>
                   <TableCell className="text-gray-600">{t("default")}</TableCell>

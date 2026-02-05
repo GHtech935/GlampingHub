@@ -17,6 +17,7 @@ import { type AddonSelection } from '@/components/providers/GlampingCartProvider
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CurrencyInput } from '@/components/ui/currency-input'
 
 // Types shared with the parent modal
 export interface AdminTentItem {
@@ -632,6 +633,31 @@ export function AdminTentTabContent({
     onTentChange({ ...tent, addonSelections: current })
   }, [tent, onTentChange])
 
+  const handleAddonToggleOverride = useCallback((addonItemId: string, checked: boolean) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel) return
+
+    current[addonItemId] = {
+      ...sel,
+      usePriceOverride: checked,
+      priceOverride: checked ? (sel.totalPrice || 0) : undefined, // Pre-fill with calculated
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
+
+  const handleAddonPriceOverrideChange = useCallback((addonItemId: string, value: number | undefined) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel) return
+
+    current[addonItemId] = {
+      ...sel,
+      priceOverride: value,
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
+
   // Compute total guests counted for menu (combo limits)
   const totalCountedGuests = useMemo(() => {
     return tent.itemParameters.reduce((sum, param) => {
@@ -947,12 +973,85 @@ export function AdminTentTabContent({
                                 </div>
                               )}
 
+                              {/* Price Override Section */}
+                              {addonTotal > 0 && (
+                                <div className="mt-2 space-y-2 bg-gray-50 p-2 rounded border border-gray-200">
+                                  <div className="flex items-start gap-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`override-${addon.addon_item_id}`}
+                                      checked={selection?.usePriceOverride || false}
+                                      onChange={(e) => handleAddonToggleOverride(addon.addon_item_id, e.target.checked)}
+                                      className="mt-1"
+                                    />
+                                    <div className="flex-1">
+                                      <label
+                                        htmlFor={`override-${addon.addon_item_id}`}
+                                        className="text-xs cursor-pointer font-medium"
+                                      >
+                                        {locale === 'vi' ? 'Ghi đè giá thủ công' : 'Override price manually'}
+                                      </label>
+
+                                      {selection?.usePriceOverride && (
+                                        <div className="mt-2 space-y-1">
+                                          <CurrencyInput
+                                            value={selection?.priceOverride}
+                                            onValueChange={(val) => handleAddonPriceOverrideChange(addon.addon_item_id, val)}
+                                            placeholder={locale === 'vi' ? 'Nhập giá...' : 'Enter price...'}
+                                            locale={locale}
+                                            className="w-full"
+                                          />
+                                          <p className="text-[10px] text-muted-foreground">
+                                            💡 {locale === 'vi' ? 'Giá tính toán:' : 'Calculated price:'}{' '}
+                                            {formatCurrency(addonTotal, locale, 'VND')}
+                                          </p>
+
+                                          {selection?.priceOverride !== undefined && (() => {
+                                            const calculated = addonTotal || 0
+                                            const override = selection.priceOverride || 0
+                                            const diff = Math.abs(override - calculated)
+                                            const diffPercent = calculated > 0 ? (diff / calculated) * 100 : 0
+
+                                            if (diffPercent > 30) {
+                                              return (
+                                                <p className="text-[10px] text-yellow-600">
+                                                  ⚠️ {locale === 'vi'
+                                                    ? `Giá ghi đè khác ${diffPercent.toFixed(0)}% so với giá tính toán`
+                                                    : `Override differs ${diffPercent.toFixed(0)}% from calculated`}
+                                                </p>
+                                              )
+                                            }
+                                            return null
+                                          })()}
+
+                                          {selection?.priceOverride !== undefined && selection.priceOverride <= 0 && (
+                                            <p className="text-[10px] text-orange-600">
+                                              ⚠️ {locale === 'vi'
+                                                ? 'Giá bằng 0 hoặc âm. Xác nhận đây là dịch vụ miễn phí/hoàn tiền?'
+                                                : 'Zero or negative price. Confirm this is free/refund?'}
+                                            </p>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {selection?.usePriceOverride && selection?.voucher && (
+                                    <p className="text-[10px] text-blue-600">
+                                      ℹ️ {locale === 'vi'
+                                        ? 'Voucher sẽ áp dụng vào giá đã ghi đè'
+                                        : 'Voucher will apply to overridden price'}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
                               {addonTotal > 0 && (
                                 <div className="mt-2">
                                   <VoucherInput
                                     itemId={addon.addon_item_id}
                                     zoneId={zoneId}
-                                    totalAmount={addonTotal}
+                                    totalAmount={selection?.usePriceOverride && selection?.priceOverride !== undefined ? selection.priceOverride : addonTotal}
                                     applicationType="common_item"
                                     validationEndpoint="/api/glamping/validate-voucher"
                                     locale={locale}
@@ -1051,18 +1150,28 @@ export function AdminTentTabContent({
               {(() => {
                 const addonTotal = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
                   if (!sel || !sel.selected) return sum
-                  return sum + (sel.totalPrice || 0)
+                  // Use override if set, otherwise use calculated totalPrice
+                  const effectivePrice = sel.usePriceOverride && sel.priceOverride !== undefined
+                    ? sel.priceOverride
+                    : (sel.totalPrice || 0)
+                  return sum + effectivePrice
                 }, 0)
                 const addonDiscount = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
                   if (!sel || !sel.selected) return sum
                   return sum + (sel.voucher?.discountAmount || 0)
                 }, 0)
+                const hasOverrides = Object.values(tent.addonSelections || {}).some(s => s.selected && s.usePriceOverride)
 
                 if (addonTotal <= 0) return null
                 return (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">{locale === 'vi' ? 'Dịch vụ bổ sung' : 'Add-ons'}</span>
+                      <span className="text-gray-600">
+                        {locale === 'vi' ? 'Dịch vụ bổ sung' : 'Add-ons'}
+                        {hasOverrides && (
+                          <span className="ml-1 text-xs text-blue-600">*</span>
+                        )}
+                      </span>
                       <span className="font-medium">{formatCurrency(addonTotal, locale, 'VND')}</span>
                     </div>
                     {addonDiscount > 0 && (
@@ -1070,6 +1179,11 @@ export function AdminTentTabContent({
                         <span>{locale === 'vi' ? 'Voucher dịch vụ' : 'Add-on vouchers'}</span>
                         <span>-{formatCurrency(addonDiscount, locale, 'VND')}</span>
                       </div>
+                    )}
+                    {hasOverrides && (
+                      <p className="text-[10px] text-blue-600 mt-0.5">
+                        * {locale === 'vi' ? 'Có dịch vụ đã ghi đè giá' : 'Some add-ons have overridden prices'}
+                      </p>
                     )}
                   </>
                 )
@@ -1096,7 +1210,11 @@ export function AdminTentTabContent({
                     }, 0)
                     const addonTotal = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
                       if (!sel || !sel.selected) return sum
-                      return sum + (sel.totalPrice || 0)
+                      // Use override if set, otherwise use calculated totalPrice
+                      const effectivePrice = sel.usePriceOverride && sel.priceOverride !== undefined
+                        ? sel.priceOverride
+                        : (sel.totalPrice || 0)
+                      return sum + effectivePrice
                     }, 0)
                     const addonDiscount = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
                       if (!sel || !sel.selected) return sum

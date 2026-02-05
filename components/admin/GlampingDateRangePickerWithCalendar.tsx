@@ -51,6 +51,7 @@ interface GlampingParameter {
 
 interface GlampingDateRangePickerWithCalendarProps {
   itemId?: string
+  excludeBookingId?: string
   dateRange?: DateRange
   onDateRangeChange: (range: DateRange | undefined) => void
   locale?: string
@@ -75,6 +76,7 @@ interface GlampingDateRangePickerWithCalendarProps {
 
 export function GlampingDateRangePickerWithCalendar({
   itemId,
+  excludeBookingId,
   dateRange,
   onDateRangeChange,
   locale = 'vi',
@@ -136,9 +138,8 @@ export function GlampingDateRangePickerWithCalendar({
         const month = String(currentMonth.getMonth() + 1).padStart(2, '0')
         const startDate = `${year}-${month}-01`
 
-        const response = await fetch(
-          `/api/glamping/items/${itemId}/availability?startDate=${startDate}&months=2`
-        )
+        const url = `/api/glamping/items/${itemId}/availability?startDate=${startDate}&months=2${excludeBookingId ? `&excludeBookingId=${excludeBookingId}` : ''}`
+        const response = await fetch(url)
 
         if (response.ok) {
           const data = await response.json()
@@ -163,7 +164,7 @@ export function GlampingDateRangePickerWithCalendar({
     }
 
     fetchAvailability()
-  }, [itemId, currentMonth])
+  }, [itemId, currentMonth, excludeBookingId])
 
   // Validate dateRange against calendar availability when calendar data loads
   // This clears invalid pre-filled dates (e.g., from copying dates between tents)
@@ -469,29 +470,29 @@ export function GlampingDateRangePickerWithCalendar({
   // So selecting 3 days (e.g. 10, 11, 12) highlights all 3 days
   const isDateInRange = (date: string) => {
     if (!dateRange?.from) return false
-    const checkDate = new Date(date)
-    if (!dateRange.to) return checkDate.getTime() === dateRange.from.getTime()
-    // Inclusive of check-out date
-    return checkDate >= dateRange.from && checkDate <= dateRange.to
+    if (!dateRange.to) return date === formatDateToYMD(dateRange.from)
+    const fromStr = formatDateToYMD(dateRange.from)
+    const toStr = formatDateToYMD(dateRange.to)
+    // Inclusive of check-out date - compare as strings
+    return date >= fromStr && date <= toStr
   }
 
   const isRangeStart = (date: string) => {
     if (!dateRange?.from || !dateRange?.to) return false
-    const checkDate = new Date(date)
-    return checkDate.getTime() === dateRange.from.getTime()
+    return date === formatDateToYMD(dateRange.from)
   }
 
   // Check if date is the check-out date (end of visual range)
   const isRangeEnd = (date: string) => {
     if (!dateRange?.from || !dateRange?.to) return false
-    const checkDate = new Date(date)
-    return checkDate.getTime() === dateRange.to.getTime()
+    return date === formatDateToYMD(dateRange.to)
   }
 
   const isRangeMiddle = (date: string) => {
     if (!dateRange?.from || !dateRange?.to) return false
-    const checkDate = new Date(date)
-    return checkDate > dateRange.from && checkDate < dateRange.to
+    const fromStr = formatDateToYMD(dateRange.from)
+    const toStr = formatDateToYMD(dateRange.to)
+    return date > fromStr && date < toStr
   }
 
   const calculateTotalPrice = () => {
@@ -551,95 +552,9 @@ export function GlampingDateRangePickerWithCalendar({
     <div className="space-y-4">
       <Card className="border-none shadow-none">
         <CardContent className="px-0 py-2">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Column 1: Booking Info + Parameters */}
-            <div className="">
-              {/* Booking Info */}
-              <div className="p-4 space-y-2">
-                <p className="text-sm font-medium text-gray-700">
-                  {locale === 'vi' ? 'Thông tin đặt phòng' : 'Booking Information'}
-                </p>
-
-                {dateRange?.from ? (
-                  <>
-                    <div className="flex gap-6 text-sm">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-gray-500">Check-in:</span>
-                        <span className="font-medium text-gray-900">
-                          {format(dateRange.from, 'dd/MM/yyyy', { locale: locale === 'vi' ? vi : undefined })}
-                        </span>
-                      </div>
-
-                      {dateRange.to && (
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-gray-500">Check-out:</span>
-                          <span className="font-medium text-gray-900">
-                            {format(dateRange.to, 'dd/MM/yyyy', { locale: locale === 'vi' ? vi : undefined })}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-400">
-                    {locale === 'vi' ? 'Chưa chọn ngày' : 'No dates selected'}
-                  </p>
-                )}
-
-                {!itemId && (
-                  <div className="pt-2 border-t">
-                    <p className="text-xs text-amber-600">
-                      {locale === 'vi'
-                        ? 'Chọn item trước để xem availability'
-                        : 'Select an item first'}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Parameters Selector */}
-              {parameters.length > 0 && (
-                <div className="p-4">
-                  {loadingParameters ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin" />
-                      <span className="ml-2 text-sm">{locale === 'vi' ? 'Đang tải...' : 'Loading...'}</span>
-                    </div>
-                  ) : (
-                    <GlampingParameterSelector
-                      parameters={parameters}
-                      parameterQuantities={parameterQuantities}
-                      onQuantitiesChange={onQuantitiesChange}
-                      locale={locale}
-                      disabled={disabled}
-                      // When pricingLoading is true, use empty object to prevent showing wrong prices
-                      // Otherwise use override (with group pricing) or fallback to calendar-based pricing
-                      parameterPricing={pricingLoading ? {} : (overrideParameterPricing || parameterPricing)}
-                      // Pass pricing modes for per_person vs per_group calculation
-                      // Use override if provided, otherwise use internally fetched state
-                      parameterPricingModes={pricingLoading ? undefined : (overrideParameterPricingModes || parameterPricingModes)}
-                      nights={nights}
-                      dateRange={dateRange}
-                      // Use override nightly pricing (with group pricing) or fallback to calendar-based
-                      // Transform override format: { date, parameters } → { date, pricing }
-                      nightlyParameterPricing={
-                        pricingLoading
-                          ? []
-                          : overrideNightlyPricing
-                            ? overrideNightlyPricing.map(n => ({ date: n.date, pricing: n.parameters }))
-                            : nightlyParameterPricing
-                      }
-                      pricingLoading={pricingLoading}
-                      enableSinglePersonSurchargeAlert={enableSinglePersonSurchargeAlert}
-                      singlePersonSurchargeAlertText={singlePersonSurchargeAlertText}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Column 2: Calendar */}
-            <div className="space-y-3">
+          <div className="space-y-6">
+            {/* Calendar Section - Now on top */}
+            <div className="space-y-3 max-w-2xl mx-auto">
               {/* Month navigation */}
               <div className="flex items-center justify-between">
                 <Button type="button" variant="ghost" size="icon" onClick={goToPreviousMonth} className="h-8 w-8" disabled={disabled}>
@@ -793,6 +708,92 @@ export function GlampingDateRangePickerWithCalendar({
                     })}
                   </div>
                 </>
+              )}
+            </div>
+
+            {/* Booking Info + Parameters Section - Now below */}
+            <div className="">
+              {/* Booking Info */}
+              <div className="p-4 space-y-2">
+                <p className="text-sm font-medium text-gray-700">
+                  {locale === 'vi' ? 'Thông tin đặt phòng' : 'Booking Information'}
+                </p>
+
+                {dateRange?.from ? (
+                  <>
+                    <div className="flex gap-6 text-sm">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-500">Check-in:</span>
+                        <span className="font-medium text-gray-900">
+                          {format(dateRange.from, 'dd/MM/yyyy', { locale: locale === 'vi' ? vi : undefined })}
+                        </span>
+                      </div>
+
+                      {dateRange.to && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-gray-500">Check-out:</span>
+                          <span className="font-medium text-gray-900">
+                            {format(dateRange.to, 'dd/MM/yyyy', { locale: locale === 'vi' ? vi : undefined })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400">
+                    {locale === 'vi' ? 'Chưa chọn ngày' : 'No dates selected'}
+                  </p>
+                )}
+
+                {!itemId && (
+                  <div className="pt-2 border-t">
+                    <p className="text-xs text-amber-600">
+                      {locale === 'vi'
+                        ? 'Chọn item trước để xem availability'
+                        : 'Select an item first'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Parameters Selector */}
+              {parameters.length > 0 && (
+                <div className="p-4">
+                  {loadingParameters ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                      <span className="ml-2 text-sm">{locale === 'vi' ? 'Đang tải...' : 'Loading...'}</span>
+                    </div>
+                  ) : (
+                    <GlampingParameterSelector
+                      parameters={parameters}
+                      parameterQuantities={parameterQuantities}
+                      onQuantitiesChange={onQuantitiesChange}
+                      locale={locale}
+                      disabled={disabled}
+                      // When pricingLoading is true, use empty object to prevent showing wrong prices
+                      // Otherwise use override (with group pricing) or fallback to calendar-based pricing
+                      parameterPricing={pricingLoading ? {} : (overrideParameterPricing || parameterPricing)}
+                      // Pass pricing modes for per_person vs per_group calculation
+                      // Use override if provided, otherwise use internally fetched state
+                      parameterPricingModes={pricingLoading ? undefined : (overrideParameterPricingModes || parameterPricingModes)}
+                      nights={nights}
+                      dateRange={dateRange}
+                      // Use override nightly pricing (with group pricing) or fallback to calendar-based
+                      // Transform override format: { date, parameters } → { date, pricing }
+                      nightlyParameterPricing={
+                        pricingLoading
+                          ? []
+                          : overrideNightlyPricing
+                            ? overrideNightlyPricing.map(n => ({ date: n.date, pricing: n.parameters }))
+                            : nightlyParameterPricing
+                      }
+                      pricingLoading={pricingLoading}
+                      enableSinglePersonSurchargeAlert={enableSinglePersonSurchargeAlert}
+                      singlePersonSurchargeAlertText={singlePersonSurchargeAlertText}
+                    />
+                  )}
+                </div>
               )}
             </div>
           </div>

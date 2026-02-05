@@ -167,6 +167,9 @@ export function GlampingBookingDetailModal({
   // Force edit status dialog
   const [forceEditDialogOpen, setForceEditDialogOpen] = useState(false);
 
+  // Refresh trigger for Financial Tab - increments when Edit Tab saves
+  const [financialRefreshTrigger, setFinancialRefreshTrigger] = useState(0);
+
   useEffect(() => {
     if (bookingId && isOpen) {
       fetchBookingDetails();
@@ -588,6 +591,15 @@ export function GlampingBookingDetailModal({
     period => `${period.itemId}|${period.checkInDate}|${period.checkOutDate}`
   );
 
+  // Extract common item names (addons) - unique names only
+  const commonItemNames = booking.items
+    ?.filter(item => item.metadata?.type === 'addon')
+    .map(item => item.itemName)
+    .filter((name, index, self) => self.indexOf(name) === index) || [];
+
+  // Extract additional cost names
+  const additionalCostNames = booking.additionalCosts?.map(ac => ac.name) || [];
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
@@ -737,6 +749,8 @@ export function GlampingBookingDetailModal({
               locale={locale}
               bookingCheckIn={booking.dates.checkIn}
               bookingCheckOut={booking.dates.checkOut}
+              commonItemNames={commonItemNames}
+              additionalCostNames={additionalCostNames}
             />
 
             {/* Payment Summary */}
@@ -872,6 +886,7 @@ export function GlampingBookingDetailModal({
               onRefresh={() => {
                 fetchBookingDetails();
                 fetchBookingHistory();
+                setFinancialRefreshTrigger(prev => prev + 1);
                 onUpdate?.();
               }}
               isUpdating={updating}
@@ -1263,6 +1278,7 @@ export function GlampingBookingDetailModal({
               currentPaymentStatus={paymentStatus}
               currentStaffName="Admin"
               onRefresh={fetchBookingDetails}
+              refreshTrigger={financialRefreshTrigger}
             />
           </TabsContent>
         </Tabs>

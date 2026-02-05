@@ -96,34 +96,11 @@ export async function GET(request: NextRequest) {
       parameterQuantities
     );
 
-    // Calculate total accommodation cost using nightly breakdown with pricing_mode
-    let accommodationCost = 0;
+    // Check for missing pricing
     const missingPricing: string[] = [];
 
     console.log('[Pricing Debug] Parameter Quantities:', parameterQuantities);
     console.log('[Pricing Debug] Raw Nightly Pricing:', rawNightlyPricing);
-
-    // Calculate accommodation cost using nightly pricing with pricing_mode
-    // pricing_mode: 'per_person' = price × quantity, 'per_group' = fixed price
-    rawNightlyPricing.forEach(night => {
-      Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
-        const nightPrice = night.parameters[paramId] || 0;
-        const pricingMode = night.pricingModes?.[paramId] || 'per_person';
-
-        let priceToAdd: number;
-        if (pricingMode === 'per_group') {
-          // Per group: fixed price for the group, regardless of quantity
-          priceToAdd = nightPrice;
-          console.log(`[Pricing] ${night.date} - ${paramId}: ${nightPrice} (per_group, fixed)`);
-        } else {
-          // Per person (default): multiply price by quantity
-          priceToAdd = nightPrice * quantity;
-          console.log(`[Pricing] ${night.date} - ${paramId}: ${nightPrice}/unit × ${quantity} = ${priceToAdd} (per_person)`);
-        }
-
-        accommodationCost += priceToAdd;
-      });
-    });
 
     // Check for missing pricing
     Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
@@ -134,7 +111,6 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    console.log(`[Pricing] Total Accommodation Cost: ${accommodationCost}`);
 
     // Check if all parameters have pricing
     if (missingPricing.length > 0) {
@@ -170,74 +146,23 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform nightlyPricing to match NightlyBreakdown component format
+    // Note: subtotal calculation is left to client to apply pricing_mode correctly
     const nightlyPricing = rawNightlyPricing.map(night => {
-      // Calculate subtotal for this night (sum of price * quantity for each parameter)
-      // Using pricing_mode to determine calculation
-      let subtotal = 0;
-      Object.entries(parameterQuantities).forEach(([paramId, quantity]) => {
-        const paramPrice = night.parameters[paramId] || 0;
-        const pricingMode = night.pricingModes?.[paramId] || 'per_person';
-
-        if (pricingMode === 'per_group') {
-          // Per group: fixed price for the group
-          subtotal += paramPrice;
-        } else {
-          // Per person: multiply by quantity
-          subtotal += paramPrice * quantity;
-        }
-      });
-
       return {
         date: night.date,
-        basePitchPrice: subtotal,
+        basePitchPrice: 0, // Client will calculate based on pricing_mode
         extraAdults: { count: 0, priceEach: 0, total: 0 },
         extraChildren: { count: 0, priceEach: 0, total: 0 },
-        subtotalBeforeDiscounts: subtotal,
+        subtotalBeforeDiscounts: 0, // Client will calculate based on pricing_mode
         discounts: [] as Array<{ name: string; code: string | null; category: string; type: string; value: number; amount: number }>,
-        subtotalAfterDiscounts: subtotal,
-        // Also keep raw parameters for glamping-specific display
+        subtotalAfterDiscounts: 0, // Client will calculate based on pricing_mode
+        // Keep raw parameters for client-side calculation
         parameters: night.parameters,
         pricingModes: night.pricingModes,
       };
     });
 
-    // Apply discount code if provided
-    let voucherDiscount = 0;
-    let discountDetails = null;
-
-    if (discountCode) {
-      // Call validate-voucher API to validate and calculate discount
-      try {
-        const validateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/api/glamping/validate-voucher`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            code: discountCode,
-            zoneId: item.zone_id,
-            itemId,
-            checkIn,
-            checkOut,
-            totalAmount: accommodationCost,
-          }),
-        });
-
-        if (validateResponse.ok) {
-          const voucherData = await validateResponse.json();
-          voucherDiscount = voucherData.discountAmount || 0;
-          discountDetails = {
-            code: voucherData.voucher.code,
-            type: voucherData.voucher.discountType,
-            value: voucherData.voucher.discountValue,
-            amount: voucherDiscount,
-          };
-        }
-      } catch (error) {
-        console.error('Error validating voucher:', error);
-        // Continue without discount if validation fails
-      }
-    }
-
-    const accommodationAfterDiscount = accommodationCost - voucherDiscount;
+    // Voucher validation is now handled by client
 
     // Tax info (from item)
     let taxInfo = null;
@@ -252,14 +177,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Calculate deposit if required
-    // For now, we'll use full payment (you can customize this based on zone settings)
-    const depositInfo = {
-      type: 'percentage',
-      value: 100,
-      amount: accommodationAfterDiscount,
-      balance: 0,
-    };
 
     // Extract pricing modes for each parameter (from first night, as it's consistent)
     const parameterPricingModes: Record<string, 'per_person' | 'per_group'> = {};
@@ -270,25 +187,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Return pricing breakdown
+    // parameterPricing: Total price per parameter for ALL nights (NOT multiplied by quantity)
+    // Client will multiply by quantity if pricingMode is 'per_person'
+    // For 'per_group', client uses this value directly (fixed price for whole group)
     return NextResponse.json({
       nights,
       parameterQuantities,
-      parameterPricing, // Price per parameter for all nights (unit price, not multiplied by quantity)
+      parameterPricing, // Total price per parameter for ALL nights (NOT multiplied by quantity)
       parameterPricingModes, // Pricing mode for each parameter ('per_person' or 'per_group')
-      nightlyPricing, // Breakdown by date
+      nightlyPricing, // Breakdown by date (client calculates subtotals)
       menuProducts: menuProductsBreakdown,
-      totals: {
-        accommodationCost,
-        menuProductsCost,
-        grossSubtotal: accommodationCost + menuProductsCost,
-        voucherDiscount,
-        accommodationAfterDiscount: accommodationCost - voucherDiscount,
-        taxAmount: 0,
-        grandTotal: accommodationCost + menuProductsCost - voucherDiscount,
-      },
       taxInfo,
-      depositInfo,
-      discountDetails,
     });
   } catch (error: any) {
     console.error('Error calculating pricing:', error);

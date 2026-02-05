@@ -118,6 +118,7 @@ export async function GET(
 
     const startDateParam = searchParams.get('startDate');
     const monthsParam = searchParams.get('months') || '3';
+    const excludeBookingId = searchParams.get('excludeBookingId');
     const months = parseInt(monthsParam, 10);
 
     if (!startDateParam) {
@@ -195,7 +196,8 @@ export async function GET(
             AND b.status NOT IN ('cancelled')
             AND bt.check_in_date <= $2
             AND bt.check_out_date > $2
-        `, [itemId, dateStr]);
+            AND ($3::uuid IS NULL OR b.id != $3)
+        `, [itemId, dateStr, excludeBookingId || null]);
 
         const bookingCount = parseInt(bookingResult.rows[0]?.booking_count || 0);
 

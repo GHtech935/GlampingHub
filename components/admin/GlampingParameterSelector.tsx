@@ -135,7 +135,7 @@ export function GlampingParameterSelector({
           const totalPrice = parameterPricing?.[paramId] || 0
           const pricingMode = parameterPricingModes?.[paramId] || 'per_person'
           const isPerGroup = pricingMode === 'per_group'
-          const hasPricing = dateRange?.from && dateRange?.to && totalPrice > 0
+          const hasPricing = dateRange?.from && dateRange?.to && totalPrice !== undefined
 
           // Calculate final price based on pricing_mode
           // per_group: fixed price (not multiplied by quantity)
@@ -177,7 +177,12 @@ export function GlampingParameterSelector({
                   {/* Show price only when not loading */}
                   {!pricingLoading && hasPricing && quantity > 0 && (
                     <div className="space-y-0.5">
-                      {allSamePrice && nightPrices.length > 0 ? (
+                      {totalPrice === 0 ? (
+                        // Zero price - show as free
+                        <div className="text-sm text-green-600 font-semibold">
+                          {locale === 'vi' ? 'Miễn phí' : 'Free'}
+                        </div>
+                      ) : allSamePrice && nightPrices.length > 0 ? (
                         // All nights same price - compact display
                         <div className="text-sm text-green-600 font-semibold">
                           {formatCurrency(nightPrices[0], locale)}/{locale === 'vi' ? 'đêm' : 'night'} × {nights} {locale === 'vi' ? 'đêm' : nights === 1 ? 'night' : 'nights'}
@@ -196,7 +201,9 @@ export function GlampingParameterSelector({
                               return (
                                 <span key={n.date}>
                                   {i > 0 && ' + '}
-                                  <span title={n.date}>{formatCurrency(price, locale)}</span>
+                                  <span title={n.date}>
+                                    {price === 0 ? (locale === 'vi' ? 'Miễn phí' : 'Free') : formatCurrency(price, locale)}
+                                  </span>
                                   <span className="text-gray-400"> ({dateLabel})</span>
                                 </span>
                               )
@@ -260,7 +267,7 @@ export function GlampingParameterSelector({
                   )}
                   {!pricingLoading && hasPricing && quantity > 0 && (
                     <div className="text-xs font-semibold text-blue-600">
-                      = {formatCurrency(finalPrice, locale)}
+                      = {finalPrice === 0 ? (locale === 'vi' ? 'Miễn phí' : 'Free') : formatCurrency(finalPrice, locale)}
                     </div>
                   )}
                 </div>

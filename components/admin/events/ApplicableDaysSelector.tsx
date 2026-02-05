@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useCallback } from "react";
 
 interface ApplicableDaysSelectorProps {
-  daysOfWeek: number[];
+  daysOfWeek: number[] | null;
   onDaysChange: (days: number[]) => void;
 }
 
@@ -14,6 +14,8 @@ export default function ApplicableDaysSelector({
   daysOfWeek,
   onDaysChange
 }: ApplicableDaysSelectorProps) {
+  // Ensure daysOfWeek is always an array (fallback to empty array if null)
+  const days = daysOfWeek ?? [];
   const t = useTranslations('events.new');
 
   const weekDays = [
@@ -27,12 +29,12 @@ export default function ApplicableDaysSelector({
   ];
 
   const toggleDay = useCallback((day: number) => {
-    if (daysOfWeek.includes(day)) {
-      onDaysChange(daysOfWeek.filter(d => d !== day));
+    if (days.includes(day)) {
+      onDaysChange(days.filter(d => d !== day));
     } else {
-      onDaysChange([...daysOfWeek, day].sort());
+      onDaysChange([...days, day].sort());
     }
-  }, [daysOfWeek, onDaysChange]);
+  }, [days, onDaysChange]);
 
   return (
     <div className="space-y-2">
@@ -44,7 +46,7 @@ export default function ApplicableDaysSelector({
           <div key={day.value} className="flex items-center gap-2">
             <Checkbox
               id={`day-${day.value}`}
-              checked={daysOfWeek.includes(day.value)}
+              checked={days.includes(day.value)}
               onCheckedChange={() => toggleDay(day.value)}
             />
             <Label htmlFor={`day-${day.value}`} className="text-sm cursor-pointer">

@@ -53,6 +53,7 @@ export async function GET(
         bt.check_out_date,
         bt.nights,
         bt.subtotal,
+        bt.subtotal_override,
         bt.special_requests,
         bt.display_order,
         bt.voucher_code,
@@ -84,7 +85,7 @@ export async function GET(
         FROM glamping_booking_items bi
         LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
         WHERE bi.booking_id = $1 AND bi.booking_tent_id = ANY($2)
-          AND (bi.metadata IS NULL OR bi.metadata->>'type' != 'addon')
+          AND (bi.metadata IS NULL OR bi.metadata->>'type' IS NULL OR bi.metadata->>'type' != 'addon')
         ORDER BY bi.created_at`,
         [id, tentIds]
       );
@@ -116,9 +117,14 @@ export async function GET(
     }
 
     const tents = tentsResult.rows.map(tent => {
-      const subtotal = parseFloat(tent.subtotal || '0');
+      const calculatedSubtotal = parseFloat(tent.subtotal || '0');
+      const priceOverride = tent.subtotal_override !== null && tent.subtotal_override !== undefined
+        ? parseFloat(tent.subtotal_override)
+        : null;
+      // Use override if set, otherwise use calculated subtotal
+      const effectiveSubtotal = priceOverride !== null ? priceOverride : calculatedSubtotal;
       const discountAmount = parseFloat(tent.discount_amount || '0');
-      const afterDiscount = subtotal - discountAmount;
+      const afterDiscount = effectiveSubtotal - discountAmount;
       const taxAmount = taxEnabled ? Math.round(afterDiscount * (taxRate / 100)) : 0;
 
       return {
@@ -129,7 +135,7 @@ export async function GET(
         checkInDate: tent.check_in_date,
         checkOutDate: tent.check_out_date,
         nights: tent.nights,
-        subtotal,
+        subtotal: effectiveSubtotal, // Return effective subtotal (with override applied)
         taxAmount,
         specialRequests: tent.special_requests,
         displayOrder: tent.display_order,
@@ -139,6 +145,7 @@ export async function GET(
         discountAmount,
         totalGuests: guestCountMap[tent.id] || 0,
         parameters: parametersMap[tent.id] || [],
+        priceOverride, // Return override separately for UI
       };
     });
 
@@ -256,6 +263,7 @@ export async function GET(
       voucherCode: string | null;
       discountAmount: number;
       dates: { from: string; to: string } | null;
+      priceOverride: number | null;
     }>();
 
     for (const row of commonItemsResult.rows) {
@@ -276,6 +284,11 @@ export async function GET(
             : (metadata.dates_from && metadata.dates_to
               ? { from: metadata.dates_from, to: metadata.dates_to }
               : null),
+          priceOverride: metadata.priceOverride !== undefined && metadata.priceOverride !== null
+            ? parseFloat(metadata.priceOverride)
+            : (metadata.subtotalOverride !== undefined && metadata.subtotalOverride !== null
+              ? parseFloat(metadata.subtotalOverride)
+              : null),
         });
       }
       const entry = commonItemsMap.get(key)!;
@@ -289,6 +302,13 @@ export async function GET(
         pricingMode: rowMetadata.pricingMode || 'per_person',
       });
       entry.totalPrice += parseFloat(row.total_price || '0');
+    }
+
+    // Apply priceOverride if set for each group
+    for (const group of commonItemsMap.values()) {
+      if (group.priceOverride !== null) {
+        group.totalPrice = group.priceOverride;
+      }
     }
 
     const commonItems = Array.from(commonItemsMap.values());

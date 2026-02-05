@@ -225,20 +225,64 @@ export async function recalculateGlampingBookingTotals(
   const oldDepositDue = parseFloat(bookingResult.rows[0].deposit_due || '0');
   const oldTotalAmount = parseFloat(bookingResult.rows[0].total_amount || '0');
 
-  // Sum accommodation items (from glamping_booking_items)
-  // Note: per_group pricing means the price is for the whole group, not per person
-  const accomResult = await client.query(
+  // Sum accommodation from glamping_booking_tents (supports subtotal_override)
+  // This is separate from addon items to properly handle tent price overrides
+  const tentResult = await client.query(
     `SELECT COALESCE(SUM(
-       CASE
-         WHEN metadata->>'pricingMode' = 'per_group' THEN unit_price
-         ELSE unit_price * quantity
-       END
-     ), 0) as accommodation_total
-     FROM glamping_booking_items
+       COALESCE(subtotal_override, subtotal)
+     ), 0) as tent_total
+     FROM glamping_booking_tents
      WHERE booking_id = $1`,
     [bookingId]
   );
-  const accommodationTotal = parseFloat(accomResult.rows[0].accommodation_total);
+  const tentTotal = parseFloat(tentResult.rows[0].tent_total);
+
+  // Sum addon items (from glamping_booking_items where type = 'addon')
+  // Note: per_group pricing means the price is for the whole group, not per person
+  // Note: priceOverride takes precedence if set (for addon items)
+  // For addon items with priceOverride, we need to group by addon to avoid counting override multiple times
+  const addonResult = await client.query(
+    `WITH addon_groups AS (
+       SELECT
+         -- Group key: addon_item_id + booking_tent_id for addons
+         addon_item_id::text || '_' || COALESCE(booking_tent_id::text, 'none') as group_key,
+         addon_item_id,
+         metadata,
+         unit_price,
+         quantity
+       FROM glamping_booking_items
+       WHERE booking_id = $1
+         AND metadata->>'type' = 'addon'
+         AND addon_item_id IS NOT NULL
+     ),
+     grouped_totals AS (
+       SELECT
+         group_key,
+         -- For addon groups with priceOverride, use it (take from first row, all rows have same value)
+         -- priceOverride can be 0 (free) or positive, but NULL means no override
+         -- Also check subtotalOverride for backward compatibility
+         -- Otherwise calculate normally
+         CASE
+           WHEN COALESCE(MAX(metadata->>'priceOverride'), MAX(metadata->>'subtotalOverride')) IS NOT NULL
+             THEN COALESCE((MAX(metadata->>'priceOverride'))::numeric, (MAX(metadata->>'subtotalOverride'))::numeric)
+           ELSE SUM(
+             CASE
+               WHEN metadata->>'pricingMode' = 'per_group' THEN unit_price
+               ELSE unit_price * quantity
+             END
+           )
+         END as group_total
+       FROM addon_groups
+       GROUP BY group_key
+     )
+     SELECT COALESCE(SUM(group_total), 0) as addon_total
+     FROM grouped_totals`,
+    [bookingId]
+  );
+  const addonTotal = parseFloat(addonResult.rows[0].addon_total);
+
+  // Total accommodation = tents + addons
+  const accommodationTotal = tentTotal + addonTotal;
 
   // Sum menu products (from glamping_booking_menu_products)
   // Use subtotal_override if set, otherwise calculate unit_price * quantity

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertCircle, CheckCircle2 } from "lucide-react"
+import { MonthDayPicker } from "@/components/ui/month-day-picker"
 
 interface MyDetailsSectionProps {
   register: UseFormRegister<any>
@@ -212,26 +213,16 @@ export function GlampingMyDetailsSection({
           </div>
         </div>
 
-        {/* Date of Birth */}
+        {/* Date of Birth - Month and Day only */}
         <div className="space-y-2">
-          <Label htmlFor="dateOfBirth">
-            {t('dateOfBirth')} <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="dateOfBirth"
-            type="date"
-            {...register("dateOfBirth")}
-            className={errors.dateOfBirth ? "border-red-500" : ""}
+          <MonthDayPicker
+            value={watch('dateOfBirth')}
+            onChange={(value) => setValue('dateOfBirth', value)}
+            label={t('dateOfBirth')}
+            required
+            error={!!errors.dateOfBirth}
+            helperText={errors.dateOfBirth ? (errors.dateOfBirth.message as string) : t('dateOfBirthHelper')}
           />
-          {errors.dateOfBirth && (
-            <p className="text-sm text-red-500 flex items-center gap-1">
-              <AlertCircle className="h-4 w-4" />
-              {errors.dateOfBirth.message as string}
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            {t('dateOfBirthHelper')}
-          </p>
         </div>
 
         {/* Social Media URL */}

@@ -170,7 +170,8 @@ export default function BookingCalendarPage() {
 
   // Handle new booking
   const handleNewBooking = () => {
-    router.push(`/admin/zones/${zoneId}/bookings/new`);
+    // Navigate to bookings page with action=create to auto-open the modal
+    router.push(`/admin/zones/${zoneId}/bookings?action=create`);
   };
 
   // Handle booking detail update
@@ -199,7 +200,7 @@ export default function BookingCalendarPage() {
         filters={filters}
         onFiltersChange={setFilters}
         filterOptions={filterOptions}
-        onNewBooking={handleNewBooking}
+        onNewBooking={zoneId !== "all" ? handleNewBooking : undefined}
         locale={locale}
       />
 

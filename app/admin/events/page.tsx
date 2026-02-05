@@ -119,10 +119,11 @@ export default function EventsPage() {
 
   const getRecurrenceLabel = (recurrence: string) => {
     switch (recurrence) {
-      case 'one_time': return 'One Time';
-      case 'weekly': return 'Weekly';
-      case 'monthly': return 'Monthly';
-      case 'yearly': return 'Yearly';
+      case 'one_time': return '1 lần';
+      case 'weekly': return 'Hàng tuần';
+      case 'monthly': return 'Hàng tháng';
+      case 'yearly': return 'Hàng năm';
+      case 'always': return 'Luôn luôn';
       default: return recurrence;
     }
   };
@@ -219,6 +220,7 @@ export default function EventsPage() {
               <TableHead>Áp dụng cho</TableHead>
               <TableHead>Start date</TableHead>
               <TableHead>End date</TableHead>
+              <TableHead>Tần suất</TableHead>
               <TableHead>Pricing</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Rules</TableHead>
@@ -228,13 +230,13 @@ export default function EventsPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8">
+                <TableCell colSpan={10} className="text-center py-8">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : filteredEvents.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={10} className="text-center py-8 text-gray-500">
                   No events found
                 </TableCell>
               </TableRow>
@@ -248,6 +250,7 @@ export default function EventsPage() {
                   </TableCell>
                   <TableCell className="text-gray-600">{formatDate(event.start_date)}</TableCell>
                   <TableCell className="text-gray-600">{formatDate(event.end_date)}</TableCell>
+                  <TableCell className="text-gray-600">{getRecurrenceLabel(event.recurrence)}</TableCell>
                   <TableCell className="text-gray-600">{event.pricing_type || '–'}</TableCell>
                   <TableCell>{getTypeBadge(event.type)}</TableCell>
                   <TableCell className="text-gray-600">Default</TableCell>

@@ -136,6 +136,8 @@ export async function POST(request: NextRequest) {
       // If recurrence is 'always', force dates to NULL
       const finalStartDate = recurrence === 'always' ? null : (start_date || null);
       const finalEndDate = recurrence === 'always' ? null : (end_date || null);
+      // Only keep days_of_week when recurrence is 'weekly'
+      const finalDaysOfWeek = recurrence === 'weekly' ? (days_of_week || null) : null;
 
       // Create event
       const eventResult = await client.query(
@@ -162,7 +164,7 @@ export async function POST(request: NextRequest) {
           finalStartDate,
           finalEndDate,
           recurrence || 'one_time',
-          days_of_week || null,
+          finalDaysOfWeek,
           pricing_type || 'base_price',
           status || 'available',
           active !== undefined ? active : true,

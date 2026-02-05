@@ -1251,7 +1251,7 @@ export function ItemFormWizard({
         start_date: eventFormData.start_date,
         end_date: eventFormData.end_date || null,
         recurrence: eventFormData.recurrence,
-        days_of_week: eventFormData.days_of_week.length > 0 ? eventFormData.days_of_week : null,
+        days_of_week: eventFormData.days_of_week?.length > 0 ? eventFormData.days_of_week : null,
         pricing_type: eventFormData.pricing_type,
         status: eventFormData.status,
         applicable_times: eventFormData.applicable_times,
@@ -1434,7 +1434,7 @@ export function ItemFormWizard({
               start_date: eventFormData.start_date,
               end_date: eventFormData.end_date || null,
               recurrence: eventFormData.recurrence,
-              days_of_week: eventFormData.days_of_week.length > 0 ? eventFormData.days_of_week : null,
+              days_of_week: eventFormData.days_of_week?.length > 0 ? eventFormData.days_of_week : null,
               pricing_type: eventFormData.pricing_type,
               status: eventFormData.status,
               applicable_times: eventFormData.applicable_times,
@@ -4054,7 +4054,7 @@ export function ItemFormWizard({
               type="button"
               className="bg-blue-500 hover:bg-blue-600"
               onClick={handleCreateEvent}
-              disabled={!eventFormData.name || !eventFormData.start_date}
+              disabled={!eventFormData.name || (eventFormData.recurrence !== 'always' && !eventFormData.start_date)}
             >
               {t('itemEvents.createAndAttach')}
             </Button>
@@ -4156,7 +4156,7 @@ export function ItemFormWizard({
               type="button"
               className="bg-blue-500 hover:bg-blue-600"
               onClick={handleUpdateEvent}
-              disabled={!eventFormData.name || !eventFormData.start_date}
+              disabled={!eventFormData.name || (eventFormData.recurrence !== 'always' && !eventFormData.start_date)}
             >
               {t('itemEvents.saveChanges')}
             </Button>

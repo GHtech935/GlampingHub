@@ -68,11 +68,13 @@ export async function GET(
 
     const booking = bookingResult.rows[0];
 
-    // Get booking items (accommodation) with tent reference
+    // Get booking items (accommodation only, excluding addons) with tent reference
+    // Filter out addon items to show only tent parameters in Financial tab
     const itemsResult = await client.query(
       `SELECT
         bi.id,
         bi.item_id,
+        bi.addon_item_id,
         bi.booking_tent_id,
         bi.parameter_id,
         bi.quantity,
@@ -80,22 +82,27 @@ export async function GET(
         bi.total_price,
         bi.metadata,
         i.name as item_name,
+        ai.name as addon_item_name,
         p.name as parameter_name,
         z.name as zone_name
       FROM glamping_booking_items bi
       LEFT JOIN glamping_items i ON bi.item_id = i.id
+      LEFT JOIN glamping_items ai ON bi.addon_item_id = ai.id
       LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
       LEFT JOIN glamping_zones z ON i.zone_id = z.id
       WHERE bi.booking_id = $1
+        AND (bi.metadata IS NULL OR bi.metadata->>'type' IS NULL OR bi.metadata->>'type' != 'addon')
       ORDER BY bi.created_at`,
       [id]
     );
 
-    // Get booking tents with discount info
+    // Get booking tents with discount info and subtotal override
     const tentsResult = await client.query(
       `SELECT
         bt.id,
         bt.item_id,
+        bt.subtotal,
+        bt.subtotal_override,
         bt.voucher_code,
         bt.discount_type,
         bt.discount_value,
@@ -107,7 +114,7 @@ export async function GET(
     );
     const tentsDiscountMap = new Map(tentsResult.rows.map(t => [t.id, t]));
 
-    // Get menu products with tent reference + discount fields
+    // Get menu products with tent reference + discount fields + subtotal_override
     const productsResult = await client.query(
       `SELECT
         bp.id,
@@ -121,6 +128,7 @@ export async function GET(
         bp.discount_value,
         bp.discount_amount,
         bp.serving_date,
+        bp.subtotal_override,
         mi.name as product_name,
         mc.name as category_name
       FROM glamping_booking_menu_products bp
@@ -128,6 +136,31 @@ export async function GET(
       LEFT JOIN glamping_menu_categories mc ON mi.category_id = mc.id
       WHERE bp.booking_id = $1
       ORDER BY bp.created_at`,
+      [id]
+    );
+
+    // Get addon items (common items) - stored in glamping_booking_items with metadata.type = 'addon'
+    const addonsResult = await client.query(
+      `SELECT
+        bi.id,
+        bi.item_id,
+        bi.addon_item_id,
+        bi.booking_tent_id,
+        bi.parameter_id,
+        bi.quantity,
+        bi.unit_price,
+        bi.total_price,
+        bi.metadata,
+        i.name as item_name,
+        ai.name as addon_item_name,
+        p.name as parameter_name
+      FROM glamping_booking_items bi
+      LEFT JOIN glamping_items i ON bi.item_id = i.id
+      LEFT JOIN glamping_items ai ON bi.addon_item_id = ai.id
+      LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
+      WHERE bi.booking_id = $1
+        AND bi.metadata->>'type' = 'addon'
+      ORDER BY bi.created_at`,
       [id]
     );
 
@@ -140,28 +173,47 @@ export async function GET(
       const quantity = item.quantity || 1;
       const metadata = item.metadata || {};
       const pricingMode = metadata.pricingMode || 'per_person';
+      const isAddon = metadata.type === 'addon';
 
       // For per_group pricing, the subtotal is just the unit_price (package price for whole group)
       // For per_person pricing, the subtotal is unit_price × quantity
       const calculatedSubtotal = pricingMode === 'per_group' ? unitPrice : unitPrice * quantity;
 
+      // Check for price override in metadata (supports both priceOverride and legacy subtotalOverride)
+      const priceOverride = metadata.priceOverride !== undefined && metadata.priceOverride !== null
+        ? parseFloat(metadata.priceOverride)
+        : (metadata.subtotalOverride !== undefined && metadata.subtotalOverride !== null
+          ? parseFloat(metadata.subtotalOverride)
+          : null);
+
+      // Use override if present, otherwise use calculated
+      const effectiveSubtotal = priceOverride !== null ? priceOverride : calculatedSubtotal;
+
       // Look up per-item tax rate
       const itemTaxInfo = item.item_id ? itemTaxMap.get(item.item_id) : undefined;
       const itemTaxRate = booking.tax_invoice_required && itemTaxInfo ? itemTaxInfo.taxRate : 0;
-      const taxAmount = itemTaxRate > 0 ? calculatedSubtotal * (itemTaxRate / 100) : 0;
+      const taxAmount = itemTaxRate > 0 ? effectiveSubtotal * (itemTaxRate / 100) : 0;
 
-      // Get tent discount info
+      // Get tent discount info and override
       const tentDiscount = item.booking_tent_id ? tentsDiscountMap.get(item.booking_tent_id) : null;
+      const tentSubtotalOverride = tentDiscount?.subtotal_override !== null && tentDiscount?.subtotal_override !== undefined
+        ? parseFloat(tentDiscount.subtotal_override)
+        : null;
 
       // Extract addon voucher from metadata (common items store voucher in metadata.voucher)
-      const addonVoucher = metadata.type === 'addon' && metadata.voucher ? metadata.voucher : null;
+      const addonVoucher = isAddon && metadata.voucher ? metadata.voucher : null;
+
+      // For addon items, use addon_item_name; otherwise use item_name
+      const itemName = isAddon && item.addon_item_name
+        ? getLocalizedString(item.addon_item_name, 'Addon')
+        : getLocalizedString(item.item_name, 'Accommodation');
 
       return {
         date: new Date(booking.check_in_date).toISOString().split('T')[0],
-        subtotalBeforeDiscounts: calculatedSubtotal,
-        subtotalAfterDiscounts: calculatedSubtotal,
+        subtotalBeforeDiscounts: effectiveSubtotal,
+        subtotalAfterDiscounts: effectiveSubtotal,
         discounts: [],
-        itemName: getLocalizedString(item.item_name, 'Accommodation'),
+        itemName: itemName,
         parameterName: getLocalizedString(item.parameter_name),
         zoneName: getLocalizedString(item.zone_name),
         quantity: quantity,
@@ -171,28 +223,42 @@ export async function GET(
         taxAmount: taxAmount,
         bookingTentId: item.booking_tent_id || null,
         itemId: item.item_id || null,
+        addonItemId: item.addon_item_id || null,
         tentVoucherCode: tentDiscount?.voucher_code || null,
         tentDiscountAmount: parseFloat(tentDiscount?.discount_amount || 0),
+        tentSubtotalOverride: tentSubtotalOverride,
         voucherCode: addonVoucher?.code || null,
         discountAmount: parseFloat(addonVoucher?.discountAmount || 0),
-        isAddon: metadata.type === 'addon',
+        isAddon: isAddon,
+        priceOverride: priceOverride,
       };
     });
 
     // Build products list (with per-product discount and per-product tax)
     const products = productsResult.rows.map(p => {
       const unitPrice = parseFloat(p.unit_price) || 0;
-      const totalPrice = parseFloat(p.total_price) || 0;
+      const quantity = p.quantity || 1;
+      const calculatedTotalPrice = unitPrice * quantity;
       const productDiscountAmount = parseFloat(p.discount_amount || 0);
+
+      // Check for price override from subtotal_override column
+      const subtotalOverride = p.subtotal_override !== null && p.subtotal_override !== undefined
+        ? parseFloat(p.subtotal_override)
+        : null;
+
+      // Use override if present, otherwise use total_price from DB (or calculated)
+      const effectiveTotalPrice = subtotalOverride !== null
+        ? subtotalOverride
+        : (parseFloat(p.total_price) || calculatedTotalPrice);
 
       // Look up per-product tax rate from menu item
       const productTaxRate = booking.tax_invoice_required ? (menuTaxMap.get(p.menu_item_id) || 0) : 0;
-      const taxAmount = productTaxRate > 0 ? totalPrice * (productTaxRate / 100) : 0;
+      const taxAmount = productTaxRate > 0 ? effectiveTotalPrice * (productTaxRate / 100) : 0;
 
       return {
         name: getLocalizedString(p.product_name, 'Product'),
         category: getLocalizedString(p.category_name),
-        quantity: p.quantity || 1,
+        quantity: quantity,
         originalUnitPrice: unitPrice,
         discount: productDiscountAmount > 0 ? {
           voucherCode: p.voucher_code,
@@ -201,15 +267,71 @@ export async function GET(
           discountAmount: productDiscountAmount,
         } : null,
         finalUnitPrice: unitPrice,
-        subtotal: totalPrice,
+        subtotal: effectiveTotalPrice,
         taxRate: productTaxRate,
         taxAmount: taxAmount,
-        total: totalPrice + taxAmount,
+        total: effectiveTotalPrice + taxAmount,
         bookingTentId: p.booking_tent_id || null,
         menuItemId: p.menu_item_id || null,
         voucherCode: p.voucher_code || null,
         discountAmount: productDiscountAmount,
         servingDate: p.serving_date || null,
+        subtotalOverride: subtotalOverride,
+      };
+    });
+
+    // Build addon items list (common items)
+    const addonItems = addonsResult.rows.map(item => {
+      const unitPrice = parseFloat(item.unit_price) || 0;
+      const quantity = item.quantity || 1;
+      const metadata = item.metadata || {};
+      const pricingMode = metadata.pricingMode || 'per_person';
+
+      // For per_group pricing, the subtotal is just the unit_price (package price for whole group)
+      // For per_person pricing, the subtotal is unit_price × quantity
+      const calculatedSubtotal = pricingMode === 'per_group' ? unitPrice : unitPrice * quantity;
+
+      // Check for price override in metadata (supports both priceOverride and legacy subtotalOverride)
+      const priceOverride = metadata.priceOverride !== undefined && metadata.priceOverride !== null
+        ? parseFloat(metadata.priceOverride)
+        : (metadata.subtotalOverride !== undefined && metadata.subtotalOverride !== null
+          ? parseFloat(metadata.subtotalOverride)
+          : null);
+
+      // Use override if present, otherwise use calculated
+      const effectiveSubtotal = priceOverride !== null ? priceOverride : calculatedSubtotal;
+
+      // Look up per-item tax rate from addon_item_id
+      const addonItemId = item.addon_item_id;
+      const itemTaxInfo = addonItemId ? itemTaxMap.get(addonItemId) : undefined;
+      const itemTaxRate = booking.tax_invoice_required && itemTaxInfo ? itemTaxInfo.taxRate : 0;
+      const taxAmount = itemTaxRate > 0 ? effectiveSubtotal * (itemTaxRate / 100) : 0;
+
+      // Extract addon voucher from metadata (common items store voucher in metadata.voucher)
+      const addonVoucher = metadata.voucher || null;
+
+      // For addon items, use addon_item_name
+      const itemName = item.addon_item_name
+        ? getLocalizedString(item.addon_item_name, 'Addon')
+        : getLocalizedString(item.item_name, 'Item chung');
+
+      return {
+        id: item.id,
+        name: itemName,
+        parameterName: getLocalizedString(item.parameter_name),
+        quantity: quantity,
+        unitPrice: unitPrice,
+        pricingMode: pricingMode,
+        subtotal: effectiveSubtotal,
+        taxRate: itemTaxRate,
+        taxAmount: taxAmount,
+        total: effectiveSubtotal + taxAmount,
+        bookingTentId: item.booking_tent_id || null,
+        addonItemId: addonItemId || null,
+        voucherCode: addonVoucher?.code || null,
+        discountAmount: parseFloat(addonVoucher?.discountAmount || 0),
+        priceOverride: priceOverride,
+        dates: metadata.dates || null,
       };
     });
 
@@ -234,23 +356,61 @@ export async function GET(
     }));
 
     // Calculate totals (including per-item discounts)
-    // Use the calculated subtotals from nightlyPricing which already handle pricingMode
-    const accommodationTotal = nightlyPricing.reduce((sum, item) => sum + item.subtotalAfterDiscounts, 0);
-    const productsTotal = productsResult.rows.reduce((sum, p) => sum + (parseFloat(p.total_price) || 0), 0);
+    // For tents: use subtotal_override if set, otherwise use calculated subtotal from booking_items
+    // Group booking_items by tent to calculate per-tent totals
+    const tentCalculatedTotals = new Map<string, number>();
+    nightlyPricing.forEach(item => {
+      if (item.bookingTentId) {
+        const current = tentCalculatedTotals.get(item.bookingTentId) || 0;
+        tentCalculatedTotals.set(item.bookingTentId, current + item.subtotalAfterDiscounts);
+      }
+    });
+
+    // Calculate accommodation total using tent overrides when available
+    const accommodationTotal = tentsResult.rows.reduce((sum, tent) => {
+      const hasOverride = tent.subtotal_override !== null && tent.subtotal_override !== undefined;
+      const effectiveSubtotal = hasOverride
+        ? parseFloat(tent.subtotal_override)
+        : (tentCalculatedTotals.get(tent.id) || parseFloat(tent.subtotal || '0'));
+      return sum + effectiveSubtotal;
+    }, 0);
+
+    const productsTotal = productsResult.rows.reduce((sum, p) => {
+      // Use subtotal_override if present, otherwise use total_price
+      const override = p.subtotal_override !== null && p.subtotal_override !== undefined
+        ? parseFloat(p.subtotal_override)
+        : null;
+      return sum + (override !== null ? override : (parseFloat(p.total_price) || 0));
+    }, 0);
+    const addonsTotal = addonItems.reduce((sum, a) => sum + a.subtotal, 0);
     const additionalCostsTotal = additionalCosts.reduce((sum, c) => sum + c.totalPrice, 0);
 
     // Sum per-tent discounts
     const totalTentDiscounts = tentsResult.rows.reduce((sum, t) => sum + (parseFloat(t.discount_amount) || 0), 0);
     // Sum per-product discounts
     const totalProductDiscounts = productsResult.rows.reduce((sum, p) => sum + (parseFloat(p.discount_amount) || 0), 0);
+    // Sum per-addon discounts
+    const totalAddonDiscounts = addonItems.reduce((sum, a) => sum + a.discountAmount, 0);
 
-    const subtotal = accommodationTotal + productsTotal + additionalCostsTotal;
+    const subtotal = accommodationTotal + productsTotal + addonsTotal + additionalCostsTotal;
 
-    // Sum tax from per-item amounts
-    const accommodationTax = nightlyPricing.reduce((sum, n) => sum + n.taxAmount, 0);
+    // Calculate accommodation tax based on effective subtotals (with overrides)
+    const accommodationTax = booking.tax_invoice_required
+      ? tentsResult.rows.reduce((sum, tent) => {
+          const hasOverride = tent.subtotal_override !== null && tent.subtotal_override !== undefined;
+          const effectiveSubtotal = hasOverride
+            ? parseFloat(tent.subtotal_override)
+            : (tentCalculatedTotals.get(tent.id) || parseFloat(tent.subtotal || '0'));
+          // Get tax rate for this tent's item
+          const itemTaxInfo = tent.item_id ? itemTaxMap.get(tent.item_id) : undefined;
+          const taxRate = itemTaxInfo ? itemTaxInfo.taxRate : 0;
+          return sum + (effectiveSubtotal * (taxRate / 100));
+        }, 0)
+      : 0;
     const productsTax = products.reduce((sum, p) => sum + p.taxAmount, 0);
+    const addonsTax = addonItems.reduce((sum, a) => sum + a.taxAmount, 0);
     const additionalCostsTax = additionalCosts.reduce((sum, c) => sum + c.taxAmount, 0);
-    const totalTax = accommodationTax + productsTax + additionalCostsTax;
+    const totalTax = accommodationTax + productsTax + addonsTax + additionalCostsTax;
 
     return NextResponse.json({
       booking: {
@@ -269,6 +429,7 @@ export async function GET(
       },
       nightlyPricing,
       products,
+      addonItems,
       additionalCosts,
       voucherApplied: null,
       tentDiscounts: tentsResult.rows
@@ -280,6 +441,14 @@ export async function GET(
           discountType: t.discount_type,
           discountValue: parseFloat(t.discount_value || 0),
           discountAmount: parseFloat(t.discount_amount || 0),
+        })),
+      tentOverrides: tentsResult.rows
+        .filter(t => t.subtotal_override !== null && t.subtotal_override !== undefined)
+        .map(t => ({
+          tentId: t.id,
+          itemId: t.item_id,
+          calculatedSubtotal: parseFloat(t.subtotal || 0),
+          overrideSubtotal: parseFloat(t.subtotal_override),
         })),
       totals: {
         accommodationBeforeDiscount: accommodationTotal,

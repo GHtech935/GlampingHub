@@ -162,6 +162,7 @@ export interface BookingDetail {
   updatedAt?: string;
   confirmedAt?: string;
   cancelledAt?: string;
+  additionalCosts?: Array<{ id: string; name: string }>;
 }
 
 /**
@@ -327,6 +328,7 @@ export interface TentEditData {
   bookingId: string;
   itemId: string;
   itemName: string;
+  zoneId?: string;
   checkInDate: string;
   checkOutDate: string;
   nights: number;
@@ -336,6 +338,7 @@ export interface TentEditData {
   discountType?: string | null;
   discountValue?: number;
   discountAmount?: number;
+  priceOverride?: number | null;
   parameters: Array<{
     parameterId: string;
     parameterName: string;
@@ -368,6 +371,7 @@ export interface CommonItemEditData {
   voucherCode?: string | null;
   discountAmount?: number;
   zoneId?: string;
+  priceOverride?: number | null;
 }
 
 /**

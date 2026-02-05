@@ -9,19 +9,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import type { Locale, MultilingualText } from "@/lib/i18n-utils";
 import { getLocalizedText } from "@/lib/i18n-utils";
 import { GlampingItemSelector } from "@/components/admin/GlampingItemSelector";
-import { GlampingDateRangePickerWithCalendar } from "@/components/admin/GlampingDateRangePickerWithCalendar";
-import VoucherInput, { type AppliedVoucher } from "@/components/booking/VoucherInput";
+import { GlampingTentFormSections } from "./GlampingTentFormSections";
+import type { AppliedVoucher } from "@/components/booking/VoucherInput";
 
 interface GlampingItem {
   id: string;
@@ -75,6 +71,7 @@ const texts = {
     selectItemFirst: 'Vui lòng chọn item trước',
     selectDatesFirst: 'Vui lòng chọn ngày check-in và check-out',
     selectGuestsFirst: 'Vui lòng chọn số lượng khách',
+    pricingError: 'Không thể tải giá. Vui lòng thử lại.',
   },
   en: {
     title: 'Add New Tent',
@@ -95,6 +92,7 @@ const texts = {
     selectItemFirst: 'Please select an item first',
     selectDatesFirst: 'Please select check-in and check-out dates',
     selectGuestsFirst: 'Please select guest count',
+    pricingError: 'Failed to load pricing. Please try again.',
   },
 };
 
@@ -128,6 +126,7 @@ export function GlampingAddTentModal({
   const [parameterPricing, setParameterPricing] = useState<Record<string, number>>({});
   const [parameterPricingModes, setParameterPricingModes] = useState<Record<string, 'per_person' | 'per_group'>>({});
   const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingError, setPricingError] = useState<string | null>(null);
 
   // Submit state
   const [submitting, setSubmitting] = useState(false);
@@ -144,6 +143,7 @@ export function GlampingAddTentModal({
       setAccommodationVoucher(null);
       setParameterPricing({});
       setParameterPricingModes({});
+      setPricingError(null);
     }
   }, [isOpen]);
 
@@ -186,6 +186,7 @@ export function GlampingAddTentModal({
     if (!selectedItemId || !dateRange?.from || !dateRange?.to) {
       setParameterPricing({});
       setParameterPricingModes({});
+      setPricingError(null);
       return;
     }
 
@@ -194,6 +195,7 @@ export function GlampingAddTentModal({
 
     const fetchPricing = async () => {
       setPricingLoading(true);
+      setPricingError(null);
       try {
         const params = new URLSearchParams({
           itemId: selectedItemId,
@@ -212,16 +214,20 @@ export function GlampingAddTentModal({
         const response = await fetch(`/api/glamping/booking/calculate-pricing?${params}`);
         const data = await response.json();
 
-        if (response.ok) {
-          if (data.parameterPricing) {
-            setParameterPricing(data.parameterPricing);
-          }
-          if (data.parameterPricingModes) {
-            setParameterPricingModes(data.parameterPricingModes);
-          }
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch pricing');
+        }
+
+        if (data.parameterPricing) {
+          setParameterPricing(data.parameterPricing);
+        }
+        if (data.parameterPricingModes) {
+          setParameterPricingModes(data.parameterPricingModes);
         }
       } catch (error) {
         console.error('Error fetching pricing:', error);
+        setPricingError(locale === 'vi' ? 'Không thể tải giá. Vui lòng thử lại.' : 'Failed to load pricing. Please try again.');
+        setParameterPricing({});
       } finally {
         setPricingLoading(false);
       }
@@ -229,7 +235,7 @@ export function GlampingAddTentModal({
 
     const timer = setTimeout(fetchPricing, 300);
     return () => clearTimeout(timer);
-  }, [selectedItemId, dateRange, parameterQuantities]);
+  }, [selectedItemId, dateRange, parameterQuantities, locale]);
 
   // Calculate accommodation cost
   const accommodationCost = useMemo(() => {
@@ -343,12 +349,18 @@ export function GlampingAddTentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t.title}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {pricingError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              ⚠️ {pricingError}
+            </div>
+          )}
+
           {/* Section 1: Item Selection */}
           <div className="space-y-2">
             <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
@@ -364,115 +376,51 @@ export function GlampingAddTentModal({
             />
           </div>
 
-          {/* Section 2: Dates & Parameters */}
-          <div className="space-y-2">
-            <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-sm">2</span>
-              {t.selectDatesAndParams}
-              <span className="text-red-500">*</span>
-            </h3>
-            <GlampingDateRangePickerWithCalendar
-              itemId={selectedItemId}
-              dateRange={dateRange}
-              onDateRangeChange={setDateRange}
-              locale={locale}
-              disabled={!selectedItemId}
-              parameters={parameters}
-              parameterQuantities={parameterQuantities}
-              onQuantitiesChange={setParameterQuantities}
-              loadingParameters={loadingParameters}
-              overrideParameterPricing={parameterPricing}
-              overrideParameterPricingModes={parameterPricingModes}
-              pricingLoading={pricingLoading}
-            />
-          </div>
-
-          {/* Section 3: Voucher */}
-          <div className="space-y-2">
-            <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-sm">3</span>
-              {t.voucher}
-            </h3>
-            <VoucherInput
-              zoneId={zoneId}
-              itemId={selectedItemId}
-              checkIn={dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined}
-              checkOut={dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : undefined}
-              totalAmount={accommodationCost}
-              locale={locale}
-              validationEndpoint="/api/glamping/validate-voucher"
-              applicationType="accommodation"
-              appliedVoucher={
-                accommodationVoucher
-                  ? {
-                      id: accommodationVoucher.id,
-                      code: accommodationVoucher.code,
-                      name: '',
-                      description: '',
-                      discountType: accommodationVoucher.discountType,
-                      discountValue: accommodationVoucher.discountValue,
-                      discountAmount: accommodationVoucher.discountAmount,
-                      isStackable: false,
-                    }
-                  : null
-              }
-              onVoucherApplied={handleVoucherApplied}
-              onVoucherRemoved={handleVoucherRemoved}
-            />
-          </div>
-
-          {/* Section 4: Special Requests */}
-          <div className="space-y-2">
-            <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-sm">4</span>
-              {t.specialRequests}
-            </h3>
-            <Textarea
-              value={specialRequests}
-              onChange={(e) => setSpecialRequests(e.target.value)}
-              placeholder={t.specialRequestsPlaceholder}
-              rows={3}
-            />
-          </div>
-
-          {/* Pricing Summary */}
-          {accommodationCost > 0 && (
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="p-4">
-                <h4 className="font-semibold text-sm mb-3">{t.pricingSummary}</h4>
-                <div className="space-y-1.5 text-sm">
-                  {/* Accommodation */}
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">
-                      {t.accommodation} ({nights} {locale === 'vi' ? 'đêm' : 'nights'})
-                    </span>
-                    <span className="font-medium">{formatCurrency(accommodationCost)}</span>
-                  </div>
-
-                  {/* Voucher discount */}
-                  {accommodationVoucher && accommodationVoucher.discountAmount > 0 && (
-                    <div className="flex justify-between text-green-600">
-                      <span>{t.voucherDiscount} ({accommodationVoucher.code})</span>
-                      <span>-{formatCurrency(accommodationVoucher.discountAmount)}</span>
-                    </div>
-                  )}
-
-                  {/* Total */}
-                  <div className="border-t border-blue-300 pt-2 mt-2 flex justify-between font-bold text-base">
-                    <span>{t.total}</span>
-                    <span className="text-blue-700">{formatCurrency(totalAfterVoucher)}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Sections 2, 3, 4 - Shared Component */}
+          <GlampingTentFormSections
+            mode="add"
+            zoneId={zoneId}
+            itemId={selectedItemId}
+            locale={locale}
+            disabled={!selectedItemId || submitting}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            parameters={parameters}
+            parameterQuantities={parameterQuantities}
+            onQuantitiesChange={setParameterQuantities}
+            loadingParameters={loadingParameters}
+            parameterPricing={parameterPricing}
+            parameterPricingModes={parameterPricingModes}
+            pricingLoading={pricingLoading}
+            accommodationVoucher={
+              accommodationVoucher
+                ? {
+                    id: accommodationVoucher.id,
+                    code: accommodationVoucher.code,
+                    name: '',
+                    description: '',
+                    discountType: accommodationVoucher.discountType,
+                    discountValue: accommodationVoucher.discountValue,
+                    discountAmount: accommodationVoucher.discountAmount,
+                    isStackable: false,
+                  }
+                : null
+            }
+            onVoucherApplied={handleVoucherApplied}
+            onVoucherRemoved={handleVoucherRemoved}
+            accommodationCost={accommodationCost}
+            specialRequests={specialRequests}
+            onSpecialRequestsChange={setSpecialRequests}
+            nights={nights}
+            totalAfterVoucher={totalAfterVoucher}
+          />
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             {t.cancel}
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting}>
+          <Button onClick={handleSubmit} disabled={submitting || pricingLoading || !!pricingError}>
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

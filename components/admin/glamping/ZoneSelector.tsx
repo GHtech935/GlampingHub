@@ -31,6 +31,20 @@ export function ZoneSelector({ currentZoneId, locale, variant = "sidebar" }: Zon
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
 
+  // Pages that support viewing data for "all" zones
+  // When adding a new page that should support "all" zones:
+  // 1. Implement the page to handle `zoneId === "all"` (check API calls, filters, etc.)
+  // 2. Test the page works correctly with "all" zones
+  // 3. Add the page name to this array
+  // Pages not in this list will fallback to dashboard when "all" is selected
+  const ALL_ZONES_SUPPORTED_PAGES = [
+    'booking-calendar',
+    'bookings',
+    'customer-calendar',
+    'dashboard',
+    // Add more pages here as they gain support for "all" zones
+  ];
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -59,26 +73,38 @@ export function ZoneSelector({ currentZoneId, locale, variant = "sidebar" }: Zon
   }, []);
 
   const handleZoneChange = (zoneId: string) => {
-    // If "All Zones" is selected, always go to dashboard (only page that supports aggregate view)
-    if (zoneId === "all") {
-      router.push("/admin/zones/all/dashboard");
-      return;
-    }
-
-    // For specific zones, try to maintain the current page context
-    // /admin/zones/[oldZoneId]/items -> /admin/zones/[newZoneId]/items
+    // Extract page segment from current path
+    // /admin/zones/[zoneId]/[page] -> page
     const pathParts = pathname.split("/");
     const zoneIndex = pathParts.indexOf("zones");
 
-    if (zoneIndex !== -1 && pathParts[zoneIndex + 1]) {
-      // Replace old zone ID with new zone ID
-      pathParts[zoneIndex + 1] = zoneId;
-      const newPath = pathParts.join("/");
-      router.push(newPath);
-    } else {
-      // Fallback to dashboard
+    if (zoneIndex === -1 || !pathParts[zoneIndex + 1]) {
+      // Fallback if path structure is unexpected
       router.push(`/admin/zones/${zoneId}/dashboard`);
+      return;
     }
+
+    // Get the current page segment (e.g., "booking-calendar", "items", etc.)
+    const currentPage = pathParts[zoneIndex + 2];
+
+    if (zoneId === "all") {
+      // Check if current page supports "all" zones
+      if (currentPage && ALL_ZONES_SUPPORTED_PAGES.includes(currentPage)) {
+        // Preserve the current page context
+        pathParts[zoneIndex + 1] = "all";
+        const newPath = pathParts.join("/");
+        router.push(newPath);
+      } else {
+        // Fallback to dashboard for unsupported pages
+        router.push("/admin/zones/all/dashboard");
+      }
+      return;
+    }
+
+    // For specific zones, maintain current behavior (preserve page context)
+    pathParts[zoneIndex + 1] = zoneId;
+    const newPath = pathParts.join("/");
+    router.push(newPath);
   };
 
   if (loading) {

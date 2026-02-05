@@ -125,7 +125,18 @@ interface FlatRow {
   notes: string | null;
   bookingNotes: BookingNote[];
   guestCount?: number;
+  bookingColorIndex: number;
 }
+
+// Soft pastel colors for alternating booking backgrounds
+const BOOKING_COLORS = [
+  'bg-blue-50',
+  'bg-green-50',
+  'bg-amber-50',
+  'bg-purple-50',
+  'bg-pink-50',
+  'bg-cyan-50',
+];
 
 export default function KitchenFoodReportPage() {
   const params = useParams();
@@ -206,9 +217,13 @@ export default function KitchenFoodReportPage() {
   // Transform nested data to flat rows for table display
   const flatRows: FlatRow[] = useMemo(() => {
     const rows: FlatRow[] = [];
+    let bookingColorIndex = 0;
+
     data.forEach((booking) => {
       let isFirstRowOfBooking = true;
       let isFirstTentInBooking = true;
+      const currentColorIndex = bookingColorIndex;
+      bookingColorIndex++;
 
       booking.tents.forEach((tent) => {
         let isFirstRowOfTent = true;
@@ -238,6 +253,7 @@ export default function KitchenFoodReportPage() {
               parameters: tent.parameters || [],
               notes: product.notes,
               bookingNotes: booking.notes || [],
+              bookingColorIndex: currentColorIndex,
             });
             isFirstRowOfBooking = false;
             isFirstRowOfTent = false;
@@ -265,6 +281,7 @@ export default function KitchenFoodReportPage() {
               parameters: tent.parameters || [],
               notes: null,
               bookingNotes: booking.notes || [],
+              bookingColorIndex: currentColorIndex,
             });
             isFirstRowOfBooking = false;
             isFirstRowOfTent = false;
@@ -293,6 +310,7 @@ export default function KitchenFoodReportPage() {
                 parameters: tent.parameters || [],
                 notes: cost.notes,
                 bookingNotes: booking.notes || [],
+                bookingColorIndex: currentColorIndex,
               });
               isFirstRowOfBooking = false;
             });
@@ -324,6 +342,7 @@ export default function KitchenFoodReportPage() {
             notes: null,
             bookingNotes: booking.notes || [],
             guestCount,
+            bookingColorIndex: currentColorIndex,
           });
           isFirstRowOfBooking = false;
 
@@ -350,6 +369,7 @@ export default function KitchenFoodReportPage() {
                 parameters: tent.parameters || [],
                 notes: cost.notes,
                 bookingNotes: booking.notes || [],
+                bookingColorIndex: currentColorIndex,
               });
             });
           }
@@ -524,7 +544,6 @@ export default function KitchenFoodReportPage() {
     // Header row
     const detailHeaders = [
       tCols("tentCount"),
-      tCols("bookingCode"),
       tCols("booker"),
       tCols("item"),
       tCols("menuItem"),
@@ -544,16 +563,15 @@ export default function KitchenFoodReportPage() {
 
     // Set column widths
     worksheet.getColumn(1).width = 10;
-    worksheet.getColumn(2).width = 16;
-    worksheet.getColumn(3).width = 20;
+    worksheet.getColumn(2).width = 20;
+    worksheet.getColumn(3).width = 25;
     worksheet.getColumn(4).width = 25;
-    worksheet.getColumn(5).width = 25;
-    worksheet.getColumn(6).width = 8;
-    worksheet.getColumn(7).width = 12;
+    worksheet.getColumn(5).width = 8;
+    worksheet.getColumn(6).width = 12;
     paramLabels.forEach((_, idx) => {
-      worksheet.getColumn(8 + idx).width = 15;
+      worksheet.getColumn(7 + idx).width = 15;
     });
-    worksheet.getColumn(8 + paramLabels.length).width = 50;
+    worksheet.getColumn(7 + paramLabels.length).width = 50;
 
     // Data rows - expand each booking with notes
     data.forEach((booking) => {
@@ -708,7 +726,6 @@ export default function KitchenFoodReportPage() {
         const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
         const dataRow = worksheet.addRow([
           i === 0 ? booking.tentCount : "",
-          i === 0 ? booking.bookingCode : "",
           i === 0 ? booking.bookerName : "",
           menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
           displayMenuItemName,
@@ -725,24 +742,24 @@ export default function KitchenFoodReportPage() {
 
         // Highlight tent rows
         if (menuRow?.isFirstOfTent) {
-          dataRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
+          dataRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
         }
 
         // Highlight additional costs with purple
         if (menuRow?.product.isAdditionalCost) {
+          dataRow.getCell(4).font = { color: { argb: 'FF7C3AED' }, bold: true };
           dataRow.getCell(5).font = { color: { argb: 'FF7C3AED' }, bold: true };
-          dataRow.getCell(6).font = { color: { argb: 'FF7C3AED' }, bold: true };
         }
 
         // Highlight common items with blue
         if (menuRow?.product.isCommonItem) {
-          dataRow.getCell(5).font = { color: { argb: 'FF1D4ED8' } };
-          dataRow.getCell(6).font = { color: { argb: 'FF1D4ED8' }, bold: true };
+          dataRow.getCell(4).font = { color: { argb: 'FF1D4ED8' } };
+          dataRow.getCell(5).font = { color: { argb: 'FF1D4ED8' }, bold: true };
         }
 
         // Highlight empty tents with gray italic
         if (menuRow?.product.isEmptyTent) {
-          dataRow.getCell(5).font = { color: { argb: 'FF9CA3AF' }, italic: true };
+          dataRow.getCell(4).font = { color: { argb: 'FF9CA3AF' }, italic: true };
         }
       }
     });
@@ -772,7 +789,6 @@ export default function KitchenFoodReportPage() {
 
     const exportCols = [
       { header: tCols("tentCount"), key: "tentCount" },
-      { header: tCols("bookingCode"), key: "bookingCode" },
       { header: tCols("booker"), key: "bookerName" },
       { header: tCols("item"), key: "itemName" },
       { header: tCols("menuItem"), key: "menuItemName" },
@@ -931,7 +947,6 @@ export default function KitchenFoodReportPage() {
         const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
         const rowData: Record<string, any> = {
           tentCount: i === 0 ? booking.tentCount : "",
-          bookingCode: i === 0 ? booking.bookingCode : "",
           bookerName: i === 0 ? booking.bookerName : "",
           itemName: menuRow?.isFirstOfTent ? menuRow.tent.itemName : "",
           menuItemName: displayMenuItemName,
@@ -1009,6 +1024,7 @@ export default function KitchenFoodReportPage() {
           .menu-table th { background-color: #F97316; }
           .common-table { max-width: 400px; }
           .common-table th { background-color: #3B82F6; }
+          .notes-cell { max-width: 200px; word-wrap: break-word; word-break: break-word; overflow-wrap: break-word; font-size: 9px; line-height: 1.3; }
           .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #E5E7EB; font-size: 10px; color: #9CA3AF; display: flex; justify-content: space-between; }
           @media print {
             body { padding: 10px; }
@@ -1102,16 +1118,15 @@ export default function KitchenFoodReportPage() {
         <table>
           <thead>
             <tr>
-              <th style="width: 5%;">${tCols("tentCount")}</th>
-              <th style="width: 10%;">${tCols("bookingCode")}</th>
+              <th style="width: 4%;">${tCols("tentCount")}</th>
               <th style="width: 10%;">${tCols("booker")}</th>
-              <th style="width: 12%;">${tCols("item")}</th>
+              <th style="width: 10%;">${tCols("item")}</th>
               <th style="width: 12%;">${tCols("menuItem")}</th>
-              <th class="text-center" style="width: 5%;">${tCols("quantity")}</th>
-              <th class="text-center" style="width: 6%;">${tCols("unit")}</th>
-              ${paramLabels.map(label => `<th class="text-center" style="width: 6%;">${label}</th>`).join('')}
-              <th>${tCols("notes")}</th>
-              <th class="text-center" style="width: 6%;">${locale === "vi" ? "Chụp ảnh" : "Photo"}</th>
+              <th class="text-center" style="width: 4%;">${tCols("quantity")}</th>
+              <th class="text-center" style="width: 8%;">${tCols("unit")}</th>
+              ${paramLabels.map(label => `<th class="text-center" style="width: 5%;">${label}</th>`).join('')}
+              <th style="width: 20%;">${tCols("notes")}</th>
+              <th class="text-center" style="width: 5%;">${locale === "vi" ? "Chụp ảnh" : "Photo"}</th>
             </tr>
           </thead>
           <tbody>
@@ -1271,10 +1286,13 @@ export default function KitchenFoodReportPage() {
                   }
 
                   const photoConsentText = booking.photoConsent ? (locale === "vi" ? "Đồng ý" : "Yes") : (locale === "vi" ? "Không đồng ý" : "No");
+                  // Truncate long notes for PDF
+                  const truncatedNotes = combinedNotes.length > 150
+                    ? combinedNotes.substring(0, 150) + '...'
+                    : combinedNotes;
                   pdfRows.push(`
                     <tr>
                       <td class="text-center">${i === 0 ? booking.tentCount : ''}</td>
-                      <td>${i === 0 ? booking.bookingCode : ''}</td>
                       <td>${i === 0 ? booking.bookerName : ''}</td>
                       <td class="${menuRow?.isFirstOfTent ? 'bg-yellow font-bold' : ''}">${menuRow?.isFirstOfTent ? menuRow.tent.itemName : ''}</td>
                       <td class="${menuItemClass}">${displayMenuItemName}</td>
@@ -1285,7 +1303,7 @@ export default function KitchenFoodReportPage() {
                         const param = menuRow.tent.parameters.find(p => p.label === label);
                         return `<td class="text-center">${param ? param.quantity : ''}</td>`;
                       }).join('')}
-                      <td>${combinedNotes}</td>
+                      <td class="notes-cell">${truncatedNotes}</td>
                       <td class="text-center">${i === 0 ? photoConsentText : ''}</td>
                     </tr>
                   `);
@@ -1535,9 +1553,6 @@ export default function KitchenFoodReportPage() {
                     {tCols("tentCount")}
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {tCols("bookingCode")}
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {tCols("booker")}
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1585,33 +1600,21 @@ export default function KitchenFoodReportPage() {
                     tentRowSpan = count;
                   }
 
+                  // Get booking background color
+                  const bookingBgColor = BOOKING_COLORS[row.bookingColorIndex % BOOKING_COLORS.length];
+
                   return (
                     <tr
                       key={idx}
-                      className={`${row.isFirstRowOfBooking ? "border-t-2 border-gray-300" : ""}`}
+                      className={`${row.isFirstRowOfBooking ? "border-t-2 border-gray-300" : ""} ${bookingBgColor}`}
                     >
                       {/* Tent Count - only show for first row of booking */}
                       {row.isFirstRowOfBooking && (
                         <td
                           rowSpan={bookingRowSpan}
-                          className="px-4 py-3 text-sm text-gray-900 align-top font-semibold"
+                          className={`px-4 py-3 text-sm text-gray-900 align-top font-semibold ${bookingBgColor}`}
                         >
                           {row.tentCount}
-                        </td>
-                      )}
-
-                      {/* Booking Code - only show for first row of booking */}
-                      {row.isFirstRowOfBooking && (
-                        <td
-                          rowSpan={bookingRowSpan}
-                          className="px-4 py-3 text-sm align-top"
-                        >
-                          <button
-                            onClick={() => handleViewBooking(row.bookingId)}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {row.bookingCode}
-                          </button>
                         </td>
                       )}
 
@@ -1619,7 +1622,7 @@ export default function KitchenFoodReportPage() {
                       {row.isFirstRowOfBooking && (
                         <td
                           rowSpan={bookingRowSpan}
-                          className="px-4 py-3 text-sm text-gray-900 align-top"
+                          className={`px-4 py-3 text-sm text-gray-900 align-top ${bookingBgColor}`}
                         >
                           {row.bookerName}
                         </td>
@@ -1629,7 +1632,7 @@ export default function KitchenFoodReportPage() {
                       {row.isFirstRowOfTent && (
                         <td
                           rowSpan={tentRowSpan}
-                          className="px-4 py-3 text-sm text-gray-900 align-top bg-yellow-50 font-medium"
+                          className={`px-4 py-3 text-sm text-gray-900 align-top font-medium ${bookingBgColor}`}
                         >
                           {row.itemName}
                         </td>
@@ -1639,7 +1642,7 @@ export default function KitchenFoodReportPage() {
                       {row.isFirstRowOfTent && (
                         <td
                           rowSpan={tentRowSpan}
-                          className="px-4 py-3 text-sm text-gray-900 align-top"
+                          className={`px-4 py-3 text-sm text-gray-900 align-top ${bookingBgColor}`}
                         >
                           {row.parameters.map((p, idx) => (
                             <div key={idx}>{p.label}: {p.quantity}</div>
@@ -1648,7 +1651,7 @@ export default function KitchenFoodReportPage() {
                       )}
 
                       {/* Menu Item */}
-                      <td className={`px-4 py-3 text-sm ${
+                      <td className={`px-4 py-3 text-sm ${bookingBgColor} ${
                         row.isAdditionalCost ? 'text-purple-700 font-medium' :
                         row.isCommonItem ? 'text-blue-700' :
                         row.isEmptyTent ? 'text-gray-400 italic' :
@@ -1669,7 +1672,7 @@ export default function KitchenFoodReportPage() {
                       </td>
 
                       {/* Quantity - display adjusted quantity */}
-                      <td className={`px-4 py-3 text-sm text-center font-semibold ${
+                      <td className={`px-4 py-3 text-sm text-center font-semibold ${bookingBgColor} ${
                         row.isAdditionalCost ? 'text-purple-700' :
                         row.isCommonItem ? 'text-blue-700' :
                         row.isEmptyTent ? 'text-gray-400' :
@@ -1679,12 +1682,12 @@ export default function KitchenFoodReportPage() {
                       </td>
 
                       {/* Unit - display "combo 1 khách" if minGuests > 0 */}
-                      <td className="px-4 py-3 text-sm text-gray-600 text-center whitespace-nowrap">
+                      <td className={`px-4 py-3 text-sm text-gray-600 text-center whitespace-nowrap ${bookingBgColor}`}>
                         {row.isEmptyTent ? '' : (row.minGuests && row.minGuests > 0 ? "combo 1 khách" : row.menuItemUnit)}
                       </td>
 
                       {/* Notes - combined menu product notes and booking notes icon */}
-                      <td className="px-4 py-3 text-sm text-gray-500">
+                      <td className={`px-4 py-3 text-sm text-gray-500 ${bookingBgColor}`}>
                         <div className="flex items-center gap-2">
                           {row.notes && <span className="truncate max-w-[180px]">{row.notes}</span>}
                           {row.isFirstRowOfBooking && (
@@ -1712,7 +1715,7 @@ export default function KitchenFoodReportPage() {
                       {row.isFirstRowOfBooking && (
                         <td
                           rowSpan={bookingRowSpan}
-                          className="px-4 py-3 text-center align-top"
+                          className={`px-4 py-3 text-center align-top ${bookingBgColor}`}
                         >
                           <Button
                             variant="ghost"
@@ -1729,7 +1732,7 @@ export default function KitchenFoodReportPage() {
                       {row.isFirstRowOfBooking && (
                         <td
                           rowSpan={bookingRowSpan}
-                          className={`px-4 py-3 text-center align-top text-sm ${
+                          className={`px-4 py-3 text-center align-top text-sm ${bookingBgColor} ${
                             row.photoConsent ? "text-green-600 font-medium" : "text-gray-500"
                           }`}
                         >

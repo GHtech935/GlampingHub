@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -407,6 +407,64 @@ export function ItemFormWizard({
   const [parameterBasePrices, setParameterBasePrices] = useState<Record<string, number>>({});
   // Event pricing state
   const [eventPricing, setEventPricing] = useState<Record<string, any>>({});
+
+  // Helper function to initialize event pricing for events that need manual pricing
+  const initializeEventPricing = useCallback((
+    events: any[],
+    currentEventPricing: Record<string, any>,
+    parameters: any[],
+    groupPricingData: Record<string, any[]>
+  ): Record<string, any> => {
+    const updatedPricing = { ...currentEventPricing };
+    let hasChanges = false;
+
+    events.forEach(event => {
+      // Only initialize for events with pricing_type = "new_price" that don't have pricing data yet
+      if (event.pricing_type === 'new_price' && !updatedPricing[event.id]) {
+        hasChanges = true;
+
+        // Initialize with all parameters set to 0
+        const initialPricing: any = {
+          inventory: { amount: 0 },
+          parameters: {},
+          groupPricing: {}
+        };
+
+        // Add all parameters with amount = 0
+        parameters.forEach(param => {
+          initialPricing.parameters[param.id] = {
+            amount: 0,
+            groups: []
+          };
+
+          // Add group pricing entries if base has groups
+          const paramGroups = groupPricingData[param.id] || [];
+          if (paramGroups.length > 0) {
+            initialPricing.parameters[param.id].groups = paramGroups.map(g => ({
+              min: g.min,
+              max: g.max,
+              price: 0
+            }));
+          }
+        });
+
+        // Add inventory group pricing if base has inventory groups
+        const inventoryGroups = groupPricingData['inventory'] || [];
+        if (inventoryGroups.length > 0) {
+          initialPricing.groupPricing.inventory = inventoryGroups.map(g => ({
+            min: g.min,
+            max: g.max,
+            price: 0
+          }));
+        }
+
+        updatedPricing[event.id] = initialPricing;
+      }
+    });
+
+    return hasChanges ? updatedPricing : currentEventPricing;
+  }, []);
+
   const [depositType, setDepositType] = useState<string>('system_default');
   const [depositValue, setDepositValue] = useState<number>(50);
 
@@ -562,6 +620,20 @@ export function ItemFormWizard({
       if (initialData.event_pricing) {
         setEventPricing(initialData.event_pricing);
       }
+
+      // Auto-initialize pricing for new_price events that don't have data yet
+      if (initialData.events && initialData.events.length > 0) {
+        const initialized = initializeEventPricing(
+          initialData.events,
+          initialData.event_pricing || {},
+          initialData.parameters || [],
+          initialData.group_pricing || {}
+        );
+        if (initialized !== (initialData.event_pricing || {})) {
+          setEventPricing(initialized);
+        }
+      }
+
       // Set taxes state
       if (initialData.taxes) {
         setTaxes(initialData.taxes);
@@ -772,6 +844,17 @@ export function ItemFormWizard({
                   setEventPricing(item.event_pricing);
                 }
 
+                // Auto-initialize pricing for new_price events that don't have data yet
+                const initialized = initializeEventPricing(
+                  item.events || [],
+                  item.event_pricing || {},
+                  item.parameters || [],
+                  item.group_pricing || {}
+                );
+                if (initialized !== (item.event_pricing || {})) {
+                  setEventPricing(initialized);
+                }
+
                 // Set deposit
                 if (item.deposit_type) {
                   setDepositType(item.deposit_type);
@@ -919,6 +1002,21 @@ export function ItemFormWizard({
 
     fetchZoneSettings();
   }, [zoneId]);
+
+  // Auto-initialize event pricing when events or parameters change
+  useEffect(() => {
+    if (attachedEvents.length > 0 && attachedParameters.length > 0) {
+      const initialized = initializeEventPricing(
+        attachedEvents,
+        eventPricing,
+        attachedParameters,
+        groupPricing
+      );
+      if (initialized !== eventPricing) {
+        setEventPricing(initialized);
+      }
+    }
+  }, [attachedEvents, attachedParameters, groupPricing, eventPricing, initializeEventPricing]);
 
   // Currency formatting helper
   const formatCurrency = (amount: number): string => {
@@ -2012,7 +2110,7 @@ export function ItemFormWizard({
         start_date: eventFormData.start_date,
         end_date: eventFormData.end_date || null,
         recurrence: eventFormData.recurrence,
-        days_of_week: eventFormData.days_of_week.length > 0 ? eventFormData.days_of_week : null,
+        days_of_week: eventFormData.days_of_week?.length > 0 ? eventFormData.days_of_week : null,
         pricing_type: eventFormData.pricing_type,
         status: eventFormData.status,
         applicable_times: eventFormData.applicable_times,
@@ -2253,7 +2351,7 @@ export function ItemFormWizard({
             start_date: eventFormData.start_date,
             end_date: eventFormData.end_date,
             recurrence: eventFormData.recurrence,
-            days_of_week: eventFormData.days_of_week.length > 0 ? eventFormData.days_of_week : null,
+            days_of_week: eventFormData.days_of_week?.length > 0 ? eventFormData.days_of_week : null,
             pricing_type: eventFormData.pricing_type,
             status: eventFormData.status,
             active: eventFormData.active,
@@ -2280,7 +2378,7 @@ export function ItemFormWizard({
               start_date: eventFormData.start_date,
               end_date: eventFormData.end_date || null,
               recurrence: eventFormData.recurrence,
-              days_of_week: eventFormData.days_of_week.length > 0 ? eventFormData.days_of_week : null,
+              days_of_week: eventFormData.days_of_week?.length > 0 ? eventFormData.days_of_week : null,
               pricing_type: eventFormData.pricing_type,
               status: eventFormData.status,
               applicable_times: eventFormData.applicable_times,
@@ -5566,7 +5664,7 @@ export function ItemFormWizard({
             <Button
               type="button"
               onClick={handleCreateEvent}
-              disabled={!eventFormData.name || !eventFormData.start_date}
+              disabled={!eventFormData.name || (eventFormData.recurrence !== 'always' && !eventFormData.start_date)}
             >
               {t('itemEvents.createAndAttach')}
             </Button>
@@ -5668,7 +5766,7 @@ export function ItemFormWizard({
             <Button
               type="button"
               onClick={handleUpdateEvent}
-              disabled={!eventFormData.name || !eventFormData.start_date}
+              disabled={!eventFormData.name || (eventFormData.recurrence !== 'always' && !eventFormData.start_date)}
             >
               {t('itemEvents.saveChanges')}
             </Button>

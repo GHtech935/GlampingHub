@@ -291,7 +291,7 @@ export function GlampingMenuProductsSelector({
 
   // Filter and group menu items by category
   const filteredMenuItems = hideZeroPriceItems
-    ? menuItems.filter(item => item.price > 0)
+    ? menuItems.filter(item => item.price !== undefined && item.price !== null && item.price > 0)
     : menuItems
 
   const groupedItems = filteredMenuItems.reduce((acc, item) => {
@@ -428,11 +428,17 @@ export function GlampingMenuProductsSelector({
                           </p>
                         )}
                         <p className="text-sm font-medium text-gray-900 mt-1">
-                          {formatCurrency(item.price, locale, 'VND')}
-                          {item.unit && (
-                            <span className="text-xs text-gray-500">
-                              /{typeof item.unit === 'string' ? item.unit : getLocalizedText(item.unit, locale as 'vi' | 'en')}
-                            </span>
+                          {item.price === 0 ? (
+                            <span className="text-green-600">{locale === 'vi' ? 'Miễn phí' : 'Free'}</span>
+                          ) : (
+                            <>
+                              {formatCurrency(item.price, locale, 'VND')}
+                              {item.unit && (
+                                <span className="text-xs text-gray-500">
+                                  /{typeof item.unit === 'string' ? item.unit : getLocalizedText(item.unit, locale as 'vi' | 'en')}
+                                </span>
+                              )}
+                            </>
                           )}
                         </p>
                         {!isCombo && item.max_quantity && (
@@ -476,8 +482,8 @@ export function GlampingMenuProductsSelector({
                       </div>
                     </div>
 
-                    {/* Per-product voucher input */}
-                    {showPerProductVoucher && quantity > 0 && item.price > 0 && (
+                    {/* Per-product voucher input - only show for non-zero prices */}
+                    {showPerProductVoucher && quantity > 0 && item.price !== undefined && item.price !== null && item.price > 0 && (
                       <div className="mt-2 pt-2 border-t border-gray-100">
                         {productVoucher ? (
                           <div className="flex items-center gap-2 bg-green-50 rounded px-2 py-1.5">

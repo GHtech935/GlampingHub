@@ -602,6 +602,10 @@ export function AdminGlampingBookingFormModal({
             totalPrice: sel.totalPrice || 0,
             parameterPricing: sel.parameterPricing || {},
             voucher: sel.voucher ? { ...sel.voucher } : undefined,
+            // Add override if set
+            ...(sel.usePriceOverride && sel.priceOverride !== undefined && {
+              priceOverride: sel.priceOverride
+            }),
           }))
 
         return {

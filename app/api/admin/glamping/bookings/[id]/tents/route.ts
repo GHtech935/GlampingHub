@@ -189,7 +189,18 @@ export async function POST(
 
     // Insert booking items (parameters)
     if (parameters && Array.isArray(parameters) && parameters.length > 0) {
+      // Fetch parameter details to get label and controls_inventory
+      const parameterIds = parameters.map(p => p.parameterId);
+      const paramDetailsResult = await client.query(
+        `SELECT id, name, controls_inventory FROM glamping_parameters WHERE id = ANY($1)`,
+        [parameterIds]
+      );
+      const paramDetailsMap = new Map(
+        paramDetailsResult.rows.map(p => [p.id, { name: p.name, controls_inventory: p.controls_inventory }])
+      );
+
       for (const param of parameters) {
+        // Insert into glamping_booking_items
         await client.query(
           `INSERT INTO glamping_booking_items
            (booking_id, booking_tent_id, item_id, parameter_id, quantity, unit_price, metadata)
@@ -208,6 +219,24 @@ export async function POST(
             }),
           ]
         );
+
+        // Insert into glamping_booking_parameters (for guest count tracking)
+        const paramDetails = paramDetailsMap.get(param.parameterId);
+        if (paramDetails) {
+          await client.query(
+            `INSERT INTO glamping_booking_parameters
+             (booking_id, booking_tent_id, parameter_id, label, booked_quantity, controls_inventory)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              bookingId,
+              tentId,
+              param.parameterId,
+              paramDetails.name,
+              param.quantity,
+              paramDetails.controls_inventory || false,
+            ]
+          );
+        }
       }
     }
 

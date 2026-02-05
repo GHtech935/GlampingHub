@@ -323,13 +323,19 @@ export function ItemBookingSummaryPanel({
                           <Loader2 className="h-3 w-3 animate-spin" />
                           <span>Đang tải giá...</span>
                         </div>
-                      ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
+                      ) : hasValidSelection && pricePerUnitAllNights !== undefined ? (
                         <>
                           <div className="text-xs text-gray-500 truncate">
-                            {formatCurrency(pricePerUnitAllNights)}/{isPerGroup ? 'nhóm' : 'khách'} ({nights} {t.nights})
+                            {pricePerUnitAllNights === 0 ? (
+                              <span className="text-green-600 font-medium">Miễn phí</span>
+                            ) : (
+                              <>
+                                {formatCurrency(pricePerUnitAllNights)}/{isPerGroup ? 'nhóm' : 'khách'} ({nights} {t.nights})
+                              </>
+                            )}
                           </div>
                           {/* Single Person Surcharge Alert - below price line */}
-                          {showParamAlert && (
+                          {showParamAlert && pricePerUnitAllNights > 0 && (
                             <div className=" text-xs text-amber-800 mt-1">
                               {locale === 'vi' ? singlePersonSurchargeAlertText.vi : singlePersonSurchargeAlertText.en}
                             </div>
@@ -357,9 +363,13 @@ export function ItemBookingSummaryPanel({
                         <div className="text-sm w-24 text-right">
                           <Loader2 className="h-4 w-4 animate-spin text-gray-400 ml-auto" />
                         </div>
-                      ) : hasValidSelection && pricePerUnitAllNights > 0 ? (
+                      ) : hasValidSelection && pricePerUnitAllNights !== undefined ? (
                         <div className="text-sm font-semibold w-24 text-right">
-                          {formatCurrency(paramTotal)}
+                          {paramTotal === 0 ? (
+                            <span className="text-green-600">Miễn phí</span>
+                          ) : (
+                            formatCurrency(paramTotal)
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -378,7 +388,7 @@ export function ItemBookingSummaryPanel({
         )}
 
         {/* Pricing Summary */}
-        {hasValidSelection && (total > 0 || pricingLoading) && (
+        {hasValidSelection && (total >= 0 || pricingLoading) && calculatedPricing && (
           <div className="pt-4 border-t space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-lg font-semibold">{t.total}</span>
@@ -386,6 +396,10 @@ export function ItemBookingSummaryPanel({
                 <span className="text-xl text-gray-400 flex items-center gap-2">
                   <Loader2 className="h-5 w-5 animate-spin" />
                   Đang tính...
+                </span>
+              ) : total === 0 ? (
+                <span className="text-2xl font-bold text-green-600">
+                  Miễn phí
                 </span>
               ) : (
                 <span className="text-2xl font-bold text-green-600">
@@ -405,7 +419,7 @@ export function ItemBookingSummaryPanel({
 
         {/* Action Button */}
         <div className="space-y-2">
-          {hasValidSelection && total > 0 && !loading && !pricingLoading && calculatedPricing ? (
+          {hasValidSelection && total >= 0 && !loading && !pricingLoading && calculatedPricing ? (
             <Button
               onClick={() => {
                 // Check if same item + dates already in cart

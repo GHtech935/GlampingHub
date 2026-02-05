@@ -246,7 +246,7 @@
         "specialRequestsPlaceholder": "Cho chúng tôi biết về bất kỳ yêu cầu đặc biệt nào, nhu cầu về khả năng tiếp cận, hạn chế về chế độ ăn uống, hoặc bất kỳ thông tin nào khác giúp chuyến đi của bạn thoải mái hơn...",
         "specialRequestsHelper": "Chúng tôi sẽ gửi tin nhắn này từ bạn đến campsite và họ sẽ cố gắng đáp ứng yêu cầu của bạn. Một số yêu cầu có thể phát sinh thêm chi phí.",
         "dateOfBirth": "Ngày sinh/tháng sinh",
-        "dateOfBirthHelper": "Bạn vui lòng điền thông tin ngày, tháng sinh của mình, để có thể nhận các ưu đãi vào ngày sinh nhật cùng Trại trong tương lai nhé!",
+        "dateOfBirthHelper": "Vui lòng chọn tháng và ngày sinh của bạn để nhận ưu đãi sinh nhật từ Trại",
         "socialMediaUrl": "Đường dẫn Facebook/Instagram cá nhân của bạn",
         "socialMediaUrlHelper": "Trại sẽ gửi thông báo xác nhận đến khách qua MXH trước ngày check in",
         "photoConsent": "Lưu trữ lại kỷ niệm cùng Trại (chụp ngẫu nhiên)",
@@ -349,6 +349,7 @@
         "bookingFailed": "Đặt chỗ thất bại",
         "payNow": "Thanh toán ngay",
         "submitting": "Đang xử lý...",
+        "createFreeBookingNow": "Tạo booking miễn phí ngay",
         "validation": {
             "emailInvalid": "Email không hợp lệ",
             "firstNameRequired": "Vui lòng nhập tên",
@@ -356,7 +357,9 @@
             "countryRequired": "Vui lòng chọn quốc gia",
             "phoneInvalid": "Số điện thoại không hợp lệ",
             "termsRequired": "Bạn phải đồng ý với điều khoản đặt chỗ",
-            "dateOfBirthRequired": "Vui lòng nhập ngày sinh",
+            "dateOfBirthRequired": "Vui lòng chọn ngày sinh",
+            "dateOfBirthInvalid": "Định dạng ngày sinh không hợp lệ",
+            "dateOfBirthInvalidDay": "Ngày không hợp lệ cho tháng đã chọn",
             "socialMediaUrlRequired": "Vui lòng nhập đường dẫn Facebook/Instagram",
             "referralSourceRequired": "Vui lòng chọn nguồn giới thiệu"
         },
@@ -3898,7 +3901,8 @@
                     "one_time": "Một lần",
                     "weekly": "Hàng tuần",
                     "monthly": "Hàng tháng",
-                    "yearly": "Hàng năm"
+                    "yearly": "Hàng năm",
+                    "always": "Luôn luôn"
                 },
                 "status": {
                     "active": "Hoạt động",

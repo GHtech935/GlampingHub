@@ -123,6 +123,15 @@ export default function EventFormFields({
 
   const handleRecurrenceChange = useCallback((value: 'one_time' | 'weekly' | 'monthly' | 'yearly' | 'always') => {
     onChange('recurrence', value);
+    // Clear days_of_week when not weekly
+    if (value !== 'weekly') {
+      onChange('days_of_week', null);
+    }
+    // Clear dates when "always" (never expires)
+    if (value === 'always') {
+      onChange('start_date', '');
+      onChange('end_date', '');
+    }
   }, [onChange]);
 
   return (
