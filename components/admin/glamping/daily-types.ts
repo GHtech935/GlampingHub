@@ -42,7 +42,7 @@ export interface ManifestBooking {
   tentId: string;
   createdAt: string;
   /** Parameters for this booking (replaces adults/children) */
-  parameters?: Array<{ label: string; quantity: number }>;
+  parameters?: Array<{ label: string; quantity: number; displayOrder: number }>;
 }
 
 export interface ManifestItem {

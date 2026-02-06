@@ -232,6 +232,7 @@ export function ItemFormWizard({
     display_order?: number;
   }>>([]);
   const [showMenuDialog, setShowMenuDialog] = useState<boolean>(false);
+  const [menuSearchQuery, setMenuSearchQuery] = useState<string>('');
   const [availableMenuItems, setAvailableMenuItems] = useState<Array<{id: string; name: any; price: number; unit: any}>>([]);
 
   // Package items (add-ons) state
@@ -247,6 +248,7 @@ export function ItemFormWizard({
   }>>([]);
   const [showPackagePrice, setShowPackagePrice] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
+  const [packageSearchQuery, setPackageSearchQuery] = useState<string>('');
   const [availableCommonItems, setAvailableCommonItems] = useState<Array<{id: string; name: any; sku?: string}>>([]);
   const [showEditPackageItemDialog, setShowEditPackageItemDialog] = useState(false);
   const [editingPackageItemIndex, setEditingPackageItemIndex] = useState<number | null>(null);
@@ -407,6 +409,46 @@ export function ItemFormWizard({
   const [parameterBasePrices, setParameterBasePrices] = useState<Record<string, number>>({});
   // Event pricing state
   const [eventPricing, setEventPricing] = useState<Record<string, any>>({});
+
+  // Remove parameter and clean up all related pricing data
+  const handleRemoveParameter = (paramId: string) => {
+    // 1. Remove from attached parameters list
+    setAttachedParameters(prev => prev.filter(p => p.id !== paramId));
+
+    // 2. Remove group pricing for this parameter
+    setGroupPricing(prev => {
+      const updated = { ...prev };
+      delete updated[paramId];
+      return updated;
+    });
+
+    // 3. Remove base price for this parameter
+    setParameterBasePrices(prev => {
+      const updated = { ...prev };
+      delete updated[paramId];
+      return updated;
+    });
+
+    // 4. Remove event pricing for this parameter
+    setEventPricing(prev => {
+      const updated = { ...prev };
+      for (const eventId of Object.keys(updated)) {
+        if (updated[eventId]?.parameters?.[paramId]) {
+          updated[eventId] = {
+            ...updated[eventId],
+            parameters: { ...updated[eventId].parameters },
+          };
+          delete updated[eventId].parameters[paramId];
+        }
+      }
+      return updated;
+    });
+
+    toast({
+      title: tc("success"),
+      description: t('parameterRemoved'),
+    });
+  };
 
   // Helper function to initialize event pricing for events that need manual pricing
   const initializeEventPricing = useCallback((
@@ -1410,6 +1452,9 @@ export function ItemFormWizard({
             }))
         : undefined;
 
+      // Safety net: only include pricing for currently attached parameters
+      const attachedParamIds = new Set(attachedParameters.map(p => p.id));
+
       // Combine form data with additional state (media, pricing, packages)
       const submitData = {
         ...data,
@@ -1432,10 +1477,14 @@ export function ItemFormWizard({
           max_quantity: param.min_max.max,
           display_order: index
         })),
-        // Pricing (Step 4)
+        // Pricing (Step 4) - filter to only include pricing for attached parameters
         pricing_rate: pricingRate,
-        group_pricing: groupPricing,
-        parameter_base_prices: parameterBasePrices,
+        group_pricing: Object.fromEntries(
+          Object.entries(groupPricing).filter(([key]) => attachedParamIds.has(key))
+        ),
+        parameter_base_prices: Object.fromEntries(
+          Object.entries(parameterBasePrices).filter(([key]) => attachedParamIds.has(key))
+        ),
         event_pricing: eventPricing,
         deposit_type: depositType,
         deposit_value: depositValue,
@@ -1595,7 +1644,25 @@ export function ItemFormWizard({
     }
   };
 
+  // Validation: warn when leaving step 3 (attributes) without any parameters
+  const validateLeaveAttributesStep = (): boolean => {
+    if (currentStep === 3 && attachedParameters.length === 0) {
+      toast({
+        title: "Chưa có tham số",
+        description: "Bạn chưa thêm tham số nào. Vui lòng thêm ít nhất một tham số trước khi chuyển bước.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
+
   const handleNext = async () => {
+    // Validate leaving attributes step
+    if (currentStep === 3 && !validateLeaveAttributesStep()) {
+      return;
+    }
+
     // STEP 1 SPECIAL HANDLING: Save to DB before moving to Step 2
     if (currentStep === 1 && mode === 'create' && !createdItemId) {
       // 1. Validate Step 1 required fields
@@ -1968,6 +2035,18 @@ export function ItemFormWizard({
     }));
 
     setAttachedParameters([...attachedParameters, ...newAttachedParams]);
+
+    // Initialize base price = 0 for newly attached parameters so they show in PricingTable
+    setParameterBasePrices(prev => {
+      const updated = { ...prev };
+      parametersToAttach.forEach(param => {
+        if (!(param.id in updated)) {
+          updated[param.id] = 0;
+        }
+      });
+      return updated;
+    });
+
     setSelectedParameterIds([]);
     setShowAttachParameterModal(false);
 
@@ -2077,15 +2156,12 @@ export function ItemFormWizard({
         groupPricing: {}
       };
 
-      // Copy parameter base prices (only for parameters with base prices set)
-      parameters.forEach(param => {
-        // Only copy if this parameter has a base price set
-        if (parameterBasePrices[param.id] !== undefined && parameterBasePrices[param.id] !== null) {
-          defaultData.parameters[param.id] = {
-            amount: parameterBasePrices[param.id] || 0,
-            groups: groupPricing[param.id]?.map(g => ({ ...g })) || []
-          };
-        }
+      // Copy parameter base prices for all attached parameters (use 0 if not set)
+      attachedParameters.forEach(param => {
+        defaultData.parameters[param.id] = {
+          amount: parameterBasePrices[param.id] ?? 0,
+          groups: groupPricing[param.id]?.map(g => ({ ...g })) || []
+        };
       });
 
       // Copy inventory group pricing if exists
@@ -3026,7 +3102,7 @@ export function ItemFormWizard({
                       control={form.control}
                       name="is_active"
                       render={({ field }) => (
-                        <FormItem className="flex items-center justify-between p-4 border rounded-lg">
+                        <FormItem className="flex items-center justify-between p-4 border rounded-lg bg-white">
                           <div className="space-y-0.5">
                             <FormLabel className="text-base font-medium">{t('isActive')}</FormLabel>
                             <p className="text-sm text-gray-500">{t('isActiveDescription')}</p>
@@ -3428,13 +3504,7 @@ export function ItemFormWizard({
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => {
-                                          setAttachedParameters(attachedParameters.filter(p => p.id !== param.id));
-                                          toast({
-                                            title: tc("success"),
-                                            description: t('parameterRemoved'),
-                                          });
-                                        }}
+                                        onClick={() => handleRemoveParameter(param.id)}
                                         className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                                       >
                                         <Trash2 className="h-4 w-4" />
@@ -3535,13 +3605,7 @@ export function ItemFormWizard({
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => {
-                                          setAttachedParameters(attachedParameters.filter(p => p.id !== param.id));
-                                          toast({
-                                            title: tc("success"),
-                                            description: t('parameterRemoved'),
-                                          });
-                                        }}
+                                        onClick={() => handleRemoveParameter(param.id)}
                                         className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                                       >
                                         <Trash2 className="h-4 w-4" />
@@ -4483,7 +4547,7 @@ export function ItemFormWizard({
 
                     {/* Pricing Table */}
                     <PricingTable
-                      parameters={parameters}
+                      parameters={attachedParameters}
                       groupPricing={groupPricing}
                       basePrices={parameterBasePrices}
                       inventoryBasePrice={0}
@@ -4608,7 +4672,7 @@ export function ItemFormWizard({
 
                         {packageItems.length > 0 ? (
                           <div className="border rounded-lg overflow-hidden">
-                            <table className="w-full">
+                            <table className="w-full bg-white">
                               <thead className="bg-gray-50 border-b">
                                 <tr>
                                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{t('table.name')}</th>
@@ -4700,6 +4764,7 @@ export function ItemFormWizard({
                                   const currentId = itemId || createdItemId;
                                   const items = (data.items || []).filter((item: any) => item.id !== currentId);
                                   setAvailableCommonItems(items);
+                                  setPackageSearchQuery('');
                                   setShowAttachDialog(true);
                                 })
                                 .catch(() => {
@@ -4726,12 +4791,29 @@ export function ItemFormWizard({
                               </DialogDescription>
                             </DialogHeader>
 
+                            {/* Search input */}
+                            <div className="mb-3">
+                              <Input
+                                placeholder={t('packages.searchPlaceholder')}
+                                value={packageSearchQuery}
+                                onChange={(e) => setPackageSearchQuery(e.target.value)}
+                              />
+                            </div>
+
                             <div className="max-h-96 overflow-y-auto">
                               {availableCommonItems.length === 0 ? (
                                 <p className="text-center text-gray-500 py-8">{t('noItemsAvailable')}</p>
                               ) : (
                                 <div className="space-y-2">
-                                  {availableCommonItems.map((commonItem) => {
+                                  {availableCommonItems
+                                    .filter((commonItem) => {
+                                      if (!packageSearchQuery.trim()) return true;
+                                      const name = typeof commonItem.name === 'string'
+                                        ? commonItem.name
+                                        : (commonItem.name?.vi || commonItem.name?.en || '');
+                                      return name.toLowerCase().includes(packageSearchQuery.trim().toLowerCase());
+                                    })
+                                    .map((commonItem) => {
                                     const isAttached = packageItems.some(p => p.item_id === commonItem.id);
                                     return (
                                       <div
@@ -4953,7 +5035,7 @@ export function ItemFormWizard({
 
                       {menuProducts.length > 0 ? (
                         <div className="border rounded-lg overflow-hidden">
-                          <table className="w-full">
+                          <table className="w-full bg-white">
                             <thead className="bg-gray-50 border-b">
                               <tr>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{t('table.name')}</th>
@@ -5041,6 +5123,7 @@ export function ItemFormWizard({
                               .then(res => res.json())
                               .then(data => {
                                 setAvailableMenuItems(data.menuItems || []);
+                                setMenuSearchQuery('');
                                 setShowMenuDialog(true);
                               })
                               .catch(err => {
@@ -5068,12 +5151,51 @@ export function ItemFormWizard({
                           </DialogDescription>
                         </DialogHeader>
 
+                        {/* Search input */}
+                        <div className="mb-3">
+                          <Input
+                            placeholder={t('menuProducts.searchPlaceholder')}
+                            value={menuSearchQuery}
+                            onChange={(e) => setMenuSearchQuery(e.target.value)}
+                          />
+                        </div>
+
+                        {/* Select All / Deselect All buttons */}
+                        <div className="flex gap-2 mb-3">
+                          <Button type="button" variant="outline" size="sm"
+                            onClick={() => {
+                              const allItems = availableMenuItems.map((mi, idx) => ({
+                                menu_item_id: mi.id,
+                                menu_item_name: mi.name,
+                                menu_item_price: mi.price,
+                                menu_item_unit: mi.unit,
+                                opt_in: 'optional' as const,
+                                display_order: idx,
+                              }));
+                              setMenuProducts(allItems);
+                            }}>
+                            {t('menuProducts.selectAll')}
+                          </Button>
+                          <Button type="button" variant="outline" size="sm"
+                            onClick={() => setMenuProducts([])}>
+                            {t('menuProducts.deselectAll')}
+                          </Button>
+                        </div>
+
                         <div className="max-h-96 overflow-y-auto">
                           {availableMenuItems.length === 0 ? (
                             <p className="text-center text-gray-500 py-8">{t('noMenuItemsAvailable')}</p>
                           ) : (
                             <div className="space-y-2">
-                              {availableMenuItems.map((menuItem) => {
+                              {availableMenuItems
+                                .filter((menuItem) => {
+                                  if (!menuSearchQuery.trim()) return true;
+                                  const name = typeof menuItem.name === 'string'
+                                    ? menuItem.name
+                                    : (menuItem.name?.vi || menuItem.name?.en || '');
+                                  return name.toLowerCase().includes(menuSearchQuery.trim().toLowerCase());
+                                })
+                                .map((menuItem) => {
                                 const isAttached = menuProducts.some(p => p.menu_item_id === menuItem.id);
                                 return (
                                   <div
@@ -5348,6 +5470,15 @@ export function ItemFormWizard({
                         type="button"
                         onClick={() => {
                           if (!isDisabled) {
+                            // Validate leaving attributes step
+                            if (currentStep === 3 && step.id !== 3 && attachedParameters.length === 0) {
+                              toast({
+                                title: "Chưa có tham số",
+                                description: "Bạn chưa thêm tham số nào. Vui lòng thêm ít nhất một tham số trước khi chuyển bước.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
                             setCurrentStep(step.id);
                           }
                         }}

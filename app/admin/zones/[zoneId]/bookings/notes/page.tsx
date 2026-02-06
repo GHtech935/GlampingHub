@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { Search, RotateCcw, RefreshCw, ArrowUpDown, User } from "lucide-react";
+import { Search, RotateCcw, RefreshCw, ArrowUpDown, User, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +18,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "react-hot-toast";
 import { useTranslations } from "next-intl";
 import { GlampingBookingDetailModal } from "@/components/admin/glamping/GlampingBookingDetailModal";
@@ -87,6 +93,7 @@ export default function BookingNotesPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [allNotesBookingId, setAllNotesBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchNotes();
@@ -383,6 +390,12 @@ export default function BookingNotesPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       {t("bookingNotesPage.note")}
                     </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <div className="flex items-center justify-center gap-1">
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>Tất cả</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -453,6 +466,27 @@ export default function BookingNotesPage() {
                             </span>
                           )}
                         </td>
+
+                        {/* All Notes for this booking */}
+                        <td className="px-4 py-4 text-center">
+                          {(() => {
+                            const count = notes.filter(n => n.bookingId === note.bookingId).length;
+                            return (
+                              <button
+                                onClick={() => setAllNotesBookingId(note.bookingId)}
+                                className="relative inline-flex items-center justify-center w-7 h-7 rounded-md text-primary hover:bg-primary/10 transition-colors"
+                                title="Xem tất cả ghi chú"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                                {count > 0 && (
+                                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-medium leading-none">
+                                    {count}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })()}
+                        </td>
                       </tr>
                     );
                   })}
@@ -469,6 +503,42 @@ export default function BookingNotesPage() {
           onClose={handleCloseDetailModal}
           onUpdate={fetchNotes}
         />
+
+        {/* All Notes Modal */}
+        <Dialog open={!!allNotesBookingId} onOpenChange={(open) => { if (!open) setAllNotesBookingId(null); }}>
+          <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-sm">
+                Tất cả ghi chú - {notes.find(n => n.bookingId === allNotesBookingId)?.bookingCode || ""}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              {notes
+                .filter(n => n.bookingId === allNotesBookingId)
+                .sort((a, b) => new Date(b.noteDate).getTime() - new Date(a.noteDate).getTime())
+                .map((note) => {
+                  const { date, time } = formatDateTime(note.noteDate);
+                  return (
+                    <div key={note.noteId} className="border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                            <User className="h-3 w-3 text-gray-500" />
+                          </div>
+                          <span className="text-xs font-medium text-gray-900">{note.staffName}</span>
+                        </div>
+                        <span className="text-xs text-gray-500">{date} {time}</span>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.content}</p>
+                    </div>
+                  );
+                })}
+              {allNotesBookingId && notes.filter(n => n.bookingId === allNotesBookingId).length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">Không có ghi chú</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );

@@ -451,8 +451,12 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                               <div className="ml-4 border-l-2 border-gray-100 pl-3 mt-1 space-y-1">
                                 {item.children
                                   .filter(child => userRole && child.roles.includes(userRole))
-                                  .map((child) => {
-                                    const isChildActive = pathname === child.href || pathname.startsWith(child.href);
+                                  .map((child, _, filteredChildren) => {
+                                    const matchesPath = pathname === child.href || pathname.startsWith(child.href + '/');
+                                    const moreSpecificExists = filteredChildren.some(
+                                      c => c !== child && (pathname === c.href || pathname.startsWith(c.href + '/')) && c.href.length > child.href.length
+                                    );
+                                    const isChildActive = matchesPath && !moreSpecificExists;
                                     return (
                                       <Link
                                         key={child.name}

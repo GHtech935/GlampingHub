@@ -158,13 +158,17 @@ export async function GET(request: NextRequest) {
 
     // Fetch parameters for all bookings
     const bookingIds = [...new Set(result.rows.map((r: any) => r.booking_id))];
-    let paramsByBookingTent = new Map<string, Array<{ label: string; quantity: number }>>();
+    let paramsByBookingTent = new Map<string, Array<{ label: string; quantity: number; displayOrder: number }>>();
 
     if (bookingIds.length > 0) {
       const paramsResult = await client.query(
-        `SELECT bp.booking_id, bp.booking_tent_id, bp.label, bp.booked_quantity
+        `SELECT bp.booking_id, bp.booking_tent_id, bp.label, bp.booked_quantity,
+                COALESCE(p.display_order, 0) as display_order
          FROM glamping_booking_parameters bp
-         WHERE bp.booking_id = ANY($1::uuid[])`,
+         LEFT JOIN glamping_parameters p ON bp.parameter_id = p.id
+         WHERE bp.booking_id = ANY($1::uuid[])
+           AND (p.visibility IS NULL OR p.visibility != 'hidden')
+         ORDER BY COALESCE(p.display_order, 0) ASC`,
         [bookingIds]
       );
       for (const row of paramsResult.rows) {
@@ -175,6 +179,7 @@ export async function GET(request: NextRequest) {
         paramsByBookingTent.get(key)!.push({
           label: row.label,
           quantity: row.booked_quantity,
+          displayOrder: parseInt(row.display_order) || 0,
         });
       }
     }

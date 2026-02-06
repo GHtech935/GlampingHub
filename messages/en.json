@@ -3559,12 +3559,16 @@
                         "datesNone": "No dates",
                         "customStartDate": "Start Date",
                         "customEndDate": "End Date",
-                        "submit": "Save Changes"
+                        "submit": "Save Changes",
+                        "searchPlaceholder": "Search items..."
                     },
                     "menuProducts": {
                         "title": "Menu Products",
                         "dialogTitle": "Attach Food/Beverages",
-                        "dialogDesc": "Select food/beverages to include in this item"
+                        "dialogDesc": "Select food/beverages to include in this item",
+                        "searchPlaceholder": "Search food/beverages...",
+                        "selectAll": "Select All",
+                        "deselectAll": "Deselect All"
                     },
                     "createCategoryDialog": {
                         "title": "Create New Category",
@@ -4017,7 +4021,8 @@
                     "createSuccess": "Menu item created successfully",
                     "updateSuccess": "Menu item updated successfully",
                     "createFailed": "Failed to create menu item",
-                    "updateFailed": "Failed to update menu item"
+                    "updateFailed": "Failed to update menu item",
+                    "noItemsAvailable": "No items available in this zone"
                 },
                 "deleteSuccess": "Menu item deleted successfully",
                 "deleteConfirm": "Are you sure you want to delete this menu item?"
@@ -4461,7 +4466,9 @@
                 "filter": "Filter",
                 "export": "Export",
                 "import": "Import",
-                "confirmDelete": "Are you sure you want to delete this item?"
+                "confirmDelete": "Are you sure you want to delete this item?",
+                "yes": "Yes",
+                "no": "No"
             },
             "allZonesStats": {
                 "totalItems": "Total Items",

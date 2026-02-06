@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import { MessageSquare } from "lucide-react";
 import { type ManifestItem, type ManifestBooking } from "./daily-types";
 
 interface ManifestItemGroupProps {
@@ -30,7 +33,7 @@ const paymentStatusConfig: Record<string, { label: { en: string; vi: string } }>
 
 function formatShortDate(dateStr: string): string {
   const d = new Date(dateStr);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
 export function ManifestItemGroup({ item, locale, onViewBooking }: ManifestItemGroupProps) {
@@ -54,24 +57,15 @@ export function ManifestItemGroup({ item, locale, onViewBooking }: ManifestItemG
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       {/* Item Header */}
       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">
-              {item.categoryName && <span className="text-gray-500">{item.categoryName} | </span>}
-              {item.itemName}
-              {item.itemSku && <span className="text-gray-400 ml-1">({item.itemSku})</span>}
-            </h3>
-            <p className="text-xs text-gray-600 mt-0.5">
-              {summaryParts.join(" | ")}
-            </p>
-          </div>
-          <button
-            disabled
-            className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-400 bg-gray-50 cursor-not-allowed"
-            title={isVi ? "Sắp có" : "Coming soon"}
-          >
-            + {isVi ? "Gán" : "Assign"}
-          </button>
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">
+            {item.categoryName && <span className="text-gray-500">{item.categoryName} | </span>}
+            {item.itemName}
+            {item.itemSku && <span className="text-gray-400 ml-1">({item.itemSku})</span>}
+          </h3>
+          <p className="text-xs text-gray-600 mt-0.5">
+            {summaryParts.join(" | ")}
+          </p>
         </div>
       </div>
 
@@ -104,7 +98,7 @@ export function ManifestItemGroup({ item, locale, onViewBooking }: ManifestItemG
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
                 {isVi ? "Người đặt" : "Booker"}
               </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+              <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">
                 {isVi ? "Ghi chú" : "Notes"}
               </th>
             </tr>
@@ -148,11 +142,22 @@ function BookingRow({
   statusLabel,
   statusVariant,
   paymentLabel,
+  locale,
 }: BookingRowProps) {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const isVi = locale === "vi";
+  const hasNotes = !!(booking.internalNotes || booking.customerNotes);
+
+  // Sort parameters by displayOrder
+  const sortedParams = booking.parameters
+    ? [...booking.parameters].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+    : [];
+
   return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
-      {/* Booking Code */}
-      <td className="px-3 py-2">
+    <>
+      <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+        {/* Booking Code */}
+        <td className="px-3 py-2">
           <button
             onClick={() => onViewBooking(booking.id)}
             className="text-primary hover:underline font-medium text-xs"
@@ -168,10 +173,14 @@ function BookingRow({
         <td className="px-3 py-2 text-xs text-gray-700">
           {formatShortDate(booking.checkOutDate)}
         </td>
-        {/* Guests */}
+        {/* Guests - each param on a new line, sorted by displayOrder */}
         <td className="px-3 py-2 text-xs text-gray-700">
-          {booking.parameters && booking.parameters.length > 0
-            ? booking.parameters.map(p => `${p.label}: ${p.quantity}`).join(", ")
+          {sortedParams.length > 0
+            ? sortedParams.map((p, idx) => (
+                <div key={idx}>
+                  {p.label}: {p.quantity}
+                </div>
+              ))
             : booking.totalGuests}
         </td>
         {/* Payment */}
@@ -198,10 +207,55 @@ function BookingRow({
             <div className="text-[10px] text-gray-500 truncate max-w-[150px]">{booking.customerEmail}</div>
           )}
         </td>
-        {/* Notes */}
-        <td className="px-3 py-2 text-xs text-gray-500 max-w-[120px] truncate">
-          {booking.internalNotes || booking.customerNotes || "-"}
+        {/* Notes - chat icon */}
+        <td className="px-3 py-2 text-center">
+          <button
+            onClick={() => setNotesOpen(true)}
+            className={`inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
+              hasNotes
+                ? "text-primary hover:bg-primary/10"
+                : "text-gray-300 hover:bg-gray-100 hover:text-gray-400"
+            }`}
+            title={isVi ? "Xem ghi chú" : "View notes"}
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
         </td>
       </tr>
+
+      {/* Notes Modal */}
+      <Dialog open={notesOpen} onOpenChange={setNotesOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">
+              {isVi ? "Ghi chú" : "Notes"} - {booking.bookingCode}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {booking.internalNotes && (
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">
+                  {isVi ? "Ghi chú nội bộ" : "Internal Notes"}
+                </p>
+                <p className="text-sm text-gray-900 whitespace-pre-wrap">{booking.internalNotes}</p>
+              </div>
+            )}
+            {booking.customerNotes && (
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">
+                  {isVi ? "Ghi chú khách hàng" : "Customer Notes"}
+                </p>
+                <p className="text-sm text-gray-900 whitespace-pre-wrap">{booking.customerNotes}</p>
+              </div>
+            )}
+            {!hasNotes && (
+              <p className="text-sm text-gray-500 text-center py-4">
+                {isVi ? "Không có ghi chú" : "No notes"}
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

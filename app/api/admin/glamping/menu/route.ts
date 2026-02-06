@@ -114,7 +114,8 @@ export async function POST(request: NextRequest) {
       status,
       min_guests,
       max_guests,
-      stock
+      stock,
+      item_ids // Array of item UUIDs this menu product applies to
     } = body;
 
     // Validate required fields
@@ -138,55 +139,84 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await pool.query(
-      `INSERT INTO glamping_menu_items (
-        name,
-        description,
-        category,
-        category_id,
-        unit,
-        price,
-        tax_rate,
-        zone_id,
-        is_available,
-        max_quantity,
-        requires_advance_booking,
-        advance_hours,
-        image_url,
-        weight,
-        status,
-        min_guests,
-        max_guests,
-        stock
-      )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-       RETURNING *`,
-      [
-        name,
-        description || { vi: '', en: '' },
-        category || { vi: '', en: '' },
-        category_id || null,
-        unit || { vi: 'món', en: 'item' },
-        price,
-        tax_rate || 0,
-        zone_id,
-        is_available !== undefined ? is_available : true,
-        max_quantity || 10,
-        requires_advance_booking || false,
-        advance_hours || 0,
-        image_url || null,
-        weight || 0,
-        status || 'active',
-        min_guests || null,
-        max_guests || null,
-        stock || null
-      ]
-    );
+    // Use a transaction to insert menu item and item associations
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    return NextResponse.json({
-      success: true,
-      menuItem: result.rows[0]
-    }, { status: 201 });
+      // Insert the menu item
+      const result = await client.query(
+        `INSERT INTO glamping_menu_items (
+          name,
+          description,
+          category,
+          category_id,
+          unit,
+          price,
+          tax_rate,
+          zone_id,
+          is_available,
+          max_quantity,
+          requires_advance_booking,
+          advance_hours,
+          image_url,
+          weight,
+          status,
+          min_guests,
+          max_guests,
+          stock
+        )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+         RETURNING *`,
+        [
+          name,
+          description || { vi: '', en: '' },
+          category || { vi: '', en: '' },
+          category_id || null,
+          unit || { vi: 'món', en: 'item' },
+          price,
+          tax_rate || 0,
+          zone_id,
+          is_available !== undefined ? is_available : true,
+          max_quantity || 10,
+          requires_advance_booking || false,
+          advance_hours || 0,
+          image_url || null,
+          weight || 0,
+          status || 'active',
+          min_guests || null,
+          max_guests || null,
+          stock || null
+        ]
+      );
+
+      const menuItem = result.rows[0];
+
+      // Insert item associations if provided
+      if (item_ids && Array.isArray(item_ids) && item_ids.length > 0) {
+        const values = item_ids.map((itemId: string, index: number) =>
+          `($1, $${index + 2}, false, ${index})`
+        ).join(', ');
+
+        await client.query(
+          `INSERT INTO glamping_item_menu_products (menu_item_id, item_id, is_required, display_order)
+           VALUES ${values}`,
+          [menuItem.id, ...item_ids]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      return NextResponse.json({
+        success: true,
+        menuItem
+      }, { status: 201 });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
 
   } catch (error) {
     console.error('Menu item creation error:', error);

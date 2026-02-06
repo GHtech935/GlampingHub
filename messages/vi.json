@@ -3559,12 +3559,16 @@
                         "datesNone": "Không có ngày",
                         "customStartDate": "Ngày bắt đầu",
                         "customEndDate": "Ngày kết thúc",
-                        "submit": "Lưu thay đổi"
+                        "submit": "Lưu thay đổi",
+                        "searchPlaceholder": "Tìm kiếm mặt hàng..."
                     },
                     "menuProducts": {
                         "title": "Sản phẩm Menu",
                         "dialogTitle": "Đính kèm món ăn/đồ uống",
-                        "dialogDesc": "Chọn món ăn/đồ uống để bao gồm trong item này"
+                        "dialogDesc": "Chọn món ăn/đồ uống để bao gồm trong item này",
+                        "searchPlaceholder": "Tìm kiếm món ăn/đồ uống...",
+                        "selectAll": "Chọn tất cả",
+                        "deselectAll": "Bỏ chọn tất cả"
                     },
                     "createCategoryDialog": {
                         "title": "Tạo danh mục mới",
@@ -4017,7 +4021,8 @@
                     "createSuccess": "Tạo món thành công",
                     "updateSuccess": "Cập nhật món thành công",
                     "createFailed": "Tạo món thất bại",
-                    "updateFailed": "Cập nhật món thất bại"
+                    "updateFailed": "Cập nhật món thất bại",
+                    "noItemsAvailable": "Không có lều nào trong khu này"
                 },
                 "deleteSuccess": "Xóa món thành công",
                 "deleteConfirm": "Bạn có chắc muốn xóa món này?"
@@ -4456,7 +4461,9 @@
                 "filter": "Lọc",
                 "export": "Xuất",
                 "import": "Nhập",
-                "confirmDelete": "Bạn có chắc chắn muốn xóa mục này?"
+                "confirmDelete": "Bạn có chắc chắn muốn xóa mục này?",
+                "yes": "Có",
+                "no": "Không"
             },
             "allZonesStats": {
                 "totalItems": "Tổng Lều",

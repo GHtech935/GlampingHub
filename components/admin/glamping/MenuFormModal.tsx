@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Upload, X } from "lucide-react";
+import { Upload, X, Loader2 } from "lucide-react";
 import Image from "next/image";
 import {
   Select,
@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
 import toast from "react-hot-toast";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import CategoryItemSelector, { Category } from "@/components/admin/events/CategoryItemSelector";
 
 interface MenuFormModalProps {
   open: boolean;
@@ -50,6 +51,11 @@ export function MenuFormModal({
   const [uploading, setUploading] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Item selector state (for "Áp dụng cho" feature)
+  const [itemCategories, setItemCategories] = useState<Category[]>([]);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
   const [formData, setFormData] = useState({
     name_vi: "",
     name_en: "",
@@ -72,11 +78,26 @@ export function MenuFormModal({
     stock: "",
   });
 
+  // Fetch menu item details (including item_ids) when editing
+  const fetchMenuItemDetails = async (menuItemId: string) => {
+    try {
+      const response = await fetch(`/api/admin/glamping/menu/${menuItemId}`);
+      const data = await response.json();
+      if (data.menuItem?.item_ids) {
+        setSelectedItems(data.menuItem.item_ids);
+      }
+    } catch (error) {
+      console.error('Failed to fetch menu item details:', error);
+    }
+  };
+
   // Reset form when modal opens/closes or editData changes
   useEffect(() => {
     if (open) {
-      // Fetch categories when modal opens
+      // Fetch menu categories when modal opens
       fetchCategories();
+      // Fetch item categories for "Áp dụng cho" selector
+      fetchCategoriesAndItems();
 
       if (editData) {
         // Populate form with edit data
@@ -101,6 +122,8 @@ export function MenuFormModal({
           max_guests: editData.max_guests?.toString() || "",
           stock: editData.stock?.toString() || "",
         });
+        // Fetch item_ids from API (editData from list doesn't include item_ids)
+        fetchMenuItemDetails(editData.id);
       } else {
         // Fetch next weight for new items
         fetchNextWeight();
@@ -126,6 +149,8 @@ export function MenuFormModal({
           max_guests: "",
           stock: "",
         });
+        // Reset selected items
+        setSelectedItems([]);
       }
     }
   }, [open, editData, zoneId]);
@@ -170,6 +195,63 @@ export function MenuFormModal({
       setCategories([]);
     }
   };
+
+  // Fetch item categories and items for "Áp dụng cho" selector
+  const fetchCategoriesAndItems = async () => {
+    if (!zoneId) return;
+
+    setLoadingItems(true);
+    try {
+      // Only fetch tent categories (is_tent_category=true)
+      const categoryUrl = `/api/admin/glamping/categories?zone_id=${zoneId}&is_tent_category=true`;
+      const itemsUrl = `/api/admin/glamping/items?zone_id=${zoneId}&is_tent_category=true`;
+
+      const [categoriesRes, itemsRes] = await Promise.all([
+        fetch(categoryUrl),
+        fetch(itemsUrl)
+      ]);
+
+      const categoriesData = await categoriesRes.json();
+      const itemsData = await itemsRes.json();
+
+      // Group items by category
+      const categoryMap = new Map<string, Category>();
+
+      categoriesData.categories?.forEach((cat: any) => {
+        const catName = typeof cat.name === 'object'
+          ? (cat.name?.vi || cat.name?.en || 'N/A')
+          : (cat.name || 'N/A');
+        categoryMap.set(cat.id, { id: cat.id, name: catName, items: [] });
+      });
+
+      itemsData.items?.forEach((item: any) => {
+        const category = categoryMap.get(item.category_id);
+        if (category) {
+          const itemName = typeof item.name === 'object'
+            ? (item.name?.vi || item.name?.en || 'N/A')
+            : (item.name || 'N/A');
+          category.items.push({
+            id: item.id,
+            name: itemName,
+            category_id: item.category_id
+          });
+        }
+      });
+
+      // Only include categories that have items
+      const categoriesWithItems = Array.from(categoryMap.values()).filter(cat => cat.items.length > 0);
+      setItemCategories(categoriesWithItems);
+    } catch (error) {
+      console.error('Failed to fetch item categories and items:', error);
+      setItemCategories([]);
+    } finally {
+      setLoadingItems(false);
+    }
+  };
+
+  const handleSelectionChange = useCallback((selectedIds: string[]) => {
+    setSelectedItems(selectedIds);
+  }, []);
 
   const handleCategoryChange = (categoryId: string) => {
     if (categoryId === "none" || !categoryId) {
@@ -318,6 +400,7 @@ export function MenuFormModal({
         min_guests: formData.min_guests ? parseInt(formData.min_guests) : null,
         max_guests: formData.max_guests ? parseInt(formData.max_guests) : null,
         stock: formData.stock ? parseInt(formData.stock) : null,
+        item_ids: selectedItems, // Items this menu product applies to
       };
 
       const url = editData
@@ -682,6 +765,26 @@ export function MenuFormModal({
                 {t("imageHelp")}
               </p>
             </div>
+
+            {/* Item Selector - "Áp dụng cho" */}
+            {zoneId && (
+              <div className="space-y-2 pt-4 border-t">
+                {loadingItems ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                    <span className="ml-2 text-sm text-gray-500">{tc("loading")}</span>
+                  </div>
+                ) : itemCategories.length > 0 ? (
+                  <CategoryItemSelector
+                    categories={itemCategories}
+                    selectedItems={selectedItems}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                ) : (
+                  <p className="text-sm text-gray-500">{t("noItemsAvailable")}</p>
+                )}
+              </div>
+            )}
 
             {/* Active Status - Checkbox at the bottom */}
             <div className="flex items-center space-x-2 pt-4 border-t">

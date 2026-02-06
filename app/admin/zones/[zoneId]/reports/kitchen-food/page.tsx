@@ -138,6 +138,16 @@ const BOOKING_COLORS = [
   'bg-cyan-50',
 ];
 
+// Hex equivalents for PDF/Excel exports
+const BOOKING_COLORS_HEX = [
+  '#EFF6FF', // blue-50
+  '#F0FDF4', // green-50
+  '#FFFBEB', // amber-50
+  '#FAF5FF', // purple-50
+  '#FDF2F8', // pink-50
+  '#ECFEFF', // cyan-50
+];
+
 export default function KitchenFoodReportPage() {
   const params = useParams();
   const zoneId = params.zoneId as string;
@@ -574,7 +584,10 @@ export default function KitchenFoodReportPage() {
     worksheet.getColumn(7 + paramLabels.length).width = 50;
 
     // Data rows - expand each booking with notes
+    let bookingColorIndex = 0;
     data.forEach((booking) => {
+      const bgArgb = BOOKING_COLORS_HEX[bookingColorIndex % 6].replace('#', 'FF');
+      bookingColorIndex++;
       // Build flat product rows (menu products + common items + additional costs + empty tents) for this booking
       const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean; isAdditionalCost: boolean; isEmptyTent: boolean; guestCount?: number }; isFirstOfTent: boolean }[] = [];
       let isFirstTentInBooking = true;
@@ -736,13 +749,15 @@ export default function KitchenFoodReportPage() {
           i === 0 ? photoConsentText : ""
         ]);
 
+        // Apply booking background color to all cells, then border
         dataRow.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         });
 
-        // Highlight tent rows
+        // Bold tent name cell
         if (menuRow?.isFirstOfTent) {
-          dataRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFBEB' } };
+          dataRow.getCell(3).font = { bold: true };
         }
 
         // Highlight additional costs with purple
@@ -1009,7 +1024,12 @@ export default function KitchenFoodReportPage() {
           table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
           th { background-color: #EA580C; color: white; padding: 8px 6px; text-align: left; font-weight: 600; font-size: 10px; }
           td { padding: 6px; border: 1px solid #E5E7EB; }
-          tr:nth-child(even) { background-color: #FFF7ED; }
+          .booking-bg-0 { background-color: #EFF6FF; }
+          .booking-bg-1 { background-color: #F0FDF4; }
+          .booking-bg-2 { background-color: #FFFBEB; }
+          .booking-bg-3 { background-color: #FAF5FF; }
+          .booking-bg-4 { background-color: #FDF2F8; }
+          .booking-bg-5 { background-color: #ECFEFF; }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
           .font-bold { font-weight: bold; }
@@ -1133,7 +1153,10 @@ export default function KitchenFoodReportPage() {
             ${(() => {
               // Build expanded rows for PDF
               const pdfRows: string[] = [];
+              let pdfBookingColorIndex = 0;
               data.forEach((booking) => {
+                const colorClass = `booking-bg-${pdfBookingColorIndex % 6}`;
+                pdfBookingColorIndex++;
                 const menuProductRows: { tent: typeof booking.tents[0]; product: { menuItemName: string; menuItemUnit: string; minGuests: number | null; adjustedQuantity: number; notes: string | null; isCommonItem: boolean; isAdditionalCost: boolean; isEmptyTent: boolean; guestCount?: number }; isFirstOfTent: boolean }[] = [];
                 let isFirstTentInBooking = true;
 
@@ -1291,10 +1314,10 @@ export default function KitchenFoodReportPage() {
                     ? combinedNotes.substring(0, 150) + '...'
                     : combinedNotes;
                   pdfRows.push(`
-                    <tr>
+                    <tr class="${colorClass}">
                       <td class="text-center">${i === 0 ? booking.tentCount : ''}</td>
                       <td>${i === 0 ? booking.bookerName : ''}</td>
-                      <td class="${menuRow?.isFirstOfTent ? 'bg-yellow font-bold' : ''}">${menuRow?.isFirstOfTent ? menuRow.tent.itemName : ''}</td>
+                      <td class="${menuRow?.isFirstOfTent ? 'font-bold' : ''}">${menuRow?.isFirstOfTent ? menuRow.tent.itemName : ''}</td>
                       <td class="${menuItemClass}">${displayMenuItemName}</td>
                       <td class="text-center font-bold ${menuItemClass}">${displayQuantity}</td>
                       <td class="text-center">${displayUnit}</td>
