@@ -351,6 +351,16 @@ export function GlampingAddCommonItemModal({
     return total;
   }, [parameterQuantities, parameterPricing, parameterPricingModes]);
 
+  // Dynamically recalculate voucher discount when totalCost changes
+  // (e.g., user changes quantity after applying a percentage voucher)
+  const effectiveDiscount = useMemo(() => {
+    if (!appliedVoucher || totalCost <= 0) return 0;
+    if (appliedVoucher.discountType === 'percentage') {
+      return Math.min((totalCost * appliedVoucher.discountValue) / 100, totalCost);
+    }
+    return Math.min(appliedVoucher.discountAmount, totalCost);
+  }, [appliedVoucher, totalCost]);
+
   const updateQuantity = (paramId: string, value: number) => {
     setParameterQuantities(prev => ({ ...prev, [paramId]: value }));
   };
@@ -398,7 +408,7 @@ export function GlampingAddCommonItemModal({
           voucher: appliedVoucher ? {
             code: appliedVoucher.code,
             id: appliedVoucher.id,
-            discountAmount: appliedVoucher.discountAmount,
+            discountAmount: effectiveDiscount,
             discountType: appliedVoucher.discountType,
             discountValue: appliedVoucher.discountValue,
           } : undefined,
@@ -615,16 +625,16 @@ export function GlampingAddCommonItemModal({
                     )}
                   </span>
                 </div>
-                {appliedVoucher && appliedVoucher.discountAmount > 0 && (
+                {appliedVoucher && effectiveDiscount > 0 && (
                   <>
                     <div className="flex justify-between text-sm text-green-600 mt-1">
                       <span>Voucher {appliedVoucher.code}</span>
-                      <span>-{formatCurrency(appliedVoucher.discountAmount)}</span>
+                      <span>-{formatCurrency(effectiveDiscount)}</span>
                     </div>
                     <div className="flex justify-between text-sm font-bold mt-1 pt-1 border-t border-purple-200">
                       <span>{t.totalAfterDiscount}</span>
                       <span className="text-purple-700">
-                        {formatCurrency(Math.max(0, totalCost - appliedVoucher.discountAmount))}
+                        {formatCurrency(Math.max(0, totalCost - effectiveDiscount))}
                       </span>
                     </div>
                   </>

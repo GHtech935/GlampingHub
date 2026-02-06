@@ -326,8 +326,32 @@ export async function recalculateGlampingBookingTotals(
   );
   const menuDiscount = parseFloat(menuDiscountResult.rows[0].menu_discount);
 
+  // Sum discount amounts from addon items (voucher discounts stored in metadata)
+  // Group by addon to avoid counting the same voucher discount multiple times
+  const addonDiscountResult = await client.query(
+    `WITH addon_groups AS (
+       SELECT
+         addon_item_id::text || '_' || COALESCE(booking_tent_id::text, 'none') as group_key,
+         metadata
+       FROM glamping_booking_items
+       WHERE booking_id = $1
+         AND metadata->>'type' = 'addon'
+         AND addon_item_id IS NOT NULL
+     )
+     SELECT
+       group_key,
+       COALESCE((MAX(metadata->'voucher'->>'discountAmount'))::numeric, 0) as group_discount
+     FROM addon_groups
+     GROUP BY group_key`,
+    [bookingId]
+  );
+  let addonDiscount = 0;
+  for (const row of addonDiscountResult.rows) {
+    addonDiscount += parseFloat(row.group_discount || '0');
+  }
+
   const subtotal = accommodationTotal + menuTotal + additionalTotal;
-  const totalDiscount = tentDiscount + menuDiscount;
+  const totalDiscount = tentDiscount + menuDiscount + addonDiscount;
   const afterDiscount = subtotal - totalDiscount;
 
   // Apply tax if required (per-item tax rates + additional costs tax)
