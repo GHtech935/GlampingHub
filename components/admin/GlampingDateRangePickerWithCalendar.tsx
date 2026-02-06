@@ -72,6 +72,8 @@ interface GlampingDateRangePickerWithCalendarProps {
   // Single person surcharge alert props
   enableSinglePersonSurchargeAlert?: boolean
   singlePersonSurchargeAlertText?: { vi: string; en: string }
+  // Allow selecting past dates (for admin manual booking creation)
+  allowPastDates?: boolean
 }
 
 export function GlampingDateRangePickerWithCalendar({
@@ -91,6 +93,7 @@ export function GlampingDateRangePickerWithCalendar({
   pricingLoading = false,
   enableSinglePersonSurchargeAlert,
   singlePersonSurchargeAlertText,
+  allowPastDates = false,
 }: GlampingDateRangePickerWithCalendarProps) {
   const [calendar, setCalendar] = useState<CalendarDay[]>([])
   const [loading, setLoading] = useState(false)
@@ -183,9 +186,20 @@ export function GlampingDateRangePickerWithCalendar({
       const dayData = calendar.find(day => day.date === dateStr)
       const checkDate = new Date(dateStr)
       checkDate.setHours(0, 0, 0, 0)
+      const isDateInPast = checkDate < today
+
+      // When allowPastDates: past dates with no API data are OK (API may not return past data),
+      // but past dates with data showing unavailable (booked) are still invalid
+      if (allowPastDates && isDateInPast) {
+        if (dayData && !dayData.isAvailable) {
+          hasInvalidDate = true
+          break
+        }
+        continue
+      }
 
       // Invalid if: past date OR no data OR not available
-      if (checkDate < today || !dayData || !dayData.isAvailable) {
+      if (isDateInPast || !dayData || !dayData.isAvailable) {
         hasInvalidDate = true
         break
       }
@@ -315,6 +329,7 @@ export function GlampingDateRangePickerWithCalendar({
   }
 
   const isPastDate = (date: string) => {
+    if (allowPastDates) return false
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const checkDate = new Date(date)
@@ -610,6 +625,12 @@ export function GlampingDateRangePickerWithCalendar({
                       const isEndDate = isRangeEnd(day.date)
                       const isMiddle = isRangeMiddle(day.date)
                       const isPast = isPastDate(day.date)
+                      // True calendar past check (ignores allowPastDates) for visual styling
+                      const isActuallyPast = (() => {
+                        const today = new Date(); today.setHours(0, 0, 0, 0)
+                        const d = new Date(day.date); d.setHours(0, 0, 0, 0)
+                        return d < today
+                      })()
 
                       const isNormallyClickable = day.isAvailable && !isPast && !disabled
 
@@ -647,6 +668,9 @@ export function GlampingDateRangePickerWithCalendar({
                         const isInSelection = isDateInRange(day.date)
                         if (isInSelection) {
                           bgColorClass = 'bg-blue-700 hover:bg-blue-600'
+                        } else if (isActuallyPast && allowPastDates) {
+                          // Past dates that are clickable due to allowPastDates — amber styling
+                          bgColorClass = 'bg-amber-600 hover:bg-amber-500'
                         } else {
                           bgColorClass = 'bg-primary hover:bg-primary/90'
                         }

@@ -723,6 +723,7 @@ export function AdminTentTabContent({
           parameterQuantities={tent.parameterQuantities}
           onQuantitiesChange={handleParameterQuantitiesChange}
           loadingParameters={tent.loadingItemDetails}
+          allowPastDates
         />
       </div>
 

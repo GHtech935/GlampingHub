@@ -155,6 +155,7 @@ export function GlampingTentFormSections(props: GlampingTentFormSectionsProps) {
           overrideParameterPricing={parameterPricing}
           overrideParameterPricingModes={parameterPricingModes}
           pricingLoading={pricingLoading}
+          allowPastDates
         />
       </div>
 
