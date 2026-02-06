@@ -28,53 +28,42 @@ export async function GET(
       );
     }
 
-    // Get zone with stats
-    const zoneQuery = `
-      SELECT
-        z.*,
-        COUNT(DISTINCT i.id) as items_count,
-        COUNT(DISTINCT c.id) as categories_count,
-        COUNT(DISTINCT t.id) as tags_count,
-        COUNT(DISTINCT p.id) as parameters_count,
-        COUNT(DISTINCT e.id) as events_count,
-        COUNT(DISTINCT d.id) as discounts_count
-      FROM glamping_zones z
-      LEFT JOIN glamping_items i ON i.zone_id = z.id
-      LEFT JOIN glamping_categories c ON c.zone_id = z.id
-      LEFT JOIN glamping_tags t ON t.zone_id = z.id
-      LEFT JOIN glamping_parameters p ON p.zone_id = z.id
-      LEFT JOIN glamping_item_events e ON e.zone_id = z.id
-      LEFT JOIN glamping_discounts d ON d.zone_id = z.id
-      WHERE z.id = $1
-      GROUP BY z.id
-    `;
-
-    const { rows: zoneRows } = await pool.query(zoneQuery, [id]);
+    // Get zone data + all counts + images in parallel (avoids 6-way LEFT JOIN)
+    const [
+      { rows: zoneRows },
+      { rows: [items] },
+      { rows: [categories] },
+      { rows: [tags] },
+      { rows: [parameters] },
+      { rows: [events] },
+      { rows: [discounts] },
+      { rows: images },
+    ] = await Promise.all([
+      pool.query('SELECT * FROM glamping_zones WHERE id = $1', [id]),
+      pool.query('SELECT COUNT(*)::int as count FROM glamping_items WHERE zone_id = $1', [id]),
+      pool.query('SELECT COUNT(*)::int as count FROM glamping_categories WHERE zone_id = $1', [id]),
+      pool.query('SELECT COUNT(*)::int as count FROM glamping_tags WHERE zone_id = $1', [id]),
+      pool.query('SELECT COUNT(*)::int as count FROM glamping_parameters WHERE zone_id = $1', [id]),
+      pool.query('SELECT COUNT(*)::int as count FROM glamping_item_events WHERE zone_id = $1', [id]),
+      pool.query('SELECT COUNT(*)::int as count FROM glamping_discounts WHERE zone_id = $1', [id]),
+      pool.query(
+        'SELECT * FROM glamping_zone_images WHERE zone_id = $1 ORDER BY display_order ASC, created_at ASC',
+        [id]
+      ),
+    ]);
 
     if (zoneRows.length === 0) {
       return NextResponse.json({ error: 'Zone not found' }, { status: 404 });
     }
 
-    // Get zone images
-    const imagesQuery = `
-      SELECT *
-      FROM glamping_zone_images
-      WHERE zone_id = $1
-      ORDER BY display_order ASC, created_at ASC
-    `;
-
-    const { rows: images } = await pool.query(imagesQuery, [id]);
-
-    const zoneData = zoneRows[0];
     const zone = {
-      ...zoneData,
-      // Convert bigint counts to numbers
-      items_count: parseInt(zoneData.items_count) || 0,
-      categories_count: parseInt(zoneData.categories_count) || 0,
-      tags_count: parseInt(zoneData.tags_count) || 0,
-      parameters_count: parseInt(zoneData.parameters_count) || 0,
-      events_count: parseInt(zoneData.events_count) || 0,
-      discounts_count: parseInt(zoneData.discounts_count) || 0,
+      ...zoneRows[0],
+      items_count: items.count,
+      categories_count: categories.count,
+      tags_count: tags.count,
+      parameters_count: parameters.count,
+      events_count: events.count,
+      discounts_count: discounts.count,
       images,
     };
 
