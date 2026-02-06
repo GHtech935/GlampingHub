@@ -588,7 +588,7 @@ interface TentItemForEmail {
  * Generate HTML for tents section in email
  * Supports both single tent and multiple tents
  */
-function generateTentsSectionHTML(items: TentItemForEmail[]): string {
+export function generateTentsSectionHTML(items: TentItemForEmail[]): string {
   if (items.length === 0) {
     return '';
   }

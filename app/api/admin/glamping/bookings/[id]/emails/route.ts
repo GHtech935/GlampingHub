@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { getSession, isStaffSession } from "@/lib/auth";
-import { GLAMPING_EMAIL_TEMPLATES } from "@/lib/glamping-email-templates-html";
-import { sendGlampingTemplateEmail, formatCurrency } from "@/lib/email";
+import { GLAMPING_EMAIL_TEMPLATES, generateDinnerSectionHTML } from "@/lib/glamping-email-templates-html";
+import { sendGlampingTemplateEmail, formatCurrency, generateTentsSectionHTML } from "@/lib/email";
 
 export const dynamic = 'force-dynamic';
 
@@ -341,6 +341,61 @@ export async function POST(
       // For menu update emails (if needed)
       amount: formatCurrency(Number(booking.total_amount) || 0),
     };
+
+    // For booking confirmation template, generate dynamic HTML sections
+    if (template_slug === 'glamping-booking-confirmation') {
+      // Fetch tent items
+      const tentsResult = await client.query(
+        `SELECT
+          bt.id as tent_id,
+          i.name as item_name,
+          bt.check_in_date,
+          bt.check_out_date
+        FROM glamping_booking_tents bt
+        JOIN glamping_items i ON bt.item_id = i.id
+        WHERE bt.booking_id = $1
+        ORDER BY bt.created_at ASC`,
+        [id]
+      );
+
+      // Get per-tent guest counts from booking_parameters
+      const tentIds = tentsResult.rows.map((r: any) => r.tent_id);
+      let guestCountMap: Record<string, number> = {};
+      if (tentIds.length > 0) {
+        const guestResult = await client.query(
+          `SELECT booking_tent_id, SUM(booked_quantity) as total_guests
+           FROM glamping_booking_parameters
+           WHERE booking_id = $1 AND booking_tent_id = ANY($2)
+           GROUP BY booking_tent_id`,
+          [id, tentIds]
+        );
+        for (const row of guestResult.rows) {
+          guestCountMap[row.booking_tent_id] = parseInt(row.total_guests || '0');
+        }
+      }
+
+      const emailItems = tentsResult.rows.map((row: any) => ({
+        name: row.item_name || 'Lều',
+        checkInDate: new Date(row.check_in_date).toLocaleDateString('vi-VN'),
+        checkOutDate: new Date(row.check_out_date).toLocaleDateString('vi-VN'),
+        guests: guestCountMap[row.tent_id] || 0,
+      }));
+
+      variables.tents_section = generateTentsSectionHTML(emailItems);
+
+      // Check zone dinner setting
+      if (booking.zone_id) {
+        const zoneResult = await client.query(
+          `SELECT COALESCE(enable_dinner_reminder_email, true) as enable_dinner
+           FROM glamping_zones WHERE id = $1`,
+          [booking.zone_id]
+        );
+        const enableDinner = zoneResult.rows[0]?.enable_dinner !== false;
+        variables.dinner_section = generateDinnerSectionHTML(enableDinner, confirmationUrl);
+      } else {
+        variables.dinner_section = '';
+      }
+    }
 
     // Send email
     const result = await sendGlampingTemplateEmail({
