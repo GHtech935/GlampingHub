@@ -117,9 +117,6 @@ export function GlampingEditCommonItemModal({
   // Pricing state
   const [pricingLoading, setPricingLoading] = useState(false);
 
-  // Ref for tracking previous parameters to optimize fetches
-  const prevParametersRef = useRef(parameters);
-
   // Price override state
   const [priceOverride, setPriceOverride] = useState<number | null>(item.priceOverride || null);
   const [showPriceOverride, setShowPriceOverride] = useState(!!item.priceOverride);
@@ -155,32 +152,28 @@ export function GlampingEditCommonItemModal({
       .finally(() => setLoadingConfig(false));
   }, [item.tentItemId, item.itemId]);
 
-  // Fetch pricing when dates change
+  // Stable key that only changes when quantities change (not unitPrice/pricingMode)
+  const quantityKey = useMemo(
+    () => parameters.map(p => `${p.parameterId}:${p.quantity}`).join(','),
+    [parameters]
+  );
+
+  // Ref to read current parameters inside effect without adding to deps
+  const parametersRef = useRef(parameters);
+  parametersRef.current = parameters;
+
+  // Fetch pricing when quantities or dates change (NOT when unitPrice updates)
   useEffect(() => {
     if (!addonConfig) return;
 
-    // Create stable comparison key
-    const currentKey = parameters.map(p => `${p.parameterId}:${p.quantity}`).join(',');
-    const prevKey = prevParametersRef.current.map(p => `${p.parameterId}:${p.quantity}`).join(',');
-
-    // Skip if quantities haven't changed
-    if (currentKey === prevKey && parameters.every(p => p.unitPrice > 0)) {
-      return;
-    }
-
-    const hasQuantity = parameters.some(p => p.quantity > 0);
-    if (!hasQuantity) {
-      prevParametersRef.current = parameters;
-      return;
-    }
+    const currentParams = parametersRef.current;
+    const hasQuantity = currentParams.some(p => p.quantity > 0);
+    if (!hasQuantity) return;
 
     const effectiveCheckIn = addonDates?.from || item.tentCheckInDate;
     const effectiveCheckOut = addonDates?.to || item.tentCheckOutDate;
 
     if (!effectiveCheckIn || !effectiveCheckOut) return;
-
-    // Update ref immediately
-    prevParametersRef.current = parameters;
 
     const fetchPricing = async () => {
       setPricingLoading(true);
@@ -193,7 +186,7 @@ export function GlampingEditCommonItemModal({
           children: '0',
         });
 
-        parameters.forEach(p => {
+        currentParams.forEach(p => {
           if (p.quantity > 0) {
             params.append(`param_${p.parameterId}`, p.quantity.toString());
           }
@@ -224,7 +217,7 @@ export function GlampingEditCommonItemModal({
 
     const timer = setTimeout(fetchPricing, 300);
     return () => clearTimeout(timer);
-  }, [addonConfig, addonDates, item.tentCheckInDate, item.tentCheckOutDate, item.itemId, parameters]);
+  }, [addonConfig, addonDates, item.tentCheckInDate, item.tentCheckOutDate, item.itemId, quantityKey]);
 
   const calculatedTotal = useMemo(() =>
     parameters.reduce(

@@ -86,6 +86,8 @@ interface PricingItem {
   voucherCode?: string | null;
   discountAmount?: number;
   servingDate?: string | null; // Per-night serving date
+  addonItemId?: string | null; // For grouping addon items
+  priceOverride?: number | null; // For detecting addon group overrides
 }
 
 export function GlampingBookingFinancialTab({
@@ -211,6 +213,12 @@ export function GlampingBookingFinancialTab({
     calculatedSubtotal: number;
     overrideSubtotal: number;
   }>>([]);
+  // Per-tent stored subtotals from DB (for correct total calculation)
+  const [tentSubtotals, setTentSubtotals] = useState<Array<{
+    tentId: string;
+    storedSubtotal: number;
+    overrideSubtotal: number | null;
+  }>>([]);
   const [showCheckoutDialog, setShowCheckoutDialog] = useState(false);
   const [showVatPaymentDialog, setShowVatPaymentDialog] = useState(false);
   const [vatPaymentMethod, setVatPaymentMethod] = useState<string>('cash');
@@ -235,7 +243,6 @@ export function GlampingBookingFinancialTab({
         });
         if (response.ok) {
           const data = await response.json();
-          console.log('[Financial Tab] Pricing data:', data);
 
           const itemsList: PricingItem[] = [];
           let counter = 0;
@@ -325,6 +332,8 @@ export function GlampingBookingFinancialTab({
                 bookingTentId: addon.bookingTentId || null,
                 voucherCode: addon.voucherCode || null,
                 discountAmount: addon.discountAmount || 0,
+                addonItemId: addon.addonItemId || null,
+                priceOverride: addon.priceOverride ?? null,
               });
             });
           }
@@ -342,6 +351,13 @@ export function GlampingBookingFinancialTab({
             setTentOverrides(data.tentOverrides);
           } else {
             setTentOverrides([]);
+          }
+
+          // Store per-tent stored subtotals from DB
+          if (data.tentSubtotals && data.tentSubtotals.length > 0) {
+            setTentSubtotals(data.tentSubtotals);
+          } else {
+            setTentSubtotals([]);
           }
         } else {
           console.error('[Financial Tab] API error:', response.status);
@@ -376,23 +392,59 @@ export function GlampingBookingFinancialTab({
   let itemsSubtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
   let itemsTax = items.reduce((sum, item) => sum + item.taxAmount, 0);
 
-  tentOverrides.forEach(override => {
+  // Adjust accommodation subtotals using stored tent subtotals from DB.
+  // The per-item calculation may be wrong (e.g., missing pricingMode in metadata
+  // for bookings created through customer flow → defaults to per_person).
+  // The stored tent.subtotal is always correct (set at booking time with correct pricing).
+  tentSubtotals.forEach(tent => {
     const tentAccomItems = items.filter(
-      i => i.bookingTentId === override.tentId && i.type === 'accommodation'
+      i => i.bookingTentId === tent.tentId && i.type === 'accommodation'
     );
     if (tentAccomItems.length === 0) return;
 
-    const originalAccomSubtotal = tentAccomItems.reduce((sum, i) => sum + i.subtotal, 0);
-    const originalAccomTax = tentAccomItems.reduce((sum, i) => sum + i.taxAmount, 0);
+    const recalculatedSum = tentAccomItems.reduce((sum, i) => sum + i.subtotal, 0);
+    // Use override if set, otherwise use stored subtotal
+    const correctSum = tent.overrideSubtotal !== null ? tent.overrideSubtotal : tent.storedSubtotal;
 
-    // Replace accommodation subtotal with override value
-    itemsSubtotal += override.overrideSubtotal - originalAccomSubtotal;
+    if (recalculatedSum !== correctSum) {
+      itemsSubtotal += correctSum - recalculatedSum;
 
-    // Recalculate tax for overridden amount
-    if (originalAccomTax > 0) {
-      const avgTaxRate = tentAccomItems.reduce((sum, i) => sum + i.taxRate, 0) / tentAccomItems.length;
-      const overrideTax = override.overrideSubtotal * (avgTaxRate / 100);
-      itemsTax += overrideTax - originalAccomTax;
+      // Recalculate tax proportionally
+      const recalculatedTax = tentAccomItems.reduce((sum, i) => sum + i.taxAmount, 0);
+      if (recalculatedTax > 0) {
+        const avgTaxRate = tentAccomItems.reduce((sum, i) => sum + i.taxRate, 0) / tentAccomItems.length;
+        const correctTax = correctSum * (avgTaxRate / 100);
+        itemsTax += correctTax - recalculatedTax;
+      }
+    }
+  });
+
+  // Fix addon items with priceOverride: override is for the whole group,
+  // but each parameter row has the full override as subtotal → double-counted.
+  // Group by (addonItemId + bookingTentId) and apply override once per group.
+  const addonGroupMap = new Map<string, { items: PricingItem[]; priceOverride: number | null }>();
+  items.filter(i => i.type === 'addon' && i.addonItemId).forEach(item => {
+    const key = `${item.addonItemId}_${item.bookingTentId || 'none'}`;
+    if (!addonGroupMap.has(key)) {
+      addonGroupMap.set(key, { items: [], priceOverride: item.priceOverride ?? null });
+    }
+    addonGroupMap.get(key)!.items.push(item);
+  });
+
+  addonGroupMap.forEach(group => {
+    if (group.priceOverride !== null && group.items.length > 1) {
+      const currentSum = group.items.reduce((sum, i) => sum + i.subtotal, 0);
+      const currentTaxSum = group.items.reduce((sum, i) => sum + i.taxAmount, 0);
+
+      // Replace summed per-row overrides with single group override
+      itemsSubtotal += group.priceOverride - currentSum;
+
+      // Recalculate tax for the correct override amount
+      if (currentTaxSum > 0) {
+        const avgTaxRate = group.items.reduce((sum, i) => sum + i.taxRate, 0) / group.items.length;
+        const correctTax = group.priceOverride * (avgTaxRate / 100);
+        itemsTax += correctTax - currentTaxSum;
+      }
     }
   });
 
@@ -400,6 +452,7 @@ export function GlampingBookingFinancialTab({
   const totalTax = itemsTax + additionalCostsTax;
   const discountAmount = booking.pricing.discountAmount || 0;
   const calculatedTotal = subtotal - discountAmount + totalTax;
+
 
   // Group items by booking_tent_id and calculate breakdowns
   const groupedByTent: Record<string, PricingItem[]> = {};

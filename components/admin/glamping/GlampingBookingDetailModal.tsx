@@ -594,7 +594,7 @@ export function GlampingBookingDetailModal({
   // Extract common item names (addons) - unique names only
   const commonItemNames = booking.items
     ?.filter(item => item.metadata?.type === 'addon')
-    .map(item => item.itemName)
+    .map(item => item.addonItemName || item.itemName)
     .filter((name, index, self) => self.indexOf(name) === index) || [];
 
   // Extract additional cost names

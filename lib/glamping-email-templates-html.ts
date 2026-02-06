@@ -317,10 +317,10 @@ export const glampingPostStayThankYouHTML = `
 
       <div style="${emailStyles.section}">
         <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0;">
-          Chúng tôi hy vọng bạn đã có những trải nghiệm tuyệt vời tại <strong>{zone_name}</strong>.
+          Chúng tôi hy vọng bạn đã có những trải nghiệm tuyệt vời tại <strong>{property_name}</strong>.
         </p>
         <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 15px 0 0 0;">
-          Mã đặt phòng của bạn: <strong>{booking_reference}</strong>
+          Mã đặt phòng của bạn: <strong>{booking_code}</strong>
         </p>
       </div>
 

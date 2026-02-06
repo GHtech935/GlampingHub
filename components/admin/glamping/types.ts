@@ -43,6 +43,7 @@ export interface BookingItem {
   id: string;
   itemId: string;
   itemName: string;
+  addonItemName?: string | null;
   itemSku?: string;
   parameterId?: string;
   parameterName?: string;

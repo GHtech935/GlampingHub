@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { getSession, isStaffSession } from "@/lib/auth";
-import { sendTemplateEmail } from "@/lib/email";
+import { sendTemplateEmail, sendGlampingPostStayThankYou } from "@/lib/email";
 
 // Disable caching - admin needs real-time data
 export const dynamic = 'force-dynamic';
@@ -143,6 +143,7 @@ export async function GET(
       SELECT
         bi.id,
         bi.item_id,
+        bi.addon_item_id,
         bi.booking_tent_id,
         bi.parameter_id,
         bi.quantity,
@@ -151,11 +152,13 @@ export async function GET(
         bi.metadata,
         i.name as item_name,
         i.sku as item_sku,
+        ai.name as addon_item_name,
         p.name as parameter_name,
         z.id as zone_id,
         z.name as zone_name
       FROM glamping_booking_items bi
       LEFT JOIN glamping_items i ON bi.item_id = i.id
+      LEFT JOIN glamping_items ai ON bi.addon_item_id = ai.id
       LEFT JOIN glamping_parameters p ON bi.parameter_id = p.id
       LEFT JOIN glamping_zones z ON i.zone_id = z.id
       WHERE bi.booking_id = $1
@@ -262,19 +265,23 @@ export async function GET(
         discountAmount: parseFloat(tent.discount_amount || 0),
         parameters: paramsByTentId.get(tent.id) || [],
       })),
-      items: itemsResult.rows.map((item) => ({
-        id: item.id,
-        itemId: item.item_id,
-        itemName: getLocalizedString(item.item_name),
-        itemSku: item.item_sku,
-        parameterId: item.parameter_id,
-        parameterName: getLocalizedString(item.parameter_name),
-        quantity: item.quantity,
-        unitPrice: parseFloat(item.unit_price || 0),
-        totalPrice: parseFloat(item.total_price || 0),
-        bookingTentId: item.booking_tent_id,
-        metadata: item.metadata,
-      })),
+      items: itemsResult.rows.map((item) => {
+        const addonName = item.addon_item_name ? getLocalizedString(item.addon_item_name) : null;
+        return {
+          id: item.id,
+          itemId: item.item_id,
+          itemName: getLocalizedString(item.item_name),
+          addonItemName: addonName,
+          itemSku: item.item_sku,
+          parameterId: item.parameter_id,
+          parameterName: getLocalizedString(item.parameter_name),
+          quantity: item.quantity,
+          unitPrice: parseFloat(item.unit_price || 0),
+          totalPrice: parseFloat(item.total_price || 0),
+          bookingTentId: item.booking_tent_id,
+          metadata: item.metadata,
+        };
+      }),
       payments: paymentsResult.rows.map((payment) => ({
         id: payment.id,
         paymentMethod: payment.payment_method,
@@ -428,260 +435,263 @@ export async function PUT(
 
     await client.query('COMMIT');
 
-    // Send email notifications if status or payment_status changed
-    if (status !== current.status || paymentStatus !== current.payment_status) {
-      try {
-        // Fetch booking details for email
-        const bookingDetailsResult = await pool.query(
-          `SELECT
-            gb.id,
-            gb.booking_code,
-            gb.customer_id,
-            gb.check_in_date,
-            gb.check_out_date,
-            gb.total_amount,
-            gb.deposit_due,
-            gb.balance_due,
-            gb.guests,
-            c.email as customer_email,
-            c.first_name as customer_first_name,
-            c.last_name as customer_last_name,
-            c.phone as customer_phone,
-            gi.name as item_name,
-            gi.zone_id,
-            gz.name as zone_name
-          FROM glamping_bookings gb
-          JOIN customers c ON gb.customer_id = c.id
-          JOIN glamping_booking_items gbi ON gbi.booking_id = gb.id
-          JOIN glamping_items gi ON gbi.item_id = gi.id
-          JOIN glamping_zones gz ON gi.zone_id = gz.id
-          WHERE gb.id = $1
-          LIMIT 1`,
-          [id]
-        );
+    // Capture values needed for background tasks before returning response
+    const statusChanged = status !== current.status || paymentStatus !== current.payment_status;
+    const currentStatus = current.status;
+    const currentPaymentStatus = current.payment_status;
 
-        if (bookingDetailsResult.rows.length > 0) {
-          const booking = bookingDetailsResult.rows[0];
-          const itemName = typeof booking.item_name === 'object'
-            ? (booking.item_name.vi || booking.item_name.en)
-            : booking.item_name;
-          const zoneName = typeof booking.zone_name === 'object'
-            ? (booking.zone_name.vi || booking.zone_name.en)
-            : booking.zone_name;
+    // Return response immediately - don't wait for emails/notifications
+    const response = NextResponse.json({ success: true });
 
-          const finalStatus = status || current.status;
-          const finalPaymentStatus = paymentStatus || current.payment_status;
-
-          // 1. Send email to customer if status changed to confirmed
-          if (finalStatus === 'confirmed' && current.status !== 'confirmed') {
-            const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/glamping/booking/confirmation/${booking.id}`;
-
-            await sendTemplateEmail({
-              templateSlug: 'glamping-booking-confirmed',
-              to: [{
-                email: booking.customer_email,
-                name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim()
-              }],
-              variables: {
-                customer_name: booking.customer_first_name,
-                booking_reference: booking.booking_code,
-                zone_name: zoneName,
-                checkin_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
-                checkout_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
-                notification_link: confirmationLink,
-              },
-              bookingId: id,
-            });
-
-            console.log('✅ Confirmation email sent to customer (manual status change):', booking.customer_email);
-          }
-
-          // 2. Send notification to staff (admin/sale/operations/glamping_owner)
-          // Get staff: admin, sale, operations, and glamping_owner (only for this zone)
-          const staffResult = await pool.query(
-            `SELECT DISTINCT u.email, COALESCE(u.first_name, 'Admin') as name
-             FROM users u
-             LEFT JOIN user_glamping_zones ugz ON u.id = ugz.user_id AND ugz.zone_id = $1
-             WHERE u.is_active = true
-             AND (
-               u.role IN ('admin', 'sale', 'operations')
-               OR (u.role = 'glamping_owner' AND ugz.zone_id IS NOT NULL)
-             )`,
-            [booking.zone_id]
+    // Fire-and-forget: send emails and notifications in background
+    if (statusChanged) {
+      (async () => {
+        // Send email notifications
+        try {
+          const bookingDetailsResult = await pool.query(
+            `SELECT
+              gb.id,
+              gb.booking_code,
+              gb.customer_id,
+              gb.check_in_date,
+              gb.check_out_date,
+              gb.total_amount,
+              gb.deposit_due,
+              gb.balance_due,
+              gb.guests,
+              c.email as customer_email,
+              c.first_name as customer_first_name,
+              c.last_name as customer_last_name,
+              c.phone as customer_phone,
+              gi.name as item_name,
+              gi.zone_id,
+              gz.name as zone_name
+            FROM glamping_bookings gb
+            JOIN customers c ON gb.customer_id = c.id
+            JOIN glamping_booking_items gbi ON gbi.booking_id = gb.id
+            JOIN glamping_items gi ON gbi.item_id = gi.id
+            JOIN glamping_zones gz ON gi.zone_id = gz.id
+            WHERE gb.id = $1
+            LIMIT 1`,
+            [id]
           );
 
-          const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
-          const bookingLink = `${appUrl}/admin/zones/all/bookings?booking_code=${booking.booking_code}`;
+          if (bookingDetailsResult.rows.length > 0) {
+            const booking = bookingDetailsResult.rows[0];
+            const itemName = typeof booking.item_name === 'object'
+              ? (booking.item_name.vi || booking.item_name.en)
+              : booking.item_name;
+            const zoneName = typeof booking.zone_name === 'object'
+              ? (booking.zone_name.vi || booking.zone_name.en)
+              : booking.zone_name;
 
-          // Determine template based on status change
-          let templateSlug = 'glamping-admin-new-booking-pending';
-          let emailSubjectContext = '';
+            const finalStatus = status || currentStatus;
+            const finalPaymentStatus = paymentStatus || currentPaymentStatus;
 
-          if (finalStatus === 'confirmed' && current.status !== 'confirmed') {
-            templateSlug = 'glamping-admin-new-booking-pending';
-            emailSubjectContext = 'Admin đã xác nhận đơn đặt chỗ';
-          } else if (finalStatus === 'cancelled' && current.status !== 'cancelled') {
-            // For cancelled status, we might want a different template
-            // But for now, use the same template
-            emailSubjectContext = 'Đơn đặt chỗ đã bị hủy';
-          } else if (paymentStatus !== current.payment_status) {
-            emailSubjectContext = 'Trạng thái thanh toán đã thay đổi';
-          }
+            // 1. Send email to customer if status changed to confirmed
+            if (finalStatus === 'confirmed' && currentStatus !== 'confirmed') {
+              const confirmationLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000'}/glamping/booking/confirmation/${booking.id}`;
 
-          for (const staff of staffResult.rows) {
-            await sendTemplateEmail({
-              templateSlug: templateSlug,
-              to: [{ email: staff.email, name: staff.name }],
-              variables: {
-                admin_name: staff.name,
-                booking_reference: booking.booking_code,
-                amount: new Intl.NumberFormat('vi-VN').format(booking.total_amount) + ' ₫',
-                guest_name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim(),
-                guest_email: booking.customer_email,
-                zone_name: zoneName,
-                item_name: itemName,
-                check_in_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
-                check_out_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
-                notification_link: bookingLink,
-              },
-              bookingId: id,
-            });
-          }
+              await sendTemplateEmail({
+                templateSlug: 'glamping-booking-confirmed',
+                to: [{
+                  email: booking.customer_email,
+                  name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim()
+                }],
+                variables: {
+                  customer_name: booking.customer_first_name,
+                  booking_reference: booking.booking_code,
+                  zone_name: zoneName,
+                  checkin_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
+                  checkout_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
+                  notification_link: confirmationLink,
+                },
+                glampingBookingId: id,
+              });
 
-          console.log(`✅ Status change notification emails sent to ${staffResult.rows.length} staff member(s)`);
-        }
-      } catch (emailError) {
-        console.error('⚠️ Failed to send status change emails:', emailError);
-        // Don't fail the request if email sending fails
-      }
+              console.log('✅ Confirmation email sent to customer (manual status change):', booking.customer_email);
+            }
 
-      // Send in-app (bell) notifications
-      try {
-        const {
-          sendNotificationToCustomer,
-          broadcastToRole,
-          notifyGlampingOwnersOfBooking,
-        } = await import('@/lib/notifications');
+            // 1b. Send thank-you email to customer when checked out
+            if (finalStatus === 'checked_out' && currentStatus !== 'checked_out') {
+              await sendGlampingPostStayThankYou({
+                customerEmail: booking.customer_email,
+                customerName: `${booking.customer_first_name} ${booking.customer_last_name}`.trim(),
+                bookingCode: booking.booking_code,
+                propertyName: `${zoneName} - ${itemName}`,
+                glampingBookingId: id,
+              });
 
-        // Fetch booking details for notifications
-        const notificationBookingResult = await pool.query(
-          `SELECT
-            gb.id,
-            gb.booking_code,
-            gb.customer_id,
-            gb.check_in_date,
-            gb.check_out_date,
-            gb.total_amount,
-            c.first_name as customer_first_name,
-            c.last_name as customer_last_name,
-            gz.name as zone_name
-          FROM glamping_bookings gb
-          JOIN customers c ON gb.customer_id = c.id
-          LEFT JOIN glamping_booking_items gbi ON gb.id = gbi.booking_id
-          LEFT JOIN glamping_items gi ON gbi.item_id = gi.id
-          LEFT JOIN glamping_zones gz ON gi.zone_id = gz.id
-          WHERE gb.id = $1
-          LIMIT 1`,
-          [id]
-        );
-        const bookingData = notificationBookingResult.rows[0];
+              console.log('✅ Post-stay thank-you email sent to customer:', booking.customer_email);
+            }
 
-        if (bookingData) {
-          const customerName = `${bookingData.customer_first_name} ${bookingData.customer_last_name}`.trim();
-          const zoneName = typeof bookingData.zone_name === 'object'
-            ? (bookingData.zone_name.vi || bookingData.zone_name.en)
-            : bookingData.zone_name;
-
-          const finalStatus = status || current.status;
-          const finalPaymentStatus = paymentStatus || current.payment_status;
-
-          // Prepare notification data
-          const notificationData = {
-            booking_reference: bookingData.booking_code,
-            booking_code: bookingData.booking_code,
-            booking_id: id,
-            customer_name: customerName,
-            campsite_name: zoneName,
-            checkin_date: new Date(bookingData.check_in_date).toLocaleDateString('vi-VN'),
-            checkout_date: new Date(bookingData.check_out_date).toLocaleDateString('vi-VN'),
-            refund_message: '',
-          };
-
-          // 1. Status changed to 'confirmed'
-          if (finalStatus === 'confirmed' && current.status !== 'confirmed') {
-            // Notify customer
-            await sendNotificationToCustomer(
-              bookingData.customer_id,
-              'booking_confirmed',
-              notificationData,
-              'glamping'
+            // 2. Send notification to staff (admin/sale/operations/glamping_owner)
+            const staffResult = await pool.query(
+              `SELECT DISTINCT u.email, COALESCE(u.first_name, 'Admin') as name
+               FROM users u
+               LEFT JOIN user_glamping_zones ugz ON u.id = ugz.user_id AND ugz.zone_id = $1
+               WHERE u.is_active = true
+               AND (
+                 u.role IN ('admin', 'sale', 'operations')
+                 OR (u.role = 'glamping_owner' AND ugz.zone_id IS NOT NULL)
+               )`,
+              [booking.zone_id]
             );
 
-            // Notify staff
-            await Promise.all([
-              broadcastToRole('admin', 'owner_booking_confirmed', notificationData, 'glamping'),
-              broadcastToRole('operations', 'owner_booking_confirmed', notificationData, 'glamping'),
-            ]);
+            const appUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:4000';
+            const bookingLink = `${appUrl}/admin/zones/all/bookings?booking_code=${booking.booking_code}`;
 
-            // Notify zone owners
-            await notifyGlampingOwnersOfBooking(id, 'owner_booking_confirmed', notificationData);
+            // Determine template based on status change
+            let templateSlug = 'glamping-admin-new-booking-pending';
+
+            if (finalStatus === 'confirmed' && currentStatus !== 'confirmed') {
+              templateSlug = 'glamping-admin-new-booking-pending';
+            }
+
+            // Send staff emails in parallel instead of sequentially
+            await Promise.all(staffResult.rows.map(staff =>
+              sendTemplateEmail({
+                templateSlug: templateSlug,
+                to: [{ email: staff.email, name: staff.name }],
+                variables: {
+                  admin_name: staff.name,
+                  booking_reference: booking.booking_code,
+                  amount: new Intl.NumberFormat('vi-VN').format(booking.total_amount) + ' ₫',
+                  guest_name: `${booking.customer_first_name} ${booking.customer_last_name}`.trim(),
+                  guest_email: booking.customer_email,
+                  zone_name: zoneName,
+                  item_name: itemName,
+                  check_in_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
+                  check_out_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
+                  notification_link: bookingLink,
+                },
+                glampingBookingId: id,
+              })
+            ));
+
+            console.log(`✅ Status change notification emails sent to ${staffResult.rows.length} staff member(s)`);
           }
-
-          // 2. Status changed to 'cancelled'
-          if (finalStatus === 'cancelled' && current.status !== 'cancelled') {
-            // Notify customer
-            await sendNotificationToCustomer(
-              bookingData.customer_id,
-              'booking_cancelled',
-              notificationData,
-              'glamping'
-            );
-
-            // Notify staff
-            await Promise.all([
-              broadcastToRole('admin', 'owner_booking_cancelled', notificationData, 'glamping'),
-              broadcastToRole('operations', 'owner_booking_cancelled', notificationData, 'glamping'),
-            ]);
-
-            // Notify zone owners
-            await notifyGlampingOwnersOfBooking(id, 'owner_booking_cancelled', notificationData);
-          }
-
-          // 3. Payment status changed
-          if (paymentStatus && paymentStatus !== current.payment_status) {
-            const paymentStatusMap: Record<string, string> = {
-              'fully_paid': 'Đã thanh toán đủ',
-              'deposit_paid': 'Đã đặt cọc',
-              'pending': 'Chờ thanh toán',
-              'refunded': 'Đã hoàn tiền',
-            };
-            const paymentStatusDisplay = paymentStatusMap[finalPaymentStatus] || finalPaymentStatus;
-
-            const paymentNotificationData = {
-              ...notificationData,
-              payment_status: paymentStatusDisplay,
-              amount: new Intl.NumberFormat('vi-VN').format(bookingData.total_amount) + ' ₫',
-            };
-
-            // Notify staff
-            await Promise.all([
-              broadcastToRole('admin', 'payment_status_updated', paymentNotificationData, 'glamping'),
-              broadcastToRole('operations', 'payment_status_updated', paymentNotificationData, 'glamping'),
-            ]);
-
-            // Notify zone owners
-            await notifyGlampingOwnersOfBooking(id, 'payment_status_updated', paymentNotificationData);
-          }
-
-          console.log('✅ In-app notifications sent for booking status change');
+        } catch (emailError) {
+          console.error('⚠️ Failed to send status change emails:', emailError);
         }
-      } catch (notificationError) {
-        console.error('⚠️ Failed to send in-app notifications:', notificationError);
-        // Don't fail the request if notification sending fails
-      }
+
+        // Send in-app (bell) notifications
+        try {
+          const {
+            sendNotificationToCustomer,
+            broadcastToRole,
+            notifyGlampingOwnersOfBooking,
+          } = await import('@/lib/notifications');
+
+          const notificationBookingResult = await pool.query(
+            `SELECT
+              gb.id,
+              gb.booking_code,
+              gb.customer_id,
+              gb.check_in_date,
+              gb.check_out_date,
+              gb.total_amount,
+              c.first_name as customer_first_name,
+              c.last_name as customer_last_name,
+              gz.name as zone_name
+            FROM glamping_bookings gb
+            JOIN customers c ON gb.customer_id = c.id
+            LEFT JOIN glamping_booking_items gbi ON gb.id = gbi.booking_id
+            LEFT JOIN glamping_items gi ON gbi.item_id = gi.id
+            LEFT JOIN glamping_zones gz ON gi.zone_id = gz.id
+            WHERE gb.id = $1
+            LIMIT 1`,
+            [id]
+          );
+          const bookingData = notificationBookingResult.rows[0];
+
+          if (bookingData) {
+            const customerName = `${bookingData.customer_first_name} ${bookingData.customer_last_name}`.trim();
+            const zoneName = typeof bookingData.zone_name === 'object'
+              ? (bookingData.zone_name.vi || bookingData.zone_name.en)
+              : bookingData.zone_name;
+
+            const finalStatus = status || currentStatus;
+            const finalPaymentStatus = paymentStatus || currentPaymentStatus;
+
+            const notificationData = {
+              booking_reference: bookingData.booking_code,
+              booking_code: bookingData.booking_code,
+              booking_id: id,
+              customer_name: customerName,
+              campsite_name: zoneName,
+              checkin_date: new Date(bookingData.check_in_date).toLocaleDateString('vi-VN'),
+              checkout_date: new Date(bookingData.check_out_date).toLocaleDateString('vi-VN'),
+              refund_message: '',
+            };
+
+            // 1. Status changed to 'confirmed'
+            if (finalStatus === 'confirmed' && currentStatus !== 'confirmed') {
+              await sendNotificationToCustomer(
+                bookingData.customer_id,
+                'booking_confirmed',
+                notificationData,
+                'glamping'
+              );
+
+              await Promise.all([
+                broadcastToRole('admin', 'owner_booking_confirmed', notificationData, 'glamping'),
+                broadcastToRole('operations', 'owner_booking_confirmed', notificationData, 'glamping'),
+              ]);
+
+              await notifyGlampingOwnersOfBooking(id, 'owner_booking_confirmed', notificationData);
+            }
+
+            // 2. Status changed to 'cancelled'
+            if (finalStatus === 'cancelled' && currentStatus !== 'cancelled') {
+              await sendNotificationToCustomer(
+                bookingData.customer_id,
+                'booking_cancelled',
+                notificationData,
+                'glamping'
+              );
+
+              await Promise.all([
+                broadcastToRole('admin', 'owner_booking_cancelled', notificationData, 'glamping'),
+                broadcastToRole('operations', 'owner_booking_cancelled', notificationData, 'glamping'),
+              ]);
+
+              await notifyGlampingOwnersOfBooking(id, 'owner_booking_cancelled', notificationData);
+            }
+
+            // 3. Payment status changed
+            if (paymentStatus && paymentStatus !== currentPaymentStatus) {
+              const paymentStatusMap: Record<string, string> = {
+                'fully_paid': 'Đã thanh toán đủ',
+                'deposit_paid': 'Đã đặt cọc',
+                'pending': 'Chờ thanh toán',
+                'refunded': 'Đã hoàn tiền',
+              };
+              const paymentStatusDisplay = paymentStatusMap[finalPaymentStatus] || finalPaymentStatus;
+
+              const paymentNotificationData = {
+                ...notificationData,
+                payment_status: paymentStatusDisplay,
+                amount: new Intl.NumberFormat('vi-VN').format(bookingData.total_amount) + ' ₫',
+              };
+
+              await Promise.all([
+                broadcastToRole('admin', 'payment_status_updated', paymentNotificationData, 'glamping'),
+                broadcastToRole('operations', 'payment_status_updated', paymentNotificationData, 'glamping'),
+              ]);
+
+              await notifyGlampingOwnersOfBooking(id, 'payment_status_updated', paymentNotificationData);
+            }
+
+            console.log('✅ In-app notifications sent for booking status change');
+          }
+        } catch (notificationError) {
+          console.error('⚠️ Failed to send in-app notifications:', notificationError);
+        }
+      })();
     }
 
-    return NextResponse.json({ success: true });
+    return response;
   } catch (error) {
     await client.query('ROLLBACK');
     console.error("Error updating glamping booking:", error);

@@ -366,12 +366,13 @@ export async function GET(
       }
     });
 
-    // Calculate accommodation total using tent overrides when available
+    // Calculate accommodation total using stored tent subtotals from DB
+    // (not recalculated from booking_items, which may have missing pricingMode for older bookings)
     const accommodationTotal = tentsResult.rows.reduce((sum, tent) => {
       const hasOverride = tent.subtotal_override !== null && tent.subtotal_override !== undefined;
       const effectiveSubtotal = hasOverride
         ? parseFloat(tent.subtotal_override)
-        : (tentCalculatedTotals.get(tent.id) || parseFloat(tent.subtotal || '0'));
+        : parseFloat(tent.subtotal || '0');
       return sum + effectiveSubtotal;
     }, 0);
 
@@ -382,25 +383,52 @@ export async function GET(
         : null;
       return sum + (override !== null ? override : (parseFloat(p.total_price) || 0));
     }, 0);
-    const addonsTotal = addonItems.reduce((sum, a) => sum + a.subtotal, 0);
+    // Group addon items by (addonItemId + bookingTentId) to handle priceOverride correctly
+    // When priceOverride exists, each row has the full override as subtotal,
+    // but the override is for the whole group → must count only once per group
+    const addonGroupTotalsMap = new Map<string, { subtotal: number; priceOverride: number | null }>();
+    addonItems.forEach(a => {
+      const key = `${a.addonItemId || 'none'}_${a.bookingTentId || 'none'}`;
+      if (!addonGroupTotalsMap.has(key)) {
+        addonGroupTotalsMap.set(key, { subtotal: 0, priceOverride: a.priceOverride });
+      }
+      const group = addonGroupTotalsMap.get(key)!;
+      group.subtotal += a.subtotal;
+    });
+    let addonsTotal = 0;
+    addonGroupTotalsMap.forEach(group => {
+      if (group.priceOverride !== null) {
+        addonsTotal += group.priceOverride; // Use override once per group
+      } else {
+        addonsTotal += group.subtotal;
+      }
+    });
+
     const additionalCostsTotal = additionalCosts.reduce((sum, c) => sum + c.totalPrice, 0);
 
     // Sum per-tent discounts
     const totalTentDiscounts = tentsResult.rows.reduce((sum, t) => sum + (parseFloat(t.discount_amount) || 0), 0);
     // Sum per-product discounts
     const totalProductDiscounts = productsResult.rows.reduce((sum, p) => sum + (parseFloat(p.discount_amount) || 0), 0);
-    // Sum per-addon discounts
-    const totalAddonDiscounts = addonItems.reduce((sum, a) => sum + a.discountAmount, 0);
+    // Sum per-addon discounts (grouped to avoid double-counting per-row)
+    const addonDiscountGroupMap = new Map<string, number>();
+    addonItems.forEach(a => {
+      const key = `${a.addonItemId || 'none'}_${a.bookingTentId || 'none'}`;
+      if (!addonDiscountGroupMap.has(key)) {
+        addonDiscountGroupMap.set(key, a.discountAmount);
+      }
+    });
+    const totalAddonDiscounts = Array.from(addonDiscountGroupMap.values()).reduce((sum, d) => sum + d, 0);
 
     const subtotal = accommodationTotal + productsTotal + addonsTotal + additionalCostsTotal;
 
-    // Calculate accommodation tax based on effective subtotals (with overrides)
+    // Calculate accommodation tax based on stored tent subtotals (with overrides)
     const accommodationTax = booking.tax_invoice_required
       ? tentsResult.rows.reduce((sum, tent) => {
           const hasOverride = tent.subtotal_override !== null && tent.subtotal_override !== undefined;
           const effectiveSubtotal = hasOverride
             ? parseFloat(tent.subtotal_override)
-            : (tentCalculatedTotals.get(tent.id) || parseFloat(tent.subtotal || '0'));
+            : parseFloat(tent.subtotal || '0');
           // Get tax rate for this tent's item
           const itemTaxInfo = tent.item_id ? itemTaxMap.get(tent.item_id) : undefined;
           const taxRate = itemTaxInfo ? itemTaxInfo.taxRate : 0;
@@ -408,7 +436,27 @@ export async function GET(
         }, 0)
       : 0;
     const productsTax = products.reduce((sum, p) => sum + p.taxAmount, 0);
-    const addonsTax = addonItems.reduce((sum, a) => sum + a.taxAmount, 0);
+    // Calculate addon tax using grouped totals (consistent with addonsTotal grouping)
+    let addonsTax = 0;
+    const addonGroupTaxMap = new Map<string, { taxAmount: number; priceOverride: number | null; items: typeof addonItems }>();
+    addonItems.forEach(a => {
+      const key = `${a.addonItemId || 'none'}_${a.bookingTentId || 'none'}`;
+      if (!addonGroupTaxMap.has(key)) {
+        addonGroupTaxMap.set(key, { taxAmount: 0, priceOverride: a.priceOverride, items: [] });
+      }
+      const group = addonGroupTaxMap.get(key)!;
+      group.taxAmount += a.taxAmount;
+      group.items.push(a);
+    });
+    addonGroupTaxMap.forEach(group => {
+      if (group.priceOverride !== null && group.items.length > 1) {
+        // Recalculate tax for the single override amount
+        const avgTaxRate = group.items.reduce((sum, i) => sum + i.taxRate, 0) / group.items.length;
+        addonsTax += group.priceOverride * (avgTaxRate / 100);
+      } else {
+        addonsTax += group.taxAmount;
+      }
+    });
     const additionalCostsTax = additionalCosts.reduce((sum, c) => sum + c.taxAmount, 0);
     const totalTax = accommodationTax + productsTax + addonsTax + additionalCostsTax;
 
@@ -450,6 +498,15 @@ export async function GET(
           calculatedSubtotal: parseFloat(t.subtotal || 0),
           overrideSubtotal: parseFloat(t.subtotal_override),
         })),
+      // Per-tent stored subtotals from DB (used by financial tab for correct totals
+      // when booking_items metadata.pricingMode is missing for older bookings)
+      tentSubtotals: tentsResult.rows.map(t => ({
+        tentId: t.id,
+        storedSubtotal: parseFloat(t.subtotal || 0),
+        overrideSubtotal: t.subtotal_override !== null && t.subtotal_override !== undefined
+          ? parseFloat(t.subtotal_override)
+          : null,
+      })),
       totals: {
         accommodationBeforeDiscount: accommodationTotal,
         accommodationDiscounts: totalTentDiscounts,
