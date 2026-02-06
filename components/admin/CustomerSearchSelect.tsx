@@ -63,13 +63,14 @@ export function CustomerSearchSelect({
 
   // Initialize selectedCustomer from preselectedCustomer prop when copying booking
   useEffect(() => {
-    if (preselectedCustomer && !selectedCustomer) {
+    // Only set selectedCustomer if preselectedCustomer has valid data (has id and name)
+    if (preselectedCustomer && preselectedCustomer.id && preselectedCustomer.first_name && !selectedCustomer) {
       setSelectedCustomer(preselectedCustomer)
       setShowNewCustomerForm(false)
     }
 
-    // Reset internal state when prop is cleared
-    if (!preselectedCustomer && selectedCustomer && !selectedCustomerId) {
+    // Reset internal state when prop is cleared or invalid
+    if ((!preselectedCustomer || !preselectedCustomer.id) && selectedCustomer && !selectedCustomerId) {
       setSelectedCustomer(null)
     }
   }, [preselectedCustomer])
@@ -159,7 +160,8 @@ export function CustomerSearchSelect({
               size="sm"
               onClick={() => {
                 setSelectedCustomer(null)
-                onCustomerSelect('', {} as Customer)
+                // Pass undefined instead of empty object to properly clear the customer
+                onCustomerSelect('', undefined as any)
                 setSearchQuery('')
               }}
             >

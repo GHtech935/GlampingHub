@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Loader2, Save } from 'lucide-react'
+import { Loader2, CreditCard, Clock, Wallet } from 'lucide-react'
 import { CustomerSearchSelect } from './CustomerSearchSelect'
 import { SimpleRichTextEditor } from '@/components/ui/SimpleRichTextEditor'
 import { formatCurrency } from '@/lib/utils'
@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { MonthDayPicker } from '@/components/ui/month-day-picker'
 import type { AdminTentItem } from './AdminTentTabContent'
 
@@ -37,6 +38,12 @@ interface NewCustomerData {
   last_name: string
   phone: string
   country: string
+}
+
+interface DepositSettings {
+  hasDeposit: boolean
+  depositType: 'percentage' | 'fixed_amount' | null
+  depositValue: number
 }
 
 interface AdminBookingSummaryTabProps {
@@ -73,8 +80,13 @@ interface AdminBookingSummaryTabProps {
   // Pricing
   pricingData: any
   pricingLoading: boolean
-  // Submit
-  onSubmit: () => void
+  // Deposit settings
+  depositSettings: DepositSettings
+  grandTotal: number
+  depositAmount: number
+  balanceAmount: number
+  // Submit - now opens QR modal instead of direct submit
+  onShowPaymentModal: () => void
   submitting: boolean
   validateForm: () => string | null
 }
@@ -108,10 +120,44 @@ export function AdminBookingSummaryTab({
   onPaymentMethodChange,
   pricingData,
   pricingLoading,
-  onSubmit,
+  depositSettings,
+  grandTotal,
+  depositAmount,
+  balanceAmount,
+  onShowPaymentModal,
   submitting,
   validateForm,
 }: AdminBookingSummaryTabProps) {
+  // Check if deposit covers 100% (no need for Pay Later option)
+  const isFullPaymentDeposit =
+    (depositSettings.depositType === 'percentage' && depositSettings.depositValue >= 100) ||
+    (grandTotal > 0 && depositAmount >= grandTotal)
+
+  // Show Pay Later when zone has deposit settings AND deposit is NOT 100%
+  const showPayLater = depositSettings.hasDeposit && !isFullPaymentDeposit
+
+  // Get deposit label for display
+  const getDepositLabel = () => {
+    if (!depositSettings.depositValue) return ''
+    if (depositSettings.depositType === 'percentage') {
+      return locale === 'vi' ? `Đặt cọc ${depositSettings.depositValue}%` : `${depositSettings.depositValue}% deposit`
+    }
+    return locale === 'vi' ? `Đặt cọc ${formatCurrency(depositSettings.depositValue, locale)}` : `${formatCurrency(depositSettings.depositValue, locale)} deposit`
+  }
+
+  // Get button text based on payment method
+  const getButtonText = () => {
+    if (grandTotal === 0) {
+      return locale === 'vi' ? 'Tạo Booking miễn phí' : 'Create Free Booking'
+    }
+    if (paymentMethod === 'pay_later') {
+      if (!depositSettings.depositValue) {
+        return locale === 'vi' ? 'Đặt phòng ngay' : 'Book Now'
+      }
+      return locale === 'vi' ? `Thanh toán đặt cọc ${formatCurrency(depositAmount, locale)}` : `Pay Deposit ${formatCurrency(depositAmount, locale)}`
+    }
+    return locale === 'vi' ? `Thanh toán ${formatCurrency(grandTotal, locale)}` : `Pay ${formatCurrency(grandTotal, locale)}`
+  }
   const handleCustomerSelect = (customerId: string, customer: Customer) => {
     onCustomerSelect(customerId, customer)
   }
@@ -278,51 +324,10 @@ export function AdminBookingSummaryTab({
         </div>
       </div>
 
-      {/* Section 4: Internal Notes & Payment */}
+      {/* Section 4: Pricing Summary */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-sm">4</span>
-          {locale === 'vi' ? 'Ghi Chú Nội Bộ & Thanh Toán' : 'Internal Notes & Payment'}
-        </h3>
-
-        <div className="space-y-2">
-          <Label htmlFor="internal-notes">
-            {locale === 'vi' ? 'Ghi chú nội bộ (chỉ admin thấy)' : 'Internal notes (admin only)'}
-          </Label>
-          <Textarea
-            id="internal-notes"
-            placeholder={locale === 'vi' ? 'Ghi chú nội bộ...' : 'Internal notes...'}
-            value={internalNotes}
-            onChange={(e) => onInternalNotesChange(e.target.value)}
-            rows={2}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="payment-method">
-            {locale === 'vi' ? 'Phương thức thanh toán' : 'Payment method'}
-            <span className="text-red-500">*</span>
-          </Label>
-          <Select value={paymentMethod} onValueChange={(v) => onPaymentMethodChange(v as 'pay_now' | 'pay_later')}>
-            <SelectTrigger>
-              <SelectValue placeholder={locale === 'vi' ? 'Chọn phương thức' : 'Select method'} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pay_now">
-                {locale === 'vi' ? 'Thanh toán ngay' : 'Pay Now'}
-              </SelectItem>
-              <SelectItem value="pay_later">
-                {locale === 'vi' ? 'Thanh toán sau' : 'Pay Later'}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Section 5: Pricing Summary */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-sm">5</span>
           {locale === 'vi' ? 'Tổng Kết Giá' : 'Pricing Summary'}
         </h3>
 
@@ -504,20 +509,169 @@ export function AdminBookingSummaryTab({
         </Card>
       </div>
 
+      {/* Section 5: Internal Notes & Payment */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-sm">5</span>
+          {locale === 'vi' ? 'Ghi Chú Nội Bộ & Thanh Toán' : 'Internal Notes & Payment'}
+        </h3>
+
+        <div className="space-y-2">
+          <Label htmlFor="internal-notes">
+            {locale === 'vi' ? 'Ghi chú nội bộ (chỉ admin thấy)' : 'Internal notes (admin only)'}
+          </Label>
+          <Textarea
+            id="internal-notes"
+            placeholder={locale === 'vi' ? 'Ghi chú nội bộ...' : 'Internal notes...'}
+            value={internalNotes}
+            onChange={(e) => onInternalNotesChange(e.target.value)}
+            rows={2}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-green-600" />
+            {locale === 'vi' ? 'Phương thức thanh toán' : 'Payment method'}
+            <span className="text-red-500">*</span>
+          </Label>
+
+          <RadioGroup
+            value={paymentMethod}
+            onValueChange={(v) => onPaymentMethodChange(v as 'pay_now' | 'pay_later')}
+            className="space-y-3"
+          >
+            {/* Pay Now Option */}
+            <label
+              htmlFor="pay_now"
+              className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                paymentMethod === 'pay_now'
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <RadioGroupItem value="pay_now" id="pay_now" className="mt-1" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-green-600" />
+                  <span className="font-medium text-gray-900">
+                    {locale === 'vi' ? 'Thanh toán ngay' : 'Pay Now'}
+                  </span>
+                  <span className="text-sm text-gray-500">(100%)</span>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  {locale === 'vi'
+                    ? 'Thanh toán toàn bộ số tiền để hoàn tất đặt phòng'
+                    : 'Pay the full amount to complete the booking'}
+                </p>
+                {paymentMethod === 'pay_now' && grandTotal > 0 && (
+                  <div className="mt-2 text-green-700 font-semibold">
+                    {locale === 'vi' ? 'Tổng thanh toán: ' : 'Total: '}
+                    {formatCurrency(grandTotal, locale)}
+                  </div>
+                )}
+              </div>
+            </label>
+
+            {/* Pay Later Option - Only show if allowed AND deposit is not 100% */}
+            {showPayLater && (
+              <label
+                htmlFor="pay_later"
+                className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                  paymentMethod === 'pay_later'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <RadioGroupItem value="pay_later" id="pay_later" className="mt-1" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-gray-900">
+                      {locale === 'vi' ? 'Thanh toán sau' : 'Pay Later'}
+                    </span>
+                    {depositSettings.depositValue > 0 && (
+                      <span className="text-sm text-gray-500">
+                        ({getDepositLabel()})
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {depositSettings.depositValue > 0
+                      ? depositSettings.depositType === 'percentage'
+                        ? locale === 'vi'
+                          ? `Đặt cọc ${depositSettings.depositValue}% ngay, thanh toán phần còn lại khi trả phòng`
+                          : `Pay ${depositSettings.depositValue}% deposit now, pay the rest at checkout`
+                        : locale === 'vi'
+                          ? `Đặt cọc ${formatCurrency(depositSettings.depositValue, locale)} ngay, thanh toán phần còn lại khi trả phòng`
+                          : `Pay ${formatCurrency(depositSettings.depositValue, locale)} deposit now, pay the rest at checkout`
+                      : locale === 'vi'
+                        ? 'Thanh toán toàn bộ khi trả phòng'
+                        : 'Pay the full amount at checkout'}
+                  </p>
+                  {paymentMethod === 'pay_later' && (
+                    <div className="mt-3 p-3 bg-white rounded-md border border-blue-200 space-y-1">
+                      {depositSettings.depositValue > 0 ? (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              {locale === 'vi' ? 'Thanh toán ngay:' : 'Pay now:'}
+                            </span>
+                            <span className="font-semibold text-blue-700">
+                              {formatCurrency(depositAmount, locale)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              {locale === 'vi' ? 'Thanh toán sau:' : 'Pay later:'}
+                            </span>
+                            <span className="font-medium text-gray-700">
+                              {formatCurrency(balanceAmount, locale)}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">
+                            {locale === 'vi' ? 'Thanh toán sau:' : 'Pay later:'}
+                          </span>
+                          <span className="font-semibold text-blue-700">
+                            {formatCurrency(grandTotal, locale)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </label>
+            )}
+          </RadioGroup>
+        </div>
+      </div>
+
       {/* Submit button */}
       <div className="pt-4 border-t">
         <Button
-          onClick={onSubmit}
+          onClick={onShowPaymentModal}
           disabled={submitting || !!validateForm()}
-          className="w-full"
+          className={`w-full py-6 text-lg font-semibold ${
+            paymentMethod === 'pay_later'
+              ? 'bg-blue-600 hover:bg-blue-700'
+              : 'bg-green-600 hover:bg-green-700'
+          } text-white`}
           size="lg"
         >
           {submitting ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <>
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+              {locale === 'vi' ? 'Đang xử lý...' : 'Processing...'}
+            </>
           ) : (
-            <Save className="h-4 w-4 mr-2" />
+            <>
+              <CreditCard className="h-5 w-5 mr-2" />
+              {getButtonText()}
+            </>
           )}
-          {locale === 'vi' ? 'Tạo Booking' : 'Create Booking'}
         </Button>
       </div>
     </div>

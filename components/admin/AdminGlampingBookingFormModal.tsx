@@ -14,6 +14,7 @@ import { X, Plus, Info } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminTentTabContent, createEmptyTent, type AdminTentItem } from './AdminTentTabContent'
 import { AdminBookingSummaryTab } from './AdminBookingSummaryTab'
+import { AdminPaymentQRModal } from './AdminPaymentQRModal'
 import { getLocalizedText } from '@/lib/i18n-utils'
 import { addDays, parseISO, format } from 'date-fns'
 
@@ -29,6 +30,7 @@ interface AdminBookingDraft {
   activeTabId: string
   selectedCustomerId: string
   newCustomerData: NewCustomerData | null
+  preselectedCustomer: Customer | null // Store full customer object for display
   partyNames: string
   specialRequirements: string
   invoiceNotes: string
@@ -109,6 +111,21 @@ export function AdminGlampingBookingFormModal({
   const [multiPricingData, setMultiPricingData] = useState<any>(null)
   const [pricingLoading, setPricingLoading] = useState(false)
 
+  // ========== DEPOSIT SETTINGS STATE ==========
+  const [depositSettings, setDepositSettings] = useState<{
+    hasDeposit: boolean
+    depositType: 'percentage' | 'fixed_amount' | null
+    depositValue: number
+  }>({
+    hasDeposit: false,
+    depositType: null,
+    depositValue: 0,
+  })
+
+  // ========== QR MODAL STATE ==========
+  const [showPaymentQRModal, setShowPaymentQRModal] = useState(false)
+  const [createdBookingCode, setCreatedBookingCode] = useState<string>('')
+
   // ========== LOCALSTORAGE PERSISTENCE STATE ==========
   const [isInitialized, setIsInitialized] = useState(false)
   const [hasDraftRestored, setHasDraftRestored] = useState(false)
@@ -176,6 +193,9 @@ export function AdminGlampingBookingFormModal({
         if (draft.newCustomerData) {
           setNewCustomerData(draft.newCustomerData)
         }
+        if (draft.preselectedCustomer) {
+          setPreselectedCustomer(draft.preselectedCustomer)
+        }
         setPartyNames(draft.partyNames || '')
         setSpecialRequirements(draft.specialRequirements || '')
         setInvoiceNotes(draft.invoiceNotes || '')
@@ -241,6 +261,7 @@ export function AdminGlampingBookingFormModal({
         activeTabId,
         selectedCustomerId,
         newCustomerData,
+        preselectedCustomer,
         partyNames,
         specialRequirements,
         invoiceNotes,
@@ -266,6 +287,7 @@ export function AdminGlampingBookingFormModal({
     activeTabId,
     selectedCustomerId,
     newCustomerData,
+    preselectedCustomer,
     partyNames,
     specialRequirements,
     invoiceNotes,
@@ -436,13 +458,102 @@ export function AdminGlampingBookingFormModal({
     tents.map(t => `${t.itemId}|${t.checkIn}|${t.checkOut}|${JSON.stringify(t.parameterQuantities)}`).join(',')
   ])
 
+  // ========== FETCH DEPOSIT SETTINGS ==========
+  useEffect(() => {
+    const fetchDepositSettings = async () => {
+      // Find first tent with itemId
+      const firstTentWithItem = tents.find(t => t.itemId)
+      if (!firstTentWithItem?.itemId) {
+        setDepositSettings({
+          hasDeposit: false,
+          depositType: null,
+          depositValue: 0,
+        })
+        return
+      }
+
+      try {
+        const res = await fetch(`/api/glamping/items/${firstTentWithItem.itemId}/deposit-settings`)
+        if (res.ok) {
+          const data = await res.json()
+          setDepositSettings({
+            hasDeposit: data.hasDeposit,
+            depositType: data.depositType,
+            depositValue: data.depositValue,
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching deposit settings:', error)
+      }
+    }
+
+    fetchDepositSettings()
+  }, [tents.map(t => t.itemId).filter(Boolean).join(',')])
+
+  // ========== GRAND TOTAL CALCULATION ==========
+  const calculateGrandTotal = useCallback(() => {
+    const totalAccommodation = tents.reduce((sum, t) => sum + (t.pricingBreakdown?.accommodationCost || 0), 0)
+    const totalAccDiscount = tents.reduce((sum, t) => sum + (t.accommodationVoucher?.discountAmount || 0), 0)
+    const totalMenuProducts = tents.reduce((sum, t) => {
+      return sum + Object.values(t.menuProducts || {}).reduce((s, nightSels) => {
+        if (!nightSels) return s
+        return s + Object.values(nightSels)
+          .filter((p: any) => p.quantity > 0)
+          .reduce((s2, p: any) => s2 + p.price * p.quantity, 0)
+      }, 0)
+    }, 0)
+    const totalMenuDiscount = tents.reduce((sum, t) => {
+      return sum + Object.values(t.menuProducts || {}).reduce((s, nightSels) => {
+        if (!nightSels) return s
+        return s + Object.values(nightSels)
+          .filter((p: any) => p.quantity > 0 && p.voucher?.discountAmount)
+          .reduce((s2, p: any) => s2 + (p.voucher?.discountAmount || 0), 0)
+      }, 0)
+    }, 0)
+    const totalAddonsCost = tents.reduce((sum, t) => {
+      return sum + Object.values(t.addonSelections || {}).reduce((s, sel) => {
+        if (!sel || !sel.selected) return s
+        const effectivePrice = sel.usePriceOverride && sel.priceOverride !== undefined
+          ? sel.priceOverride
+          : (sel.totalPrice || 0)
+        return s + effectivePrice
+      }, 0)
+    }, 0)
+    const totalAddonsDiscount = tents.reduce((sum, t) => {
+      return sum + Object.values(t.addonSelections || {}).reduce((s, sel) => {
+        if (!sel || !sel.selected) return s
+        return s + (sel.voucher?.discountAmount || 0)
+      }, 0)
+    }, 0)
+
+    return totalAccommodation - totalAccDiscount + totalMenuProducts - totalMenuDiscount + totalAddonsCost - totalAddonsDiscount
+  }, [tents])
+
+  const grandTotal = calculateGrandTotal()
+
+  // ========== DEPOSIT AMOUNT CALCULATION ==========
+  const calculateDepositAmount = useCallback(() => {
+    if (!depositSettings.hasDeposit || !depositSettings.depositValue) {
+      return 0
+    }
+
+    if (depositSettings.depositType === 'percentage') {
+      return Math.round(grandTotal * (depositSettings.depositValue / 100))
+    }
+
+    // fixed_amount
+    return Math.min(depositSettings.depositValue, grandTotal)
+  }, [depositSettings, grandTotal])
+
+  const depositAmount = calculateDepositAmount()
+  const balanceAmount = grandTotal - depositAmount
+
   // ========== CUSTOMER HANDLING ==========
   const handleCustomerSelect = useCallback((customerId: string, customer?: Customer) => {
     setSelectedCustomerId(customerId)
     setNewCustomerData(null)
-    if (customer) {
-      setPreselectedCustomer(customer)
-    }
+    // Set preselectedCustomer: to customer if provided, null if clearing
+    setPreselectedCustomer(customer || null)
   }, [])
 
   const handleNewCustomerData = useCallback((data: NewCustomerData | null) => {
@@ -546,7 +657,8 @@ export function AdminGlampingBookingFormModal({
   }, [tents, selectedCustomerId, newCustomerData, locale])
 
   // ========== SUBMIT ==========
-  const handleSubmit = async () => {
+  // Returns booking code on success, null on failure
+  const handleSubmit = async (showQRAfter: boolean = false): Promise<string | null> => {
     const validationError = validateForm()
     if (validationError) {
       toast({
@@ -554,7 +666,7 @@ export function AdminGlampingBookingFormModal({
         description: validationError,
         variant: 'destructive'
       })
-      return
+      return null
     }
 
     try {
@@ -661,6 +773,15 @@ export function AdminGlampingBookingFormModal({
         localStorage.removeItem(ADMIN_BOOKING_DRAFT_KEY)
         setHasDraftRestored(false)
 
+        // If showing QR modal after, don't show toast, don't call onSuccess yet
+        // onSuccess will be called when user closes the QR modal
+        if (showQRAfter) {
+          setCreatedBookingCode(result.bookingCode)
+          setShowPaymentQRModal(true)
+          return result.bookingCode
+        }
+
+        // For free bookings (no QR needed), show toast and close
         toast({
           title: locale === 'vi' ? 'Thành công' : 'Success',
           description: locale === 'vi'
@@ -669,6 +790,7 @@ export function AdminGlampingBookingFormModal({
         })
         onSuccess()
         handleClose()
+        return result.bookingCode
       } else if (response.status === 409 && result.errorCode === 'DATES_NOT_AVAILABLE') {
         // Specific handling for availability conflict
         toast({
@@ -678,6 +800,7 @@ export function AdminGlampingBookingFormModal({
             : 'This item is fully booked for the selected dates. Please choose different dates.'),
           variant: 'destructive'
         })
+        return null
       } else {
         throw new Error(result.error || 'Failed to create booking')
       }
@@ -688,6 +811,7 @@ export function AdminGlampingBookingFormModal({
         description: error.message || (locale === 'vi' ? 'Không thể tạo booking' : 'Failed to create booking'),
         variant: 'destructive'
       })
+      return null
     } finally {
       setSubmitting(false)
     }
@@ -852,12 +976,42 @@ export function AdminGlampingBookingFormModal({
               onPaymentMethodChange={setPaymentMethod}
               pricingData={multiPricingData}
               pricingLoading={pricingLoading}
-              onSubmit={handleSubmit}
+              depositSettings={depositSettings}
+              grandTotal={grandTotal}
+              depositAmount={depositAmount}
+              balanceAmount={balanceAmount}
+              onShowPaymentModal={async () => {
+                // If grand total is 0, skip QR modal and create booking directly
+                if (grandTotal === 0) {
+                  await handleSubmit(false)
+                } else {
+                  // Create booking first, then show QR modal with actual booking code
+                  await handleSubmit(true)
+                }
+              }}
               submitting={submitting}
               validateForm={validateForm}
             />
           </TabsContent>
         </Tabs>
+
+        {/* Payment QR Modal */}
+        <AdminPaymentQRModal
+          isOpen={showPaymentQRModal}
+          onClose={() => {
+            setShowPaymentQRModal(false)
+            setCreatedBookingCode('')
+            // Now trigger onSuccess to refresh data, then close the main modal
+            onSuccess()
+            handleClose()
+          }}
+          locale={locale}
+          paymentMethod={paymentMethod}
+          grandTotal={grandTotal}
+          depositAmount={depositAmount}
+          zoneId={zoneId}
+          bookingCode={createdBookingCode}
+        />
       </DialogContent>
     </Dialog>
   )

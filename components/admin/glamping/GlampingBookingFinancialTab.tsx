@@ -368,11 +368,36 @@ export function GlampingBookingFinancialTab({
     fetchPricingDetails();
   }, [booking.id, booking.pricing.subtotalAmount, booking.taxRate, refreshTrigger]);
 
-  // Calculate totals (including additional costs)
+  // Calculate totals (including additional costs and tent overrides)
   const additionalCostsSubtotal = additionalCosts.reduce((sum, c) => sum + c.totalPrice, 0);
   const additionalCostsTax = additionalCosts.reduce((sum, c) => sum + c.taxAmount, 0);
-  const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0) + additionalCostsSubtotal;
-  const totalTax = items.reduce((sum, item) => sum + item.taxAmount, 0) + additionalCostsTax;
+
+  // Adjust items subtotal/tax for tent overrides
+  let itemsSubtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
+  let itemsTax = items.reduce((sum, item) => sum + item.taxAmount, 0);
+
+  tentOverrides.forEach(override => {
+    const tentAccomItems = items.filter(
+      i => i.bookingTentId === override.tentId && i.type === 'accommodation'
+    );
+    if (tentAccomItems.length === 0) return;
+
+    const originalAccomSubtotal = tentAccomItems.reduce((sum, i) => sum + i.subtotal, 0);
+    const originalAccomTax = tentAccomItems.reduce((sum, i) => sum + i.taxAmount, 0);
+
+    // Replace accommodation subtotal with override value
+    itemsSubtotal += override.overrideSubtotal - originalAccomSubtotal;
+
+    // Recalculate tax for overridden amount
+    if (originalAccomTax > 0) {
+      const avgTaxRate = tentAccomItems.reduce((sum, i) => sum + i.taxRate, 0) / tentAccomItems.length;
+      const overrideTax = override.overrideSubtotal * (avgTaxRate / 100);
+      itemsTax += overrideTax - originalAccomTax;
+    }
+  });
+
+  const subtotal = itemsSubtotal + additionalCostsSubtotal;
+  const totalTax = itemsTax + additionalCostsTax;
   const discountAmount = booking.pricing.discountAmount || 0;
   const calculatedTotal = subtotal - discountAmount + totalTax;
 
