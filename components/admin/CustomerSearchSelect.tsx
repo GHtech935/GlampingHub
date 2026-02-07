@@ -58,6 +58,7 @@ export function CustomerSearchSelect({
     phone: '',
     country: 'Vietnam'
   })
+  const [emailError, setEmailError] = useState<string>('')
 
   const searchRef = useRef<HTMLDivElement>(null)
 
@@ -305,9 +306,23 @@ export function CustomerSearchSelect({
                   id="new-email"
                   type="email"
                   value={newCustomer.email}
-                  onChange={(e) => handleNewCustomerChange('email', e.target.value)}
+                  onChange={(e) => {
+                    handleNewCustomerChange('email', e.target.value)
+                    if (emailError) setEmailError('')
+                  }}
+                  onBlur={() => {
+                    if (newCustomer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomer.email)) {
+                      setEmailError(locale === 'vi' ? 'Email không hợp lệ' : 'Invalid email')
+                    } else {
+                      setEmailError('')
+                    }
+                  }}
+                  className={cn(emailError && 'border-red-500 focus-visible:ring-red-500')}
                   placeholder={locale === 'vi' ? 'Nhập email' : 'Enter email'}
                 />
+                {emailError && (
+                  <p className="text-xs text-red-500">{emailError}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

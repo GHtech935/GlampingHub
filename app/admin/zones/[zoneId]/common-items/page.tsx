@@ -1,11 +1,18 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
-import { Plus, Search, Edit, Package, Eye } from "lucide-react";
+import { use, useEffect, useMemo, useState } from "react";
+import { Plus, Search, Edit, Package, Eye, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -17,6 +24,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/hooks/useAuth";
+import CommonItemAppliedItemsModal from "@/components/admin/glamping/CommonItemAppliedItemsModal";
 
 interface Item {
   id: string;
@@ -32,6 +40,21 @@ interface Item {
   deposit_type: string;
   deposit_value: number;
   is_active: boolean;
+  addon_count: number;
+  product_group_children_count: number;
+  is_product_group_parent: boolean;
+  product_group_parent_id: string | null;
+}
+
+function getItemTypeBadge(item: Item): { label: string; variant: 'destructive' | 'secondary' | 'outline' | 'default' } | null {
+  const isChild = !!item.product_group_parent_id;
+  const isParent = item.is_product_group_parent;
+  const hasAddons = item.addon_count > 0;
+  if (isParent) return { label: `Parent (${item.product_group_children_count})`, variant: 'destructive' };
+  if (isChild && hasAddons) return { label: 'Child + Package', variant: 'secondary' };
+  if (isChild) return { label: 'Child', variant: 'outline' };
+  if (hasAddons) return { label: 'Package', variant: 'default' };
+  return null;
 }
 
 const formatCurrency = (amount: number) => {
@@ -54,7 +77,14 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [showNoCategory, setShowNoCategory] = useState(false);
+  const [appliedItemsModal, setAppliedItemsModal] = useState<{ open: boolean; itemId: string; itemName: string }>({ open: false, itemId: '', itemName: '' });
+
+  const categories = useMemo(() => {
+    const names = [...new Set(items.map(i => i.category_name).filter(Boolean))];
+    return names.sort((a, b) => a.localeCompare(b));
+  }, [items]);
 
   // Check if user is operations role (read-only)
   const isOperations = user?.type === 'staff' && (user as any).role === 'operations';
@@ -101,7 +131,11 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
       (statusFilter === 'active' && item.is_active) ||
       (statusFilter === 'inactive' && !item.is_active);
 
-    return matchesSearch && matchesStatus;
+    // Filter by category
+    const matchesCategory =
+      categoryFilter === 'all' || item.category_name === categoryFilter;
+
+    return matchesSearch && matchesStatus && matchesCategory;
   });
 
   return (
@@ -131,6 +165,20 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
             className="pl-10"
           />
         </div>
+        {/* Category Filter */}
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder={t("filters.category")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("filters.allCategories")}</SelectItem>
+            {categories.map((cat) => (
+              <SelectItem key={cat} value={cat}>
+                {cat}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {/* No Category Checkbox */}
         <div className="flex items-center gap-2">
           <Checkbox
@@ -194,13 +242,14 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
               <TableHead>{t("table.price")}</TableHead>
               <TableHead>{t("table.inventory")}</TableHead>
               <TableHead>{t("table.visibility")}</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead className="text-right">{t("table.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                   </div>
@@ -208,7 +257,7 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
               </TableRow>
             ) : filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   <Package className="w-12 h-12 mx-auto text-gray-300 mb-4" />
                   <div className="text-gray-500">{tc("noData")}</div>
                 </TableCell>
@@ -247,17 +296,37 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
                       {t(`status.${item.status}`)}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const typeBadge = getItemTypeBadge(item);
+                      return typeBadge ? (
+                        <Badge variant={typeBadge.variant} className="text-xs">
+                          {typeBadge.label}
+                        </Badge>
+                      ) : null;
+                    })()}
+                  </TableCell>
                   <TableCell className="text-right">
                     {!isOperations && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          router.push(`/admin/zones/${zoneId}/common-items/${item.id}/edit`)
-                        }
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title={t("appliedItems.title")}
+                          onClick={() => setAppliedItemsModal({ open: true, itemId: item.id, itemName: item.name })}
+                        >
+                          <Link2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            router.push(`/admin/zones/${zoneId}/common-items/${item.id}/edit`)
+                          }
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -266,6 +335,14 @@ export default function CommonItemsPage({ params }: { params: Promise<{ zoneId: 
           </TableBody>
         </Table>
       </div>
+
+      <CommonItemAppliedItemsModal
+        open={appliedItemsModal.open}
+        onOpenChange={(open) => setAppliedItemsModal(prev => ({ ...prev, open }))}
+        zoneId={zoneId}
+        commonItemId={appliedItemsModal.itemId}
+        commonItemName={appliedItemsModal.itemName}
+      />
     </div>
   );
 }

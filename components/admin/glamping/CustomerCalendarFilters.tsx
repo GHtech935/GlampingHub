@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Download, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -247,6 +247,52 @@ export function CustomerCalendarFilters({
 
         {/* Spacer to push export button to right */}
         <div className="flex-1" />
+
+        {/* Payment Status Legend */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Info className="h-4 w-4 text-gray-500" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[200px] p-3" align="end">
+            <p className="text-sm font-medium mb-2">
+              {locale === "vi" ? "Trạng thái thanh toán" : "Payment Status"}
+            </p>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-orange-500 shrink-0" />
+                <span className="text-sm text-gray-700">
+                  {locale === "vi" ? "Chờ thanh toán" : "Pending"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-blue-500 shrink-0" />
+                <span className="text-sm text-gray-700">
+                  {locale === "vi" ? "Đã cọc" : "Deposit Paid"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-green-500 shrink-0" />
+                <span className="text-sm text-gray-700">
+                  {locale === "vi" ? "Đã thanh toán" : "Fully Paid"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-gray-400 shrink-0" />
+                <span className="text-sm text-gray-700">
+                  {locale === "vi" ? "Đã hoàn tiền" : "Refunded"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-gray-600 shrink-0" />
+                <span className="text-sm text-gray-700">
+                  {locale === "vi" ? "Hết hạn" : "Expired"}
+                </span>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Export PDF Button */}
         {onExportPDF && (

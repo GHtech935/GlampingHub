@@ -66,7 +66,9 @@ interface GlampingBookingFinancialTabProps {
   isUpdating?: boolean;
   canCheckout?: boolean;
   currentPaymentStatus?: string;
-  currentStaffName?: string;
+  createdByUserId?: string | null;
+  createdByName?: string | null;
+  customerId?: string | null;
   onRefresh?: () => void;
   refreshTrigger?: number; // Increment to force refetch
 }
@@ -99,7 +101,9 @@ export function GlampingBookingFinancialTab({
   isUpdating = false,
   canCheckout = false,
   currentPaymentStatus,
-  currentStaffName,
+  createdByUserId,
+  createdByName,
+  customerId,
   onRefresh,
   refreshTrigger,
 }: GlampingBookingFinancialTabProps) {
@@ -125,7 +129,7 @@ export function GlampingBookingFinancialTab({
       unitPrice: 'Đơn giá',
       amount: 'Thành tiền',
       paymentInfo: 'Thông tin thanh toán',
-      staff: 'Nhân viên:',
+      staff: 'Nhân viên tư vấn:',
       bookingTime: 'Thời gian đặt:',
       subtotal: 'Tạm tính',
       discount: 'Giảm giá',
@@ -163,7 +167,7 @@ export function GlampingBookingFinancialTab({
       unitPrice: 'Unit Price',
       amount: 'Amount',
       paymentInfo: 'Payment Information',
-      staff: 'Staff:',
+      staff: 'Consultant:',
       bookingTime: 'Booking Time:',
       subtotal: 'Subtotal',
       discount: 'Discount',
@@ -710,6 +714,7 @@ export function GlampingBookingFinancialTab({
       },
       specialRequests: booking.specialRequirements || '',
       invoiceNotes: invoiceNotes || '',
+      staffName: createdByUserId && createdByUserId !== customerId ? (createdByName || null) : null,
     });
   };
 
@@ -1340,15 +1345,18 @@ export function GlampingBookingFinancialTab({
           <CardContent className="space-y-4">
             {/* Metadata */}
             <div className="text-sm space-y-2 pb-3 border-b">
-              <div className="flex items-center gap-2 text-gray-600">
-                <User className="h-4 w-4" />
-                <span>{t.staff}</span>
-                <span className="font-medium text-gray-900">{currentStaffName || 'Admin'}</span>
-              </div>
+              {/* Show staff line only if booking was created by a staff member (not by customer) */}
+              {createdByUserId && createdByUserId !== customerId && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <User className="h-4 w-4" />
+                  <span>{t.staff}</span>
+                  <span className="font-medium text-gray-900">{createdByName || 'Admin'}</span>
+                </div>
+              )}
               <div className="flex items-center gap-2 text-gray-600">
                 <Clock className="h-4 w-4" />
                 <span>{t.bookingTime}</span>
-                <span className="font-medium text-gray-900">{formatDate(booking.createdAt)}</span>
+                <span className="font-medium text-gray-900">{formatDate(booking.createdAt, locale, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
               </div>
             </div>
 

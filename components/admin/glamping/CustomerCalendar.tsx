@@ -9,7 +9,7 @@ import type {
   CustomerCalendarData,
   CustomerCalendarBooking,
 } from "./customer-calendar-types";
-import { CUSTOMER_CALENDAR_STATUS_COLORS } from "./customer-calendar-types";
+import { CUSTOMER_CALENDAR_PAYMENT_COLORS } from "./customer-calendar-types";
 
 interface CustomerCalendarProps {
   data: CustomerCalendarData | null;
@@ -314,7 +314,7 @@ export function CustomerCalendar({
                             if (!barStyle.visible) return null;
 
                             const statusColor =
-                              CUSTOMER_CALENDAR_STATUS_COLORS[booking.status] ||
+                              CUSTOMER_CALENDAR_PAYMENT_COLORS[booking.paymentStatus] ||
                               "bg-blue-500";
 
                             return (

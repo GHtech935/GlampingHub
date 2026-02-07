@@ -33,6 +33,21 @@ interface Item {
   status: string;
   zone_id: string;
   zone_name: string;
+  addon_count: number;
+  product_group_children_count: number;
+  is_product_group_parent: boolean;
+  product_group_parent_id: string | null;
+}
+
+function getItemTypeBadge(item: Item): { label: string; variant: 'destructive' | 'secondary' | 'outline' | 'default' } | null {
+  const isChild = !!item.product_group_parent_id;
+  const isParent = item.is_product_group_parent;
+  const hasAddons = item.addon_count > 0;
+  if (isParent) return { label: `Parent (${item.product_group_children_count})`, variant: 'destructive' };
+  if (isChild && hasAddons) return { label: 'Child + Package', variant: 'secondary' };
+  if (isChild) return { label: 'Child', variant: 'outline' };
+  if (hasAddons) return { label: 'Package', variant: 'default' };
+  return null;
 }
 
 export default function AllZonesCommonItemsPage() {
@@ -166,13 +181,14 @@ export default function AllZonesCommonItemsPage() {
               <TableHead>{t("table.category")}</TableHead>
               <TableHead>{t("table.inventory")}</TableHead>
               <TableHead>{t("table.visibility")}</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead className="text-right">{t("table.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                   </div>
@@ -180,7 +196,7 @@ export default function AllZonesCommonItemsPage() {
               </TableRow>
             ) : filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   <div className="text-gray-500">{tc("noData")}</div>
                 </TableCell>
               </TableRow>
@@ -209,6 +225,16 @@ export default function AllZonesCommonItemsPage() {
                     >
                       {t(`status.${item.status}`)}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const typeBadge = getItemTypeBadge(item);
+                      return typeBadge ? (
+                        <Badge variant={typeBadge.variant} className="text-xs">
+                          {typeBadge.label}
+                        </Badge>
+                      ) : null;
+                    })()}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">

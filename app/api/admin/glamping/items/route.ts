@@ -47,7 +47,11 @@ export async function GET(request: NextRequest) {
         COALESCE(ds.type, 'system_default') as deposit_type,
         COALESCE(ds.amount, 0) as deposit_value,
         z.deposit_type as zone_deposit_type,
-        z.deposit_value as zone_deposit_value
+        z.deposit_value as zone_deposit_value,
+        (SELECT COUNT(*) FROM glamping_product_groups WHERE parent_item_id = i.id)::int as product_group_children_count,
+        (SELECT parent_item_id FROM glamping_product_groups WHERE child_item_id = i.id LIMIT 1) as product_group_parent_id,
+        EXISTS(SELECT 1 FROM glamping_product_group_settings WHERE item_id = i.id) as is_product_group_parent,
+        (SELECT COUNT(*) FROM glamping_item_addons WHERE item_id = i.id)::int as addon_count
       FROM glamping_items i
       LEFT JOIN glamping_categories c ON i.category_id = c.id
       LEFT JOIN glamping_zones z ON i.zone_id = z.id
@@ -172,11 +176,16 @@ export async function POST(request: NextRequest) {
       fixed_length_unit,
       fixed_start_time,
       default_length_hours,
+      allocation_interval_minutes,
       timeslots,
       // Tax fields
       taxes,
       // Active status
       is_active,
+      // Product Grouping
+      product_group_role,
+      product_group_children,
+      product_group_settings,
     } = body;
 
     // Validate required fields
@@ -238,11 +247,12 @@ export async function POST(request: NextRequest) {
           fixed_length_unit,
           fixed_start_time,
           default_length_hours,
+          allocation_interval_minutes,
           visibility,
           default_calendar_status,
           is_active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           itemId,
           unlimited_inventory ? 0 : (inventory_quantity || 1),
@@ -252,6 +262,7 @@ export async function POST(request: NextRequest) {
           fixed_length_unit || null,
           fixed_start_time || null,
           default_length_hours || null,
+          allocation_interval_minutes || 30,
           visibility || 'everyone',
           default_calendar_status || 'available',
           is_active !== undefined ? is_active : true
@@ -543,6 +554,38 @@ export async function POST(request: NextRequest) {
            VALUES ($1, $2)`,
           [itemId, true]
         );
+      }
+
+      // Insert product group data if role is parent
+      if (product_group_role === 'parent') {
+        const settings = product_group_settings || {};
+        await client.query(
+          `INSERT INTO glamping_product_group_settings (
+            item_id, show_unavailable_children, show_starting_price,
+            show_child_prices_in_dropdown, display_price, default_calendar_status
+          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            itemId,
+            settings.show_unavailable_children || false,
+            settings.show_starting_price || false,
+            settings.show_child_prices_in_dropdown !== false,
+            settings.display_price || 0,
+            settings.default_calendar_status || 'available',
+          ]
+        );
+
+        if (product_group_children && product_group_children.length > 0) {
+          for (let i = 0; i < product_group_children.length; i++) {
+            const childId = typeof product_group_children[i] === 'string'
+              ? product_group_children[i]
+              : product_group_children[i].item_id;
+            await client.query(
+              `INSERT INTO glamping_product_groups (parent_item_id, child_item_id, display_order)
+               VALUES ($1, $2, $3)`,
+              [itemId, childId, i]
+            );
+          }
+        }
       }
 
       // Insert timeslots if allocation type is 'timeslots'

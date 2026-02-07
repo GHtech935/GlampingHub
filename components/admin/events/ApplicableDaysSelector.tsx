@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useTranslations } from "next-intl";
 import { useCallback } from "react";
+import { DAY_NAME_TO_NUMBER } from "@/lib/days-of-week";
 
 interface ApplicableDaysSelectorProps {
   daysOfWeek: number[] | null;
@@ -19,13 +20,13 @@ export default function ApplicableDaysSelector({
   const t = useTranslations('events.new');
 
   const weekDays = [
-    { value: 1, label: 'Th 2', fullLabel: t('monday') },
-    { value: 2, label: 'Th 3', fullLabel: t('tuesday') },
-    { value: 3, label: 'Th 4', fullLabel: t('wednesday') },
-    { value: 4, label: 'Th 5', fullLabel: t('thursday') },
-    { value: 5, label: 'Th 6', fullLabel: t('friday') },
-    { value: 6, label: 'Th 7', fullLabel: t('saturday') },
-    { value: 0, label: 'CN', fullLabel: t('sunday') }
+    { value: DAY_NAME_TO_NUMBER.monday, label: 'Th 2', fullLabel: t('monday') },
+    { value: DAY_NAME_TO_NUMBER.tuesday, label: 'Th 3', fullLabel: t('tuesday') },
+    { value: DAY_NAME_TO_NUMBER.wednesday, label: 'Th 4', fullLabel: t('wednesday') },
+    { value: DAY_NAME_TO_NUMBER.thursday, label: 'Th 5', fullLabel: t('thursday') },
+    { value: DAY_NAME_TO_NUMBER.friday, label: 'Th 6', fullLabel: t('friday') },
+    { value: DAY_NAME_TO_NUMBER.saturday, label: 'Th 7', fullLabel: t('saturday') },
+    { value: DAY_NAME_TO_NUMBER.sunday, label: 'CN', fullLabel: t('sunday') }
   ];
 
   const toggleDay = useCallback((day: number) => {

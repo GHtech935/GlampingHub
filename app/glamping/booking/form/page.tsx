@@ -144,6 +144,7 @@ function GlampingBookingFormContent() {
     formState: { errors },
   } = useForm<BookingFormData>({
     resolver: zodResolver(createBookingFormSchema(t)),
+    mode: "onBlur",
     defaultValues: {
       phoneCountryCode: "+84",
       country: "Vietnam",
@@ -748,6 +749,31 @@ function GlampingBookingFormContent() {
                     discountType: sel.voucher.discountType,
                     discountValue: sel.voucher.discountValue,
                   } : undefined,
+                  // Product group fields
+                  isProductGroupParent: sel.isProductGroupParent || false,
+                  selectedChildren: sel.isProductGroupParent && sel.selectedChildren
+                    ? Object.fromEntries(
+                        Object.entries(sel.selectedChildren).map(([childId, childData]) => [
+                          childId,
+                          {
+                            childItemId: childData.childItemId,
+                            childName: childData.childName,
+                            parameterQuantities: childData.parameterQuantities,
+                            totalPrice: childData.totalPrice || 0,
+                            parameterPricing: childData.parameterPricing || {},
+                            dates: childData.dates || undefined,
+                            selectedDate: childData.selectedDate || undefined,
+                            voucher: childData.voucher ? {
+                              code: childData.voucher.code,
+                              id: childData.voucher.id,
+                              discountAmount: childData.voucher.discountAmount,
+                              discountType: childData.voucher.discountType,
+                              discountValue: childData.voucher.discountValue,
+                            } : undefined,
+                          },
+                        ])
+                      )
+                    : undefined,
                 }))
             : [];
 
@@ -937,7 +963,14 @@ function GlampingBookingFormContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit, (errors) => {
+          const firstErrorKey = Object.keys(errors)[0];
+          const el = document.querySelector(`[name="${firstErrorKey}"]`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            (el as HTMLElement).focus();
+          }
+        })}>
         {/* Blue header with booking summary */}
         <GlampingBookingSummaryHeader
           bookingData={{

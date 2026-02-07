@@ -398,10 +398,11 @@ export async function POST(request: NextRequest) {
         [foundBooking.id, transactionId]
       );
 
-      // Update glamping_bookings to fully_paid
+      // Update glamping_bookings to fully_paid and clear balance
       await client.query(
         `UPDATE glamping_bookings
          SET payment_status = 'fully_paid',
+             balance_due = 0,
              updated_at = NOW()
          WHERE id = $1`,
         [foundBooking.id]
@@ -519,15 +520,22 @@ export async function POST(request: NextRequest) {
           [matchedBooking.id, transactionId]
         );
 
-        // Update glamping_bookings
+        // Update glamping_bookings (including balance_due based on payment)
+        const newBalanceDue = newPaymentStatus === 'fully_paid'
+          ? 0
+          : newPaymentStatus === 'deposit_paid'
+            ? totalAmount - paidAmount
+            : parseFloat(matchedBooking.balance_due);
+
         await client.query(
           `UPDATE glamping_bookings
            SET payment_status = $1,
                status = 'confirmed',
+               balance_due = $3,
                confirmed_at = NOW(),
                updated_at = NOW()
            WHERE id = $2`,
-          [newPaymentStatus, matchedBooking.id]
+          [newPaymentStatus, matchedBooking.id, newBalanceDue]
         );
 
         // Create payment record in glamping_booking_payments table

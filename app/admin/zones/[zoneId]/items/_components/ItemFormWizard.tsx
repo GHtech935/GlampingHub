@@ -62,6 +62,7 @@ import EventFormFields from "@/components/admin/events/EventFormFields";
 import TaxManagement from "@/components/admin/items/TaxManagement";
 import { PricingTable } from "./PricingTable";
 import type { Category as EventCategory } from "@/components/admin/events/CategoryItemSelector";
+import { DAY_NAMES, DAY_NAMES_FROM_MONDAY, dayNumberToName, dayNameToNumber } from "@/lib/days-of-week";
 
 interface Category {
   id: string;
@@ -156,6 +157,7 @@ export interface ItemFormWizardProps {
     fixed_length_unit?: 'days' | 'nights' | 'hours';
     fixed_start_time?: string;
     default_length_hours?: number;
+    allocation_interval_minutes?: number;
     timeslots?: Array<{
       start_time: string;
       end_time: string;
@@ -167,6 +169,17 @@ export interface ItemFormWizardProps {
     menu_products?: Array<any>;
     is_active?: boolean;
     display_order?: number;
+    // Product Grouping
+    product_group_role?: 'parent' | null;
+    product_group_children?: Array<{item_id: string; item_name: string; item_sku?: string}>;
+    product_group_settings?: {
+      show_unavailable_children: boolean;
+      show_starting_price: boolean;
+      show_child_prices_in_dropdown: boolean;
+      display_price: number;
+      default_calendar_status: string;
+    };
+    product_group_parent?: {id: string; name: string} | null;
   };
   onSuccess?: (itemId: string) => void;
   /** Filter categories by is_tent_category. Default: true (for Items), set false for Common Items */
@@ -248,6 +261,7 @@ export function ItemFormWizard({
   }>>([]);
   const [showPackagePrice, setShowPackagePrice] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
+  const [tempPackageItems, setTempPackageItems] = useState<typeof packageItems>([]);
   const [packageSearchQuery, setPackageSearchQuery] = useState<string>('');
   const [availableCommonItems, setAvailableCommonItems] = useState<Array<{id: string; name: any; sku?: string}>>([]);
   const [showEditPackageItemDialog, setShowEditPackageItemDialog] = useState(false);
@@ -259,6 +273,20 @@ export function ItemFormWizard({
     custom_start_date: string;
     custom_end_date: string;
   }>({ price_percentage: 100, opt_in: 'optional', dates_setting: 'inherit_parent', custom_start_date: '', custom_end_date: '' });
+
+  // Product Grouping state
+  const [productGroupRole, setProductGroupRole] = useState<'parent' | null>(null);
+  const [productGroupChildren, setProductGroupChildren] = useState<Array<{item_id: string; item_name: string; item_sku?: string}>>([]);
+  const [productGroupSettings, setProductGroupSettings] = useState({
+    show_unavailable_children: false,
+    show_starting_price: false,
+    show_child_prices_in_dropdown: true,
+    display_price: 0,
+    default_calendar_status: 'available',
+  });
+  const [productGroupParent, setProductGroupParent] = useState<{id: string; name: string} | null>(null);
+  const [showProductGroupChildDialog, setShowProductGroupChildDialog] = useState(false);
+  const [productGroupSearchQuery, setProductGroupSearchQuery] = useState('');
 
   // Inline Category/Tag creation state
   const [showCategoryInput, setShowCategoryInput] = useState(false);
@@ -280,7 +308,7 @@ export function ItemFormWizard({
     showEndPicker?: boolean;
     showDayPicker?: boolean;
   }>>([
-    {startTime: '', endTime: '', selectedDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']}
+    {startTime: '', endTime: '', selectedDays: [...DAY_NAMES_FROM_MONDAY]}
   ]);
   const [fixedStartTime, setFixedStartTime] = useState<string>('');
   const [showTimePicker, setShowTimePicker] = useState<boolean>(false);
@@ -396,8 +424,7 @@ export function ItemFormWizard({
 
   // Format selected days display
   const formatSelectedDays = (selectedDays: string[]) => {
-    const allDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    if (selectedDays.length === 7 && allDays.every(day => selectedDays.includes(day))) {
+    if (selectedDays.length === 7 && DAY_NAMES_FROM_MONDAY.every(day => selectedDays.includes(day))) {
       return t('everyDay');
     }
     return selectedDays.map(day => getDayAbbreviation(day)).join(', ');
@@ -650,7 +677,8 @@ export function ItemFormWizard({
       }
       // Set pricing state
       if (initialData.pricing_rate) {
-        setPricingRate(initialData.pricing_rate);
+        // Map per_timeslot back to timeslot_0 for UI tabs
+        setPricingRate(initialData.pricing_rate === 'per_timeslot' ? 'timeslot_0' : initialData.pricing_rate);
       }
       if (initialData.group_pricing) {
         setGroupPricing(initialData.group_pricing);
@@ -708,6 +736,19 @@ export function ItemFormWizard({
       if (initialData.show_package_price) {
         setShowPackagePrice(initialData.show_package_price);
       }
+      // Set product group data
+      if (initialData.product_group_role) {
+        setProductGroupRole(initialData.product_group_role);
+      }
+      if (initialData.product_group_children && initialData.product_group_children.length > 0) {
+        setProductGroupChildren(initialData.product_group_children);
+      }
+      if (initialData.product_group_settings) {
+        setProductGroupSettings(initialData.product_group_settings);
+      }
+      if (initialData.product_group_parent) {
+        setProductGroupParent(initialData.product_group_parent);
+      }
       // Set allocation settings
       if (initialData.allocation_type) {
         form.setValue('allocation_type', initialData.allocation_type);
@@ -725,22 +766,15 @@ export function ItemFormWizard({
       if (initialData.default_length_hours !== undefined) {
         form.setValue('default_length_hours', initialData.default_length_hours);
       }
+      if (initialData.allocation_interval_minutes) {
+        setTimeInterval(String(initialData.allocation_interval_minutes));
+      }
       // Transform and set timeslots if allocation_type is 'timeslots'
       if (initialData.timeslots && initialData.timeslots.length > 0) {
-        const numberToDayName: Record<number, string> = {
-          0: 'sunday',
-          1: 'monday',
-          2: 'tuesday',
-          3: 'wednesday',
-          4: 'thursday',
-          5: 'friday',
-          6: 'saturday'
-        };
-
         const transformedSlots = initialData.timeslots.map(slot => ({
           startTime: slot.start_time,
           endTime: slot.end_time,
-          selectedDays: slot.days_of_week.map(num => numberToDayName[num] || 'monday'),
+          selectedDays: slot.days_of_week.map(num => dayNumberToName(num)),
           showStartPicker: false,
           showEndPicker: false,
           showDayPicker: false
@@ -874,7 +908,7 @@ export function ItemFormWizard({
 
                 // Set pricing
                 if (item.pricing_rate) {
-                  setPricingRate(item.pricing_rate);
+                  setPricingRate(item.pricing_rate === 'per_timeslot' ? 'timeslot_0' : item.pricing_rate);
                 }
                 if (item.group_pricing) {
                   setGroupPricing(item.group_pricing);
@@ -915,10 +949,7 @@ export function ItemFormWizard({
                   setTimeslots(item.timeslots.map((ts: any) => ({
                     startTime: ts.start_time,
                     endTime: ts.end_time,
-                    selectedDays: (ts.days_of_week || []).map((d: number) => {
-                      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                      return dayNames[d] || 'monday';
-                    })
+                    selectedDays: (ts.days_of_week || []).map((d: number) => dayNumberToName(d))
                   })));
                 }
 
@@ -1181,6 +1212,7 @@ export function ItemFormWizard({
     pricingData: any
   ) => {
     try {
+      const dbRateType = pricingRate.startsWith('timeslot_') ? 'per_timeslot' : pricingRate;
       const pricingInserts = [];
 
       // Inventory pricing - allow 0 for free pricing
@@ -1189,7 +1221,7 @@ export function ItemFormWizard({
           item_id: itemId,
           event_id: eventId,
           parameter_id: null,
-          rate_type: pricingRate,
+          rate_type: dbRateType,
           group_min: null,
           group_max: null,
           amount: pricingData.inventory.amount
@@ -1205,7 +1237,7 @@ export function ItemFormWizard({
               item_id: itemId,
               event_id: eventId,
               parameter_id: paramId,
-              rate_type: pricingRate,
+              rate_type: dbRateType,
               group_min: null,
               group_max: null,
               amount: typed.amount
@@ -1220,7 +1252,7 @@ export function ItemFormWizard({
                   item_id: itemId,
                   event_id: eventId,
                   parameter_id: paramId,
-                  rate_type: pricingRate,
+                  rate_type: dbRateType,
                   group_min: group.min,
                   group_max: group.max,
                   amount: group.price
@@ -1239,7 +1271,7 @@ export function ItemFormWizard({
               item_id: itemId,
               event_id: eventId,
               parameter_id: null,
-              rate_type: pricingRate,
+              rate_type: dbRateType,
               group_min: group.min,
               group_max: group.max,
               amount: group.price
@@ -1432,23 +1464,13 @@ export function ItemFormWizard({
       }
 
       // Transform timeslots format for database (if allocation type is timeslots)
-      const dayNameToNumber: Record<string, number> = {
-        'sunday': 0,
-        'monday': 1,
-        'tuesday': 2,
-        'wednesday': 3,
-        'thursday': 4,
-        'friday': 5,
-        'saturday': 6
-      };
-
       const transformedTimeslots = data.allocation_type === 'timeslots'
         ? timeslots
             .filter(slot => slot.startTime && slot.endTime)
             .map(slot => ({
               start_time: slot.startTime,
               end_time: slot.endTime,
-              days_of_week: slot.selectedDays.map(day => dayNameToNumber[day.toLowerCase()] ?? 0)
+              days_of_week: slot.selectedDays.map(day => dayNameToNumber(day))
             }))
         : undefined;
 
@@ -1470,15 +1492,15 @@ export function ItemFormWizard({
         images: validImages,
         youtube_url: youtubeUrl,
         video_start_time: youtubeStartTime,
-        // Parameters (Step 3)
-        parameters: attachedParameters.map((param, index) => ({
+        // Parameters (Step 3) - empty for product group parents
+        parameters: productGroupRole === 'parent' ? [] : attachedParameters.map((param, index) => ({
           parameter_id: param.id,
           min_quantity: param.min_max.min,
           max_quantity: param.min_max.max,
           display_order: index
         })),
         // Pricing (Step 4) - filter to only include pricing for attached parameters
-        pricing_rate: pricingRate,
+        pricing_rate: pricingRate.startsWith('timeslot_') ? 'per_timeslot' : pricingRate,
         group_pricing: Object.fromEntries(
           Object.entries(groupPricing).filter(([key]) => attachedParamIds.has(key))
         ),
@@ -1493,7 +1515,12 @@ export function ItemFormWizard({
         // Package Items / Add-Ons (Step 5)
         package_items: packageItems,
         show_package_price: showPackagePrice,
-        // Timeslots (Step 3 - Allocation)
+        // Product Grouping
+        product_group_role: productGroupRole,
+        product_group_children: productGroupChildren.map(c => c.item_id),
+        product_group_settings: productGroupRole === 'parent' ? productGroupSettings : null,
+        // Timeslots & Allocation interval (Step 3 - Allocation)
+        allocation_interval_minutes: parseInt(timeInterval),
         timeslots: transformedTimeslots,
         // Taxes (Step 6)
         taxes: taxes.filter(tax => tax.enabled), // Only send enabled taxes
@@ -1646,6 +1673,8 @@ export function ItemFormWizard({
 
   // Validation: warn when leaving step 3 (attributes) without any parameters
   const validateLeaveAttributesStep = (): boolean => {
+    // Skip parameter validation for product group parents
+    if (productGroupRole === 'parent') return true;
     if (currentStep === 3 && attachedParameters.length === 0) {
       toast({
         title: "Chưa có tham số",
@@ -2593,6 +2622,19 @@ export function ItemFormWizard({
   const itemName = form.watch('name') || 'New Item';
   const allocationType = form.watch('allocation_type');
 
+  // Auto-sync pricingRate when allocation type changes
+  useEffect(() => {
+    if (allocationType === 'timeslots') {
+      // Timeslots only supports per-timeslot pricing
+      if (!pricingRate.startsWith('timeslot_')) {
+        setPricingRate('timeslot_0');
+      }
+    } else if (pricingRate.startsWith('timeslot_')) {
+      // Switching away from timeslots, reset to per_booking
+      setPricingRate('per_booking');
+    }
+  }, [allocationType]);
+
   // Generate SKU from name
   const generateSKU = (name: string): string => {
     if (!name) return '';
@@ -3295,6 +3337,14 @@ export function ItemFormWizard({
                 {/* Step 3: Attributes */}
                 {currentStep === 3 && (
                   <div className="space-y-6">
+                    {productGroupRole === 'parent' && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <p className="text-sm text-yellow-800">
+                          Đây là item Product Grouping Parent. Giá và parameters dựa trên child items. Bạn có thể tắt Product Grouping ở tab Packages.
+                        </p>
+                      </div>
+                    )}
+                    {productGroupRole !== 'parent' && (<>
                     <div className="flex items-center gap-6">
                       <FormField
                         control={form.control}
@@ -3651,9 +3701,8 @@ export function ItemFormWizard({
                               {/* per Day */}
                               <button
                                 type="button"
-                                disabled
                                 onClick={() => field.onChange('per_day')}
-                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors opacity-50 pointer-events-none cursor-not-allowed ${
+                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors ${
                                   field.value === 'per_day'
                                     ? 'border-primary bg-white'
                                     : 'border-gray-200 bg-white hover:border-gray-300'
@@ -3690,9 +3739,8 @@ export function ItemFormWizard({
                               {/* per Time */}
                               <button
                                 type="button"
-                                disabled
                                 onClick={() => field.onChange('per_hour')}
-                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors opacity-50 pointer-events-none cursor-not-allowed ${
+                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors ${
                                   field.value === 'per_hour'
                                     ? 'border-primary bg-white'
                                     : 'border-gray-200 bg-white hover:border-gray-300'
@@ -3710,9 +3758,8 @@ export function ItemFormWizard({
                               {/* Timeslots */}
                               <button
                                 type="button"
-                                disabled
                                 onClick={() => field.onChange('timeslots')}
-                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors opacity-50 pointer-events-none cursor-not-allowed ${
+                                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg transition-colors ${
                                   field.value === 'timeslots'
                                     ? 'border-primary bg-white'
                                     : 'border-gray-200 bg-white hover:border-gray-300'
@@ -3999,15 +4046,7 @@ export function ItemFormWizard({
                                       />
                                       {slot.showDayPicker && (
                                         <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg p-2">
-                                          {[
-                                            {key: 'monday', label: t('monday')},
-                                            {key: 'tuesday', label: t('tuesday')},
-                                            {key: 'wednesday', label: t('wednesday')},
-                                            {key: 'thursday', label: t('thursday')},
-                                            {key: 'friday', label: t('friday')},
-                                            {key: 'saturday', label: t('saturday')},
-                                            {key: 'sunday', label: t('sunday')}
-                                          ].map((day) => (
+                                          {DAY_NAMES_FROM_MONDAY.map(d => ({key: d, label: t(d)})).map((day) => (
                                             <div
                                               key={day.key}
                                               className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 cursor-pointer"
@@ -4057,7 +4096,7 @@ export function ItemFormWizard({
                                   setTimeslots([...timeslots, {
                                     startTime: '',
                                     endTime: '',
-                                    selectedDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+                                    selectedDays: [...DAY_NAMES_FROM_MONDAY]
                                   }]);
                                 }}
                                 className="w-auto"
@@ -4119,26 +4158,63 @@ export function ItemFormWizard({
                         </FormItem>
                       )}
                     />
+                  </>)}
                   </div>
                 )}
 
                 {/* Step 4: Pricing */}
                 {currentStep === 4 && (
                   <div className="space-y-6">
+                    {productGroupRole === 'parent' ? (
+                      <div className="space-y-6">
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <p className="text-sm text-yellow-800">
+                            Đây là item Product Grouping Parent. Giá dựa trên child items. Bạn có thể tắt Product Grouping ở tab Packages.
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Giá hiển thị (Display Price)</Label>
+                          <p className="text-xs text-gray-500 mb-2">Giá hiển thị trên danh sách, không ảnh hưởng đến tính giá booking</p>
+                          <CurrencyInput
+                            value={productGroupSettings.display_price}
+                            onValueChange={(val) => setProductGroupSettings(prev => ({ ...prev, display_price: val || 0 }))}
+                            className="w-64"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Trạng thái lịch mặc định</Label>
+                          <Select
+                            value={productGroupSettings.default_calendar_status}
+                            onValueChange={(val) => setProductGroupSettings(prev => ({ ...prev, default_calendar_status: val }))}
+                          >
+                            <SelectTrigger className="w-64">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="available">Available</SelectItem>
+                              <SelectItem value="unavailable">Unavailable</SelectItem>
+                              <SelectItem value="disabled">Disabled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ) : (<>
                     <div>
                       <h2 className="text-xl font-semibold mb-4">{t('pricing.title')}</h2>
 
                       {/* Pricing Type Toggle */}
                       <div className="inline-flex rounded-md shadow-sm mb-6" role="group">
-                        {/* Always show per_booking option */}
-                        <Button
-                          type="button"
-                          variant={pricingRate === 'per_booking' ? 'default' : 'outline'}
-                          onClick={() => setPricingRate('per_booking')}
-                          className="rounded-r-none"
-                        >
-                          {t('pricing.perBookingBtn')}
-                        </Button>
+                        {/* Show per_booking option for non-timeslot allocation types */}
+                        {allocationType !== 'timeslots' && (
+                          <Button
+                            type="button"
+                            variant={pricingRate === 'per_booking' ? 'default' : 'outline'}
+                            onClick={() => setPricingRate('per_booking')}
+                            className="rounded-r-none"
+                          >
+                            {t('pricing.perBookingBtn')}
+                          </Button>
+                        )}
 
                         {/* Show button based on allocation type */}
                         {allocationType === 'per_hour' && (
@@ -4171,17 +4247,16 @@ export function ItemFormWizard({
                             {t('pricing.perNightBtn')}
                           </Button>
                         )}
-                        {allocationType === 'timeslots' && timeslots.length > 0 && timeslots.map((slot, index) => (
+                        {allocationType === 'timeslots' && (
                           <Button
-                            key={index}
                             type="button"
-                            variant={pricingRate === `timeslot_${index}` ? 'default' : 'outline'}
-                            onClick={() => setPricingRate(`timeslot_${index}`)}
-                            className="rounded-l-none border-l-0"
+                            variant={pricingRate.startsWith('timeslot_') ? 'default' : 'outline'}
+                            onClick={() => setPricingRate('timeslot_0')}
+                            className="rounded-none"
                           >
-                            {slot.startTime && slot.endTime ? `${slot.startTime} - ${slot.endTime}` : t('pricing.perTimeslotBtn')}
+                            {t('pricing.perTimeslotBtn')}
                           </Button>
-                        ))}
+                        )}
                       </div>
 
                       {/* Base Price Table */}
@@ -4222,7 +4297,7 @@ export function ItemFormWizard({
                                     />
                                   </td>
                                   <td className="px-4 py-2 text-xs text-gray-600">
-                                    {t('pricing.perParameter', { rate: pricingRate, param: param.name })}
+                                    {t('pricing.perParameter', { rate: pricingRate.startsWith('timeslot_') ? 'per_timeslot' : pricingRate, param: param.name })}
                                   </td>
                                   <td className="px-4 py-2">
                                     <Button
@@ -4658,12 +4733,151 @@ export function ItemFormWizard({
                         </p>
                       </div>
                     </div>
+                    </>)}
                   </div>
                 )}
 
                 {/* Step 5: Package / Add-Ons & Menu Products */}
                 {currentStep === 5 && (
                   <div className="space-y-6">
+                    {/* Product Grouping Section */}
+                    <div className="space-y-4">
+                      <label className="block text-sm font-medium text-gray-700">
+                        {t('productGroup.label')}
+                      </label>
+
+                      {productGroupParent ? (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <p className="text-sm text-blue-800">
+                            {t('productGroup.childInfoPrefix')}<strong>{t('productGroup.childInfoChild')}</strong>{t('productGroup.childInfoSuffix')}{' '}
+                            <button
+                              type="button"
+                              className="text-blue-600 underline hover:text-blue-800"
+                              onClick={() => router.push(`/admin/zones/${zoneId}/${basePath}/${productGroupParent.id}/edit`)}
+                            >
+                              {typeof productGroupParent.name === 'string'
+                                ? productGroupParent.name
+                                : ((productGroupParent.name as any)?.vi || (productGroupParent.name as any)?.en || '-')}
+                            </button>
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <Select
+                            value={productGroupRole || 'disabled'}
+                            onValueChange={(val) => setProductGroupRole(val === 'disabled' ? null : 'parent')}
+                          >
+                            <SelectTrigger className="w-64">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="disabled">{t('productGroup.disabled')}</SelectItem>
+                              <SelectItem value="parent">{t('productGroup.parent')}</SelectItem>
+                            </SelectContent>
+                          </Select>
+
+                          {productGroupRole === 'parent' && (
+                            <div className="space-y-4 ml-4 border-l-2 border-blue-200 pl-4">
+                              {/* Child Items */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  {t('productGroup.childItems')}
+                                </label>
+                                {productGroupChildren.length > 0 && (
+                                  <div className="border rounded-lg overflow-hidden mb-3">
+                                    <table className="w-full bg-white">
+                                      <thead className="bg-gray-50 border-b">
+                                        <tr>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{t('productGroup.tableName')}</th>
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{t('productGroup.tableSku')}</th>
+                                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase"></th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {productGroupChildren.map((child, idx) => (
+                                          <tr key={child.item_id} className="border-b last:border-0">
+                                            <td className="px-4 py-2 text-sm">
+                                              {typeof child.item_name === 'string'
+                                                ? child.item_name
+                                                : ((child.item_name as any)?.vi || (child.item_name as any)?.en || '-')}
+                                            </td>
+                                            <td className="px-4 py-2 text-sm text-gray-500">{child.item_sku || '-'}</td>
+                                            <td className="px-4 py-2 text-right">
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setProductGroupChildren(prev => prev.filter((_, i) => i !== idx))}
+                                              >
+                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                              </Button>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setShowProductGroupChildDialog(true);
+                                    setProductGroupSearchQuery('');
+                                    // Fetch available common items for this zone
+                                    fetch(`/api/admin/glamping/items?zone_id=${zoneId}&is_tent_category=false`)
+                                      .then(res => res.json())
+                                      .then(data => {
+                                        if (data.items) {
+                                          setAvailableCommonItems(data.items.map((i: any) => ({
+                                            id: i.id,
+                                            name: i.name,
+                                            sku: i.sku,
+                                          })));
+                                        }
+                                      });
+                                  }}
+                                >
+                                  <Paperclip className="w-4 h-4 mr-1" />
+                                  {t('productGroup.addChild')}
+                                </Button>
+                              </div>
+
+                              {/* Settings */}
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <Switch
+                                    checked={productGroupSettings.show_unavailable_children}
+                                    onCheckedChange={(checked) => setProductGroupSettings(prev => ({ ...prev, show_unavailable_children: checked }))}
+                                  />
+                                  <Label className="text-sm">{t('productGroup.showUnavailable')}</Label>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <Switch
+                                    checked={productGroupSettings.show_starting_price}
+                                    onCheckedChange={(checked) => setProductGroupSettings(prev => ({ ...prev, show_starting_price: checked }))}
+                                  />
+                                  <Label className="text-sm">{t('productGroup.showStartingPrice')}</Label>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <Switch
+                                    checked={productGroupSettings.show_child_prices_in_dropdown}
+                                    onCheckedChange={(checked) => setProductGroupSettings(prev => ({ ...prev, show_child_prices_in_dropdown: checked }))}
+                                  />
+                                  <Label className="text-sm">{t('productGroup.showChildPrices')}</Label>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {productGroupRole !== 'parent' && (
+                    <>
+                    <hr className="border-gray-200" />
+
                     {/* Item Add-Ons Section */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-4">
@@ -4765,6 +4979,7 @@ export function ItemFormWizard({
                                   const items = (data.items || []).filter((item: any) => item.id !== currentId);
                                   setAvailableCommonItems(items);
                                   setPackageSearchQuery('');
+                                  setTempPackageItems([...packageItems]);
                                   setShowAttachDialog(true);
                                 })
                                 .catch(() => {
@@ -4800,6 +5015,60 @@ export function ItemFormWizard({
                               />
                             </div>
 
+                            {/* Select All / Deselect All */}
+                            {availableCommonItems.length > 0 && (
+                              <div className="flex gap-2 mb-3">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const filtered = availableCommonItems.filter((ci) => {
+                                      if (!packageSearchQuery.trim()) return true;
+                                      const name = typeof ci.name === 'string'
+                                        ? ci.name
+                                        : (ci.name?.vi || ci.name?.en || '');
+                                      return name.toLowerCase().includes(packageSearchQuery.trim().toLowerCase());
+                                    });
+                                    const existingIds = new Set(tempPackageItems.map(p => p.item_id));
+                                    const newItems = filtered
+                                      .filter(ci => !existingIds.has(ci.id))
+                                      .map(ci => ({
+                                        item_id: ci.id,
+                                        item_name: typeof ci.name === 'string'
+                                          ? ci.name
+                                          : (ci.name?.vi || ci.name?.en || ''),
+                                        item_sku: ci.sku,
+                                        price_percentage: 100,
+                                        opt_in: 'optional' as const,
+                                        dates_setting: 'inherit_parent' as const,
+                                      }));
+                                    setTempPackageItems([...tempPackageItems, ...newItems]);
+                                  }}
+                                >
+                                  Chọn tất cả
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const filtered = availableCommonItems.filter((ci) => {
+                                      if (!packageSearchQuery.trim()) return true;
+                                      const name = typeof ci.name === 'string'
+                                        ? ci.name
+                                        : (ci.name?.vi || ci.name?.en || '');
+                                      return name.toLowerCase().includes(packageSearchQuery.trim().toLowerCase());
+                                    });
+                                    const filteredIds = new Set(filtered.map(ci => ci.id));
+                                    setTempPackageItems(tempPackageItems.filter(p => !filteredIds.has(p.item_id)));
+                                  }}
+                                >
+                                  Bỏ chọn tất cả
+                                </Button>
+                              </div>
+                            )}
+
                             <div className="max-h-96 overflow-y-auto">
                               {availableCommonItems.length === 0 ? (
                                 <p className="text-center text-gray-500 py-8">{t('noItemsAvailable')}</p>
@@ -4814,7 +5083,7 @@ export function ItemFormWizard({
                                       return name.toLowerCase().includes(packageSearchQuery.trim().toLowerCase());
                                     })
                                     .map((commonItem) => {
-                                    const isAttached = packageItems.some(p => p.item_id === commonItem.id);
+                                    const isAttached = tempPackageItems.some(p => p.item_id === commonItem.id);
                                     return (
                                       <div
                                         key={commonItem.id}
@@ -4824,8 +5093,8 @@ export function ItemFormWizard({
                                           checked={isAttached}
                                           onCheckedChange={(checked) => {
                                             if (checked) {
-                                              setPackageItems([
-                                                ...packageItems,
+                                              setTempPackageItems([
+                                                ...tempPackageItems,
                                                 {
                                                   item_id: commonItem.id,
                                                   item_name: typeof commonItem.name === 'string'
@@ -4838,7 +5107,7 @@ export function ItemFormWizard({
                                                 }
                                               ]);
                                             } else {
-                                              setPackageItems(packageItems.filter(p => p.item_id !== commonItem.id));
+                                              setTempPackageItems(tempPackageItems.filter(p => p.item_id !== commonItem.id));
                                             }
                                           }}
                                         />
@@ -4867,7 +5136,10 @@ export function ItemFormWizard({
                               </Button>
                               <Button
                                 type="button"
-                                onClick={() => setShowAttachDialog(false)}
+                                onClick={() => {
+                                  setPackageItems(tempPackageItems);
+                                  setShowAttachDialog(false);
+                                }}
                               >
                                 {t('done')}
                               </Button>
@@ -5021,6 +5293,87 @@ export function ItemFormWizard({
                           </DialogContent>
                         </Dialog>
                       </div>
+                    </>
+                    )}
+
+                    {/* Product Group Child Selection Dialog */}
+                    <Dialog open={showProductGroupChildDialog} onOpenChange={setShowProductGroupChildDialog}>
+                      <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>{t('productGroup.selectChildTitle')}</DialogTitle>
+                          <DialogDescription>
+                            {t('productGroup.selectChildDesc')}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="mb-3">
+                          <Input
+                            placeholder={t('productGroup.searchPlaceholder')}
+                            value={productGroupSearchQuery}
+                            onChange={(e) => setProductGroupSearchQuery(e.target.value)}
+                          />
+                        </div>
+                        <div className="max-h-96 overflow-y-auto">
+                          {availableCommonItems.length === 0 ? (
+                            <p className="text-center text-gray-500 py-8">{t('productGroup.noItems')}</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {availableCommonItems
+                                .filter((item) => {
+                                  // Exclude current item (can't be child of itself)
+                                  if (item.id === itemId || item.id === createdItemId) return false;
+                                  if (!productGroupSearchQuery.trim()) return true;
+                                  const name = typeof item.name === 'string'
+                                    ? item.name
+                                    : ((item.name as any)?.vi || (item.name as any)?.en || '');
+                                  return name.toLowerCase().includes(productGroupSearchQuery.trim().toLowerCase());
+                                })
+                                .map((item) => {
+                                  const isSelected = productGroupChildren.some(c => c.item_id === item.id);
+                                  return (
+                                    <div key={item.id} className="flex items-center gap-3 p-3 border rounded hover:bg-gray-50">
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            setProductGroupChildren(prev => [
+                                              ...prev,
+                                              {
+                                                item_id: item.id,
+                                                item_name: typeof item.name === 'string'
+                                                  ? item.name
+                                                  : ((item.name as any)?.vi || (item.name as any)?.en || ''),
+                                                item_sku: item.sku,
+                                              }
+                                            ]);
+                                          } else {
+                                            setProductGroupChildren(prev => prev.filter(c => c.item_id !== item.id));
+                                          }
+                                        }}
+                                      />
+                                      <label className="text-sm cursor-pointer flex-1">
+                                        {typeof item.name === 'string'
+                                          ? item.name
+                                          : ((item.name as any)?.vi || (item.name as any)?.en || '-')}
+                                        {item.sku && (
+                                          <span className="ml-2 text-xs text-gray-500">({item.sku})</span>
+                                        )}
+                                      </label>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          )}
+                        </div>
+                        <DialogFooter>
+                          <Button type="button" variant="outline" onClick={() => setShowProductGroupChildDialog(false)}>
+                            {tc('cancel')}
+                          </Button>
+                          <Button type="button" onClick={() => setShowProductGroupChildDialog(false)}>
+                            {t('done')}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
 
                     {/* Separator between Add-Ons and Menu Products */}
                     {isTentCategory && (
@@ -5470,8 +5823,8 @@ export function ItemFormWizard({
                         type="button"
                         onClick={() => {
                           if (!isDisabled) {
-                            // Validate leaving attributes step
-                            if (currentStep === 3 && step.id !== 3 && attachedParameters.length === 0) {
+                            // Validate leaving attributes step (skip for product group parents)
+                            if (currentStep === 3 && step.id !== 3 && attachedParameters.length === 0 && productGroupRole !== 'parent') {
                               toast({
                                 title: "Chưa có tham số",
                                 description: "Bạn chưa thêm tham số nào. Vui lòng thêm ít nhất một tham số trước khi chuyển bước.",

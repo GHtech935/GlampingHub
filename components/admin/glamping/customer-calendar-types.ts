@@ -85,23 +85,14 @@ export const DEFAULT_CUSTOMER_CALENDAR_FILTERS: CustomerCalendarFilters = {
 };
 
 /**
- * Status color mapping for booking bars
+ * Payment status color mapping for booking bars
  */
-export const CUSTOMER_CALENDAR_STATUS_COLORS: Record<BookingStatus, string> = {
+export const CUSTOMER_CALENDAR_PAYMENT_COLORS: Record<PaymentStatus, string> = {
   pending: 'bg-orange-500',
-  confirmed: 'bg-blue-500',
-  checked_in: 'bg-green-500',
-  checked_out: 'bg-gray-400',
-  cancelled: 'bg-red-500',
-};
-
-/**
- * Text color mapping for booking bars
- */
-export const CUSTOMER_CALENDAR_STATUS_TEXT_COLORS: Record<BookingStatus, string> = {
-  pending: 'text-white',
-  confirmed: 'text-white',
-  checked_in: 'text-white',
-  checked_out: 'text-white',
-  cancelled: 'text-white',
+  deposit_paid: 'bg-blue-500',
+  fully_paid: 'bg-green-500',
+  refund_pending: 'bg-yellow-500',
+  refunded: 'bg-gray-400',
+  no_refund: 'bg-red-500',
+  expired: 'bg-gray-600',
 };

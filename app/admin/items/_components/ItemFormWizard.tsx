@@ -61,6 +61,7 @@ import EventFormFields from "@/components/admin/events/EventFormFields";
 import TaxManagement from "@/components/admin/items/TaxManagement";
 import { PricingTable } from "./PricingTable";
 import type { Category as EventCategory } from "@/components/admin/events/CategoryItemSelector";
+import { dayNumberToName, dayNameToNumber } from "@/lib/days-of-week";
 
 interface Category {
   id: string;
@@ -199,6 +200,7 @@ export function ItemFormWizard({
   const [showPackagePrice, setShowPackagePrice] = useState<boolean>(false);
   const [packageStartingPrice, setPackageStartingPrice] = useState<number>(0);
   const [showAttachDialog, setShowAttachDialog] = useState<boolean>(false);
+  const [tempPackageItems, setTempPackageItems] = useState<typeof packageItems>([]);
   const [availableItems, setAvailableItems] = useState<Array<{id: string; name: string}>>([]);
 
   // Inline Category/Tag creation state
@@ -535,20 +537,10 @@ export function ItemFormWizard({
       }
       // Transform and set timeslots if allocation_type is 'timeslots'
       if (initialData.timeslots && initialData.timeslots.length > 0) {
-        const numberToDayName: Record<number, string> = {
-          0: 'sunday',
-          1: 'monday',
-          2: 'tuesday',
-          3: 'wednesday',
-          4: 'thursday',
-          5: 'friday',
-          6: 'saturday'
-        };
-
         const transformedSlots = initialData.timeslots.map(slot => ({
           startTime: slot.start_time,
           endTime: slot.end_time,
-          selectedDays: slot.days_of_week.map(num => numberToDayName[num] || 'monday'),
+          selectedDays: slot.days_of_week.map(num => dayNumberToName(num)),
           showStartPicker: false,
           showEndPicker: false,
           showDayPicker: false
@@ -755,23 +747,13 @@ export function ItemFormWizard({
       }
 
       // Transform timeslots format for database (if allocation type is timeslots)
-      const dayNameToNumber: Record<string, number> = {
-        'sunday': 0,
-        'monday': 1,
-        'tuesday': 2,
-        'wednesday': 3,
-        'thursday': 4,
-        'friday': 5,
-        'saturday': 6
-      };
-
       const transformedTimeslots = data.allocation_type === 'timeslots'
         ? timeslots
             .filter(slot => slot.startTime && slot.endTime)
             .map(slot => ({
               start_time: slot.startTime,
               end_time: slot.endTime,
-              days_of_week: slot.selectedDays.map(day => dayNameToNumber[day.toLowerCase()] ?? 0)
+              days_of_week: slot.selectedDays.map(day => dayNameToNumber(day))
             }))
         : undefined;
 
@@ -3440,6 +3422,7 @@ export function ItemFormWizard({
                               .then(res => res.json())
                               .then(data => {
                                 setAvailableItems(data.items || []);
+                                setTempPackageItems([...packageItems]);
                                 setShowAttachDialog(true);
                               })
                               .catch(err => {
@@ -3503,13 +3486,49 @@ export function ItemFormWizard({
                           </DialogDescription>
                         </DialogHeader>
 
+                        {/* Select All / Deselect All */}
+                        {availableItems.length > 0 && (
+                          <div className="flex gap-2 mb-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const existingIds = new Set(tempPackageItems.map(p => p.item_id));
+                                const newItems = availableItems
+                                  .filter(item => !existingIds.has(item.id))
+                                  .map(item => ({
+                                    item_id: item.id,
+                                    item_name: item.name,
+                                    price_percentage: 100,
+                                    opt_in: 'optional' as const,
+                                  }));
+                                setTempPackageItems([...tempPackageItems, ...newItems]);
+                              }}
+                            >
+                              Chọn tất cả
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const allIds = new Set(availableItems.map(item => item.id));
+                                setTempPackageItems(tempPackageItems.filter(p => !allIds.has(p.item_id)));
+                              }}
+                            >
+                              Bỏ chọn tất cả
+                            </Button>
+                          </div>
+                        )}
+
                         <div className="max-h-96 overflow-y-auto">
                           {availableItems.length === 0 ? (
                             <p className="text-center text-gray-500 py-8">{t('noItemsAvailable')}</p>
                           ) : (
                             <div className="space-y-2">
                               {availableItems.map((item) => {
-                                const isAttached = packageItems.some(p => p.item_id === item.id);
+                                const isAttached = tempPackageItems.some(p => p.item_id === item.id);
                                 return (
                                   <div
                                     key={item.id}
@@ -3519,8 +3538,8 @@ export function ItemFormWizard({
                                       checked={isAttached}
                                       onCheckedChange={(checked) => {
                                         if (checked) {
-                                          setPackageItems([
-                                            ...packageItems,
+                                          setTempPackageItems([
+                                            ...tempPackageItems,
                                             {
                                               item_id: item.id,
                                               item_name: item.name,
@@ -3529,7 +3548,7 @@ export function ItemFormWizard({
                                             }
                                           ]);
                                         } else {
-                                          setPackageItems(packageItems.filter(p => p.item_id !== item.id));
+                                          setTempPackageItems(tempPackageItems.filter(p => p.item_id !== item.id));
                                         }
                                       }}
                                     />
@@ -3553,7 +3572,10 @@ export function ItemFormWizard({
                           </Button>
                           <Button
                             type="button"
-                            onClick={() => setShowAttachDialog(false)}
+                            onClick={() => {
+                              setPackageItems(tempPackageItems);
+                              setShowAttachDialog(false);
+                            }}
                           >
                             {t('done')}
                           </Button>

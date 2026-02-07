@@ -7,6 +7,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -164,6 +173,10 @@ export function GlampingBookingDetailModal({
   const [customerBookings, setCustomerBookings] = useState<CustomerBookingExtended[]>([]);
   const [loadingCustomerBookings, setLoadingCustomerBookings] = useState(false);
 
+  // Cancel dialog
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+
   // Force edit status dialog
   const [forceEditDialogOpen, setForceEditDialogOpen] = useState(false);
 
@@ -271,7 +284,7 @@ export function GlampingBookingDetailModal({
     }
   };
 
-  const handleStatusTransition = async (newStatus: BookingStatus) => {
+  const handleStatusTransition = async (newStatus: BookingStatus, cancellationReason?: string) => {
     if (!bookingId) return;
 
     try {
@@ -284,6 +297,7 @@ export function GlampingBookingDetailModal({
           status: newStatus,
           paymentStatus,
           internalNotes,
+          ...(cancellationReason ? { cancellationReason } : {}),
         }),
       });
 
@@ -705,7 +719,7 @@ export function GlampingBookingDetailModal({
                 <div className="flex justify-between items-center pt-4 border-t">
                   <Button
                     variant="outline"
-                    onClick={() => handleStatusTransition('cancelled')}
+                    onClick={() => setShowCancelDialog(true)}
                     disabled={updating}
                     className="text-destructive border-destructive hover:bg-destructive/10"
                   >
@@ -1276,7 +1290,9 @@ export function GlampingBookingDetailModal({
               isUpdating={updating}
               canCheckout={status === 'checked_in'}
               currentPaymentStatus={paymentStatus}
-              currentStaffName="Admin"
+              createdByUserId={booking.createdByUserId || null}
+              createdByName={booking.createdByName || null}
+              customerId={booking.customer?.id || null}
               onRefresh={fetchBookingDetails}
               refreshTrigger={financialRefreshTrigger}
             />
@@ -1294,6 +1310,52 @@ export function GlampingBookingDetailModal({
           isLoading={updating}
           locale={locale}
         />
+
+        {/* Cancel Booking Confirmation Dialog */}
+        <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {locale === 'vi' ? 'Xác nhận hủy booking' : 'Confirm Cancellation'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {locale === 'vi'
+                  ? 'Vui lòng nhập lý do hủy booking. Thông tin này sẽ được gửi cho khách hàng qua email.'
+                  : 'Please enter the cancellation reason. This will be sent to the customer via email.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-2">
+              <Label className="text-sm font-medium">
+                {locale === 'vi' ? 'Lý do hủy' : 'Cancellation Reason'} <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder={locale === 'vi' ? 'Nhập lý do hủy booking...' : 'Enter cancellation reason...'}
+                rows={3}
+                className="mt-2"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setShowCancelDialog(false); setCancelReason(""); }}>
+                {locale === 'vi' ? 'Đóng' : 'Close'}
+              </AlertDialogCancel>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  await handleStatusTransition('cancelled', cancelReason || undefined);
+                  setShowCancelDialog(false);
+                  setCancelReason("");
+                }}
+                disabled={updating || !cancelReason.trim()}
+              >
+                {updating && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />}
+                <XCircle className="h-4 w-4 mr-2" />
+                {locale === 'vi' ? 'Hủy booking' : 'Cancel Booking'}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

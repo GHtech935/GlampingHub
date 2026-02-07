@@ -36,6 +36,7 @@ interface InvoiceData {
   };
   invoiceNotes?: string; // Ghi chú xuất hoá đơn (HTML formatted)
   specialRequests?: string; // Yêu cầu đặc biệt của khách (plain text)
+  staffName?: string | null; // Nhân viên tư vấn (nếu admin tạo booking)
 }
 
 // Helper to format currency
@@ -283,7 +284,8 @@ function generateInvoiceHTML(data: InvoiceData): string {
   <div class="info-section">
     <div class="info-box">
       <h3>Thông tin đơn hàng</h3>
-      <p><strong>Campsite:</strong> ${data.campsite.name}</p>
+      <p><strong>Khu glamping:</strong> ${data.campsite.name}</p>
+      ${data.staffName ? `<p><strong>Nhân viên tư vấn:</strong> ${data.staffName}</p>` : ''}
       ${data.campsite.address ? `<p><strong>Địa chỉ:</strong> ${data.campsite.address}</p>` : ''}
       ${data.campsite.phone ? `<p><strong>SĐT:</strong> ${data.campsite.phone}</p>` : ''}
     </div>

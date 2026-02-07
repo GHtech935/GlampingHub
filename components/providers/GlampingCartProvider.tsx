@@ -40,6 +40,18 @@ export interface AddonSelection {
   // Price override fields (for admin manual booking)
   priceOverride?: number;      // Manual override price
   usePriceOverride?: boolean;  // Whether to use override
+  // Product Grouping fields
+  isProductGroupParent?: boolean;
+  selectedChildren?: Record<string, {
+    childItemId: string;
+    childName: string;
+    parameterQuantities: Record<string, number>;
+    totalPrice?: number;
+    parameterPricing?: Record<string, { unitPrice: number; pricingMode: string; paramName: string }>;
+    dates?: { from: string; to: string };
+    selectedDate?: string;
+    voucher?: any;
+  }>;
 }
 
 export interface GlampingCartItem {

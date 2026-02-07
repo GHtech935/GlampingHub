@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import pool, { query } from '@/lib/db';
+import { getGlampingBookingLiveTotal } from '@/lib/booking-recalculate';
 
 export async function GET(
   request: NextRequest,
@@ -45,7 +46,38 @@ export async function GET(
 
     const booking = bookingResult.rows[0];
 
-    // Query 2: Get all tents with item and zone info
+    // Calculate live total from individual items (not the potentially stale stored value)
+    const client = await pool.connect();
+    let liveTotal: { subtotal: number; taxAmount: number; discountAmount: number; totalAmount: number };
+    try {
+      liveTotal = await getGlampingBookingLiveTotal(client, bookingId);
+    } finally {
+      client.release();
+    }
+
+    // Recalculate deposit_due based on live total and stored deposit ratio
+    const storedTotal = parseFloat(booking.total_amount || '0');
+    const storedDeposit = parseFloat(booking.deposit_due || '0');
+    const depositRatio = storedTotal > 0 && storedDeposit > 0 ? storedDeposit / storedTotal : 1;
+    booking.deposit_due = Math.round(liveTotal.totalAmount * depositRatio);
+
+    // Override stored pricing with live-calculated values
+    booking.subtotal_amount = liveTotal.subtotal;
+    booking.tax_amount = liveTotal.taxAmount;
+    booking.discount_amount = liveTotal.discountAmount;
+    booking.total_amount = liveTotal.totalAmount;
+
+    // Compute balance_due dynamically from actual payments
+    const paymentsResult = await query(
+      `SELECT COALESCE(SUM(amount), 0) as total_paid
+       FROM glamping_booking_payments
+       WHERE booking_id = $1 AND status IN ('successful', 'completed', 'paid')`,
+      [bookingId]
+    );
+    const totalPaid = parseFloat(paymentsResult.rows[0].total_paid || '0');
+    booking.balance_due = Math.max(0, liveTotal.totalAmount - totalPaid);
+
+    // Query 2: Get all tents with item and zone info (including discount fields)
     const tentsResult = await query(`
       SELECT
         bt.id,
@@ -56,6 +88,10 @@ export async function GET(
         bt.subtotal,
         bt.special_requests,
         bt.display_order,
+        bt.voucher_code,
+        bt.discount_type,
+        bt.discount_value,
+        bt.discount_amount,
         i.name as item_name,
         z.id as zone_id,
         z.name as zone_name
@@ -100,6 +136,7 @@ export async function GET(
       FROM glamping_booking_parameters bp
       LEFT JOIN glamping_parameters p ON bp.parameter_id = p.id
       WHERE bp.booking_id = $1
+      ORDER BY p.display_order ASC, p.name ASC
     `, [bookingId]);
 
     // Query 5: Get all menu products grouped by booking_tent_id
@@ -112,6 +149,8 @@ export async function GET(
         mp.unit_price,
         mp.total_price,
         mp.serving_date,
+        mp.voucher_code as menu_voucher_code,
+        mp.discount_amount as menu_discount_amount,
         mi.name,
         mi.description,
         mi.unit,
@@ -165,6 +204,10 @@ export async function GET(
         subtotal: parseFloat(tent.subtotal || 0),
         specialRequests: tent.special_requests,
         displayOrder: tent.display_order,
+        voucherCode: tent.voucher_code || null,
+        discountType: tent.discount_type || null,
+        discountValue: parseFloat(tent.discount_value || 0),
+        discountAmount: parseFloat(tent.discount_amount || 0),
         items: (itemsByTent.get(tent.id) || []).map(item => ({
           id: item.id,
           itemId: item.item_id,
@@ -200,6 +243,8 @@ export async function GET(
           maxGuests: mp.max_guests,
           categoryId: mp.category_id,
           categoryName: mp.category_name,
+          voucherCode: mp.menu_voucher_code || null,
+          discountAmount: parseFloat(mp.menu_discount_amount || 0),
         })),
       };
     });

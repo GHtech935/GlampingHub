@@ -164,6 +164,8 @@ export interface BookingDetail {
   confirmedAt?: string;
   cancelledAt?: string;
   additionalCosts?: Array<{ id: string; name: string }>;
+  createdByUserId?: string | null;
+  createdByName?: string | null;
 }
 
 /**
@@ -373,6 +375,8 @@ export interface CommonItemEditData {
   discountAmount?: number;
   zoneId?: string;
   priceOverride?: number | null;
+  productGroupParentId?: string | null;
+  productGroupParentName?: string | null;
 }
 
 /**

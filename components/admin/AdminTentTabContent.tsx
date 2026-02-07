@@ -298,6 +298,13 @@ export function AdminTentTabContent({
     loading: boolean
   }>>({})
 
+  // Child pricing state (for product group children)
+  const [childPricingMap, setChildPricingMap] = useState<Record<string, {
+    parameterPricing: Record<string, number>
+    parameterPricingModes: Record<string, string>
+    loading: boolean
+  }>>({})
+
   // Use ref flag to prevent circular dependency between pricing fetch and sync effects.
   // Without this, syncing pricing back into addonSelections triggers another fetch.
   const isSyncingPricingRef = useRef(false)
@@ -371,7 +378,7 @@ export function AdminTentTabContent({
     if (!addons || addons.length === 0) return
 
     const selectedAddons = addons.filter(
-      (a) => tent.addonSelections[a.addon_item_id]?.selected
+      (a) => tent.addonSelections[a.addon_item_id]?.selected && !a.is_product_group_parent
     )
 
     if (selectedAddons.length === 0) {
@@ -477,6 +484,7 @@ export function AdminTentTabContent({
     const updatedSelections = { ...currentSelections }
 
     for (const addon of addons) {
+      if (addon.is_product_group_parent) continue // Skip - handled by child pricing sync
       const sel = currentSelections[addon.addon_item_id]
       if (!sel || !sel.selected) continue
 
@@ -529,6 +537,201 @@ export function AdminTentTabContent({
   useEffect(() => {
     isSyncingPricingRef.current = false
   }, [tent.addonSelections])
+
+  // Track previous child selections to detect changes
+  const prevChildSelectionsRef = useRef<string>('')
+
+  // Fetch pricing for selected product group children
+  useEffect(() => {
+    if (!addons || addons.length === 0) return
+
+    // Collect all selected children from product group parents
+    const childrenToFetch: Array<{
+      addonItemId: string
+      childItemId: string
+      parameterQuantities: Record<string, number>
+      pricePercentage: number
+      dates?: { from: string; to: string }
+    }> = []
+
+    addons.forEach((addon) => {
+      if (!addon.is_product_group_parent) return
+      const sel = tent.addonSelections[addon.addon_item_id]
+      if (!sel?.selected || !sel.selectedChildren) return
+
+      Object.entries(sel.selectedChildren).forEach(([childId, childData]) => {
+        if (!childData) return
+        const effectiveDates = childData.dates || sel.dates || (tent.dateRange?.from && tent.dateRange?.to
+          ? { from: format(tent.dateRange.from, 'yyyy-MM-dd'), to: format(tent.dateRange.to, 'yyyy-MM-dd') }
+          : undefined)
+
+        childrenToFetch.push({
+          addonItemId: addon.addon_item_id,
+          childItemId: childId,
+          parameterQuantities: childData.parameterQuantities,
+          pricePercentage: addon.price_percentage,
+          dates: effectiveDates,
+        })
+      })
+    })
+
+    // Build fingerprint to detect changes
+    const fingerprint = JSON.stringify(childrenToFetch.map(c => ({
+      id: c.childItemId,
+      pq: c.parameterQuantities,
+      d: c.dates,
+    })))
+
+    const anyMissingPricing = childrenToFetch.some(c => !childPricingMap[c.childItemId])
+
+    if (fingerprint === prevChildSelectionsRef.current && !anyMissingPricing) return
+    prevChildSelectionsRef.current = fingerprint
+
+    if (childrenToFetch.length === 0) {
+      setChildPricingMap({})
+      return
+    }
+
+    const fetchChildPricing = async () => {
+      const newMap: typeof childPricingMap = {}
+
+      childrenToFetch.forEach((child) => {
+        newMap[child.childItemId] = {
+          parameterPricing: {},
+          parameterPricingModes: {},
+          loading: true,
+        }
+      })
+      setChildPricingMap({ ...newMap })
+
+      await Promise.all(
+        childrenToFetch.map(async (child) => {
+          if (!child.dates?.from || !child.dates?.to) {
+            newMap[child.childItemId] = { parameterPricing: {}, parameterPricingModes: {}, loading: false }
+            return
+          }
+
+          try {
+            const params = new URLSearchParams({
+              itemId: child.childItemId,
+              checkIn: child.dates.from,
+              checkOut: child.dates.to,
+            })
+
+            Object.entries(child.parameterQuantities).forEach(([paramId, qty]) => {
+              if (qty > 0) {
+                params.append(`param_${paramId}`, qty.toString())
+              }
+            })
+
+            const response = await fetch(`/api/glamping/booking/calculate-pricing?${params}`)
+            const data = await response.json()
+
+            if (response.ok) {
+              const adjustedPricing: Record<string, number> = {}
+              const pct = child.pricePercentage / 100
+              Object.entries(data.parameterPricing || {}).forEach(([paramId, price]) => {
+                adjustedPricing[paramId] = (price as number) * pct
+              })
+              newMap[child.childItemId] = {
+                parameterPricing: adjustedPricing,
+                parameterPricingModes: data.parameterPricingModes || {},
+                loading: false,
+              }
+            } else {
+              newMap[child.childItemId] = { parameterPricing: {}, parameterPricingModes: {}, loading: false }
+            }
+          } catch {
+            newMap[child.childItemId] = { parameterPricing: {}, parameterPricingModes: {}, loading: false }
+          }
+        })
+      )
+
+      setChildPricingMap({ ...newMap })
+    }
+
+    const timer = setTimeout(fetchChildPricing, 800)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addons, tent.addonSelections, tent.dateRange])
+
+  // Sync child pricing into addonSelections (totalPrice for children & parent)
+  useEffect(() => {
+    if (!addons || addons.length === 0) return
+
+    const anyLoading = Object.values(childPricingMap).some(p => p.loading)
+    if (anyLoading) return
+    if (Object.keys(childPricingMap).length === 0) return
+
+    const currentSelections = tent.addonSelections
+    let hasChanges = false
+    const updatedSelections = { ...currentSelections }
+
+    for (const addon of addons) {
+      if (!addon.is_product_group_parent) continue
+      const sel = currentSelections[addon.addon_item_id]
+      if (!sel?.selected || !sel.selectedChildren) continue
+
+      let parentTotal = 0
+      const updatedChildren = { ...sel.selectedChildren }
+
+      for (const [childId, childData] of Object.entries(sel.selectedChildren)) {
+        if (!childData) continue
+        const childPricing = childPricingMap[childId]
+        if (!childPricing) continue
+
+        const childDef = addon.product_group_children?.find(c => c.child_item_id === childId)
+        if (!childDef) continue
+
+        let childTotal = 0
+        const computedParamPricing: Record<string, { unitPrice: number; pricingMode: string; paramName: string }> = {}
+
+        childDef.parameters.forEach((param) => {
+          const qty = childData.parameterQuantities[param.id] || 0
+          const unitPrice = childPricing.parameterPricing[param.id] || 0
+          const pricingMode = childPricing.parameterPricingModes[param.id] || 'per_person'
+          const isPerGroup = pricingMode === 'per_group'
+          childTotal += isPerGroup ? unitPrice : unitPrice * qty
+
+          computedParamPricing[param.id] = {
+            unitPrice,
+            pricingMode,
+            paramName: getAddonName(param),
+          }
+        })
+
+        if (
+          childData.totalPrice !== childTotal ||
+          JSON.stringify(childData.parameterPricing) !== JSON.stringify(computedParamPricing)
+        ) {
+          updatedChildren[childId] = {
+            ...childData,
+            totalPrice: childTotal,
+            parameterPricing: computedParamPricing,
+          }
+          hasChanges = true
+        }
+
+        const voucherDiscount = childData.voucher?.discountAmount || 0
+        parentTotal += Math.max(0, (updatedChildren[childId].totalPrice || childTotal) - voucherDiscount)
+      }
+
+      if (hasChanges || sel.totalPrice !== parentTotal) {
+        updatedSelections[addon.addon_item_id] = {
+          ...sel,
+          selectedChildren: updatedChildren,
+          totalPrice: parentTotal,
+        }
+        hasChanges = true
+      }
+    }
+
+    if (hasChanges) {
+      isSyncingPricingRef.current = true
+      onTentChange({ ...tent, addonSelections: updatedSelections })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childPricingMap, addons])
 
   // Addon event handlers
   const handleAddonToggle = useCallback((addonItemId: string, selected: boolean, addon: ItemAddon) => {
@@ -629,6 +832,49 @@ export function AdminTentTabContent({
     current[addonItemId] = {
       ...sel,
       voucher: null,
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
+
+  // Child voucher handlers (for product group children)
+  const handleChildVoucherApplied = useCallback((addonItemId: string, childItemId: string, voucher: AppliedVoucher) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel?.selectedChildren?.[childItemId]) return
+
+    current[addonItemId] = {
+      ...sel,
+      selectedChildren: {
+        ...sel.selectedChildren,
+        [childItemId]: {
+          ...sel.selectedChildren[childItemId],
+          voucher: {
+            code: voucher.code,
+            id: voucher.id,
+            discountAmount: voucher.discountAmount,
+            discountType: voucher.discountType as 'percentage' | 'fixed',
+            discountValue: voucher.discountValue,
+          },
+        },
+      },
+    }
+    onTentChange({ ...tent, addonSelections: current })
+  }, [tent, onTentChange])
+
+  const handleChildVoucherRemoved = useCallback((addonItemId: string, childItemId: string) => {
+    const current = { ...tent.addonSelections }
+    const sel = current[addonItemId]
+    if (!sel?.selectedChildren?.[childItemId]) return
+
+    current[addonItemId] = {
+      ...sel,
+      selectedChildren: {
+        ...sel.selectedChildren,
+        [childItemId]: {
+          ...sel.selectedChildren[childItemId],
+          voucher: null,
+        },
+      },
     }
     onTentChange({ ...tent, addonSelections: current })
   }, [tent, onTentChange])
@@ -840,8 +1086,8 @@ export function AdminTentTabContent({
                     )}
                   </div>
 
-                  {/* Addon Date - single date picker for inherit_parent */}
-                  {isSelected && addon.dates_setting === 'inherit_parent' && tent.dateRange?.from && tent.dateRange?.to && (() => {
+                  {/* Addon Date - single date picker for inherit_parent (hidden for product group parents) */}
+                  {isSelected && !addon.is_product_group_parent && addon.dates_setting === 'inherit_parent' && tent.dateRange?.from && tent.dateRange?.to && (() => {
                     const parentFrom = format(tent.dateRange.from!, 'yyyy-MM-dd')
                     const lastNight = new Date(tent.dateRange.to!)
                     lastNight.setDate(lastNight.getDate() - 1)
@@ -862,8 +1108,8 @@ export function AdminTentTabContent({
                     )
                   })()}
 
-                  {/* Addon Date - from/to for custom */}
-                  {isSelected && addon.dates_setting === 'custom' && (
+                  {/* Addon Date - from/to for custom (hidden for product group parents) */}
+                  {isSelected && !addon.is_product_group_parent && addon.dates_setting === 'custom' && (
                     <div className="mt-2 space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-600 shrink-0">{locale === 'vi' ? 'Từ ngày' : 'From'}</span>
@@ -895,8 +1141,221 @@ export function AdminTentTabContent({
                     </div>
                   )}
 
-                  {/* Addon Parameters */}
-                  {isSelected && addon.parameters.length > 0 && (() => {
+                  {/* Product Group Parent - child dropdown + child params */}
+                  {isSelected && addon.is_product_group_parent && addon.product_group_children && (() => {
+                    const selectedChildIds = Object.keys(selection?.selectedChildren || {})
+                    const selectedChildId = selectedChildIds.length > 0 ? selectedChildIds[0] : ''
+                    const selectedChild = selectedChildId
+                      ? addon.product_group_children.find(c => c.child_item_id === selectedChildId)
+                      : null
+                    const childSelected = selectedChild ? selection?.selectedChildren?.[selectedChildId] : null
+
+                    return (
+                      <div className="space-y-3 mt-2">
+                        {/* Dropdown to select ONE child */}
+                        <select
+                          className={`w-full text-xs rounded-md border px-2 py-1.5 pr-6 font-medium transition-all cursor-pointer truncate bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-300 ${
+                            selectedChildId
+                              ? 'border-purple-400 text-purple-800'
+                              : 'border-gray-200 text-gray-500'
+                          }`}
+                          value={selectedChildId}
+                          onChange={(e) => {
+                            const updatedSelections = { ...tent.addonSelections }
+                            const addonSel = { ...updatedSelections[addon.addon_item_id] }
+
+                            if (!e.target.value) {
+                              addonSel.selectedChildren = {}
+                            } else {
+                              const child = addon.product_group_children!.find(c => c.child_item_id === e.target.value)
+                              if (child) {
+                                const paramQtys: Record<string, number> = {}
+                                child.parameters.forEach(p => {
+                                  paramQtys[p.id] = p.min_quantity || 1
+                                })
+                                addonSel.selectedChildren = {
+                                  [child.child_item_id]: {
+                                    childItemId: child.child_item_id,
+                                    childName: getAddonName(child),
+                                    parameterQuantities: paramQtys,
+                                    dates: addonSel.dates,
+                                  },
+                                }
+                              }
+                            }
+
+                            addonSel.isProductGroupParent = true
+                            updatedSelections[addon.addon_item_id] = addonSel
+                            onTentChange({ ...tent, addonSelections: updatedSelections })
+                          }}
+                        >
+                          <option value="">{locale === 'vi' ? 'Chọn dịch vụ...' : 'Select service...'}</option>
+                          {addon.product_group_children.map((child) => (
+                            <option key={child.child_item_id} value={child.child_item_id}>
+                              {formatCurrency(child.base_price, locale, 'VND')} - {getAddonName(child)}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Selected child's parameters with quantity controls + pricing */}
+                        {selectedChild && childSelected && selectedChild.parameters.length > 0 && (() => {
+                          const childPricing = childPricingMap[selectedChildId]
+                          return (
+                            <div className="space-y-2 pl-2 border-l-2 border-purple-300">
+                              {selectedChild.parameters.map((param) => {
+                                const qty = childSelected.parameterQuantities[param.id] || 0
+                                const paramPrice = childPricing?.parameterPricing?.[param.id]
+                                const pricingMode = childPricing?.parameterPricingModes?.[param.id] || 'per_person'
+                                const isPerGroup = pricingMode === 'per_group'
+
+                                return (
+                                  <div key={param.id}>
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <span className="text-[11px] text-gray-600">{getAddonName(param)}</span>
+                                        <div className="text-[10px] text-gray-500 min-h-[16px] flex items-center">
+                                          {childPricing?.loading ? (
+                                            <Loader2 className="h-2.5 w-2.5 animate-spin text-gray-400" />
+                                          ) : paramPrice != null && paramPrice > 0 ? (
+                                            `${formatCurrency(paramPrice, locale, 'VND')}/${isPerGroup ? (locale === 'vi' ? 'nhóm' : 'group') : (locale === 'vi' ? 'người' : 'person')}`
+                                          ) : (
+                                            <span className="text-gray-400">-</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 w-6 p-0"
+                                          onClick={() => {
+                                            const updatedSelections = { ...tent.addonSelections }
+                                            const addonSel = { ...updatedSelections[addon.addon_item_id] }
+                                            const children = { ...(addonSel.selectedChildren || {}) }
+                                            const childData = { ...children[selectedChildId] }
+                                            const pq = { ...childData.parameterQuantities }
+                                            pq[param.id] = Math.max(param.min_quantity || 0, (pq[param.id] || 0) - 1)
+                                            childData.parameterQuantities = pq
+                                            children[selectedChildId] = childData
+                                            addonSel.selectedChildren = children
+                                            updatedSelections[addon.addon_item_id] = addonSel
+                                            onTentChange({ ...tent, addonSelections: updatedSelections })
+                                          }}
+                                          disabled={qty <= (param.min_quantity || 0)}
+                                        >
+                                          <Minus className="h-2.5 w-2.5" />
+                                        </Button>
+                                        <span className="text-xs font-medium w-5 text-center">{qty}</span>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 w-6 p-0"
+                                          onClick={() => {
+                                            const updatedSelections = { ...tent.addonSelections }
+                                            const addonSel = { ...updatedSelections[addon.addon_item_id] }
+                                            const children = { ...(addonSel.selectedChildren || {}) }
+                                            const childData = { ...children[selectedChildId] }
+                                            const pq = { ...childData.parameterQuantities }
+                                            pq[param.id] = Math.min(param.max_quantity || 99, (pq[param.id] || 0) + 1)
+                                            childData.parameterQuantities = pq
+                                            children[selectedChildId] = childData
+                                            addonSel.selectedChildren = children
+                                            updatedSelections[addon.addon_item_id] = addonSel
+                                            onTentChange({ ...tent, addonSelections: updatedSelections })
+                                          }}
+                                          disabled={qty >= (param.max_quantity || 99)}
+                                        >
+                                          <Plus className="h-2.5 w-2.5" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+
+                              {/* Child total & voucher */}
+                              {(() => {
+                                let childTotal = 0
+                                if (!childPricing?.loading) {
+                                  selectedChild.parameters.forEach((param) => {
+                                    const qty = childSelected.parameterQuantities[param.id] || 0
+                                    const price = childPricing?.parameterPricing?.[param.id] || 0
+                                    const mode = childPricing?.parameterPricingModes?.[param.id] || 'per_person'
+                                    childTotal += mode === 'per_group' ? price : price * qty
+                                  })
+                                }
+
+                                const memoizedChildVoucher = childSelected.voucher ? {
+                                  id: childSelected.voucher.id,
+                                  code: childSelected.voucher.code,
+                                  name: '',
+                                  description: '',
+                                  discountType: childSelected.voucher.discountType,
+                                  discountValue: childSelected.voucher.discountValue,
+                                  discountAmount: childSelected.voucher.discountAmount,
+                                  isStackable: false,
+                                } : null
+
+                                const voucherDiscount = childSelected.voucher?.discountAmount || 0
+                                const childFinalTotal = Math.max(0, childTotal - voucherDiscount)
+
+                                return (
+                                  <>
+                                    {(childPricing?.loading || childTotal > 0) && (
+                                      <div className="flex justify-between items-center pt-2 mt-1 border-t border-purple-200">
+                                        <span className="text-xs text-gray-600">{locale === 'vi' ? 'Tổng dịch vụ' : 'Service total'}</span>
+                                        <span className="text-sm font-semibold text-purple-700">
+                                          {childPricing?.loading ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                                          ) : (
+                                            formatCurrency(childTotal, locale, 'VND')
+                                          )}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* Voucher input for child item */}
+                                    {childTotal > 0 && (
+                                      <div className="mt-2">
+                                        <VoucherInput
+                                          key={selectedChildId}
+                                          itemId={selectedChildId}
+                                          zoneId={zoneId}
+                                          totalAmount={childTotal}
+                                          applicationType="common_item"
+                                          validationEndpoint="/api/glamping/validate-voucher"
+                                          locale={locale}
+                                          appliedVoucher={memoizedChildVoucher}
+                                          onVoucherApplied={(voucher) => handleChildVoucherApplied(addon.addon_item_id, selectedChildId, voucher)}
+                                          onVoucherRemoved={() => handleChildVoucherRemoved(addon.addon_item_id, selectedChildId)}
+                                          disabled={childPricing?.loading || childTotal === 0}
+                                        />
+                                      </div>
+                                    )}
+
+                                    {/* Final total after voucher */}
+                                    {voucherDiscount > 0 && childTotal > 0 && (
+                                      <div className="flex justify-between items-center pt-2 mt-1 border-t border-purple-200">
+                                        <span className="text-xs font-semibold text-gray-700">{locale === 'vi' ? 'Tổng sau voucher' : 'Total after voucher'}</span>
+                                        <span className="text-sm font-bold text-purple-700">
+                                          {formatCurrency(childFinalTotal, locale, 'VND')}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </>
+                                )
+                              })()}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Addon Parameters (not for product group parents) */}
+                  {isSelected && !addon.is_product_group_parent && addon.parameters.length > 0 && (() => {
                     const addonPricing = addonPricingMap[addon.addon_item_id]
                     return (
                       <div className="space-y-2 mt-2">
@@ -1159,7 +1618,14 @@ export function AdminTentTabContent({
                 }, 0)
                 const addonDiscount = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
                   if (!sel || !sel.selected) return sum
-                  return sum + (sel.voucher?.discountAmount || 0)
+                  let discount = sel.voucher?.discountAmount || 0
+                  // For product group parents, vouchers are on child items
+                  if (sel.isProductGroupParent && sel.selectedChildren) {
+                    Object.values(sel.selectedChildren).forEach((child) => {
+                      discount += child?.voucher?.discountAmount || 0
+                    })
+                  }
+                  return sum + discount
                 }, 0)
                 const hasOverrides = Object.values(tent.addonSelections || {}).some(s => s.selected && s.usePriceOverride)
 
@@ -1219,7 +1685,13 @@ export function AdminTentTabContent({
                     }, 0)
                     const addonDiscount = Object.values(tent.addonSelections || {}).reduce((sum, sel) => {
                       if (!sel || !sel.selected) return sum
-                      return sum + (sel.voucher?.discountAmount || 0)
+                      let discount = sel.voucher?.discountAmount || 0
+                      if (sel.isProductGroupParent && sel.selectedChildren) {
+                        Object.values(sel.selectedChildren).forEach((child) => {
+                          discount += child?.voucher?.discountAmount || 0
+                        })
+                      }
+                      return sum + discount
                     }, 0)
                     return formatCurrency(accommodation - accDiscount + menuTotal - menuDiscount + addonTotal - addonDiscount, locale, 'VND')
                   })()}

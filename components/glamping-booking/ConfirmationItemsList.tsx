@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from 'react';
-import { Edit2, ChevronDown, ChevronUp, Check, X, Loader2, Package, Minus, Plus } from 'lucide-react';
+import { Edit2, ChevronDown, ChevronUp, Check, X, Loader2, Package, Minus, Plus, Tent, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +31,8 @@ export interface TentMenuProduct {
   maxGuests?: number | null;
   categoryId?: string;
   categoryName?: any;
+  voucherCode?: string | null;
+  discountAmount?: number;
 }
 
 export interface TentParameter {
@@ -67,6 +69,10 @@ export interface TentData {
   subtotal: number;
   specialRequests?: string;
   displayOrder: number;
+  voucherCode?: string | null;
+  discountType?: string | null;
+  discountValue?: number;
+  discountAmount?: number;
   parameters: TentParameter[];
   menuProducts: TentMenuProduct[];
   commonItems?: TentCommonItem[];
@@ -118,6 +124,7 @@ export function ConfirmationItemsList({
   onMenuUpdated,
   locale = 'vi',
 }: ConfirmationItemsListProps) {
+  const [expandedAccommodation, setExpandedAccommodation] = useState<Set<string>>(new Set());
   const [expandedMenuItems, setExpandedMenuItems] = useState<Set<string>>(new Set());
   const [expandedCommonItems, setExpandedCommonItems] = useState<Set<string>>(new Set());
   const [editingTentId, setEditingTentId] = useState<string | null>(null);
@@ -147,6 +154,18 @@ export function ConfirmationItemsList({
   if (!tents || tents.length === 0) {
     return null;
   }
+
+  const toggleAccommodationExpansion = (tentId: string) => {
+    setExpandedAccommodation((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(tentId)) {
+        newSet.delete(tentId);
+      } else {
+        newSet.add(tentId);
+      }
+      return newSet;
+    });
+  };
 
   const toggleMenuExpansion = (tentId: string) => {
     setExpandedMenuItems((prev) => {
@@ -723,10 +742,20 @@ export function ConfirmationItemsList({
     return menuProducts.reduce((sum, mp) => sum + mp.totalPrice, 0);
   };
 
-  const calculateCommonItemsTotal = (commonItems?: TentCommonItem[]): number => {
+  // Raw total for common items (before voucher discounts) - used for headers and "Giá lều này"
+  const calculateCommonItemsRawTotal = (commonItems?: TentCommonItem[]): number => {
     if (!commonItems || commonItems.length === 0) return 0;
     let total = 0;
-    // Group by addonItemId to calculate per-addon totals
+    commonItems.forEach((item) => {
+      const isPerGroup = item.pricingMode === 'per_group';
+      total += isPerGroup ? item.unitPrice : item.unitPrice * item.quantity;
+    });
+    return total;
+  };
+
+  // Voucher discount total for common items
+  const calculateCommonItemsDiscount = (commonItems?: TentCommonItem[]): number => {
+    if (!commonItems || commonItems.length === 0) return 0;
     const grouped = new Map<string, TentCommonItem[]>();
     commonItems.forEach((ci) => {
       if (!grouped.has(ci.addonItemId)) {
@@ -734,19 +763,11 @@ export function ConfirmationItemsList({
       }
       grouped.get(ci.addonItemId)!.push(ci);
     });
-
+    let discount = 0;
     for (const [, items] of grouped.entries()) {
-      let addonTotal = 0;
-      items.forEach((item) => {
-        const isPerGroup = item.pricingMode === 'per_group';
-        addonTotal += isPerGroup ? item.unitPrice : item.unitPrice * item.quantity;
-      });
-      // Apply voucher if present
-      const firstItem = items[0];
-      const voucherDiscount = firstItem.voucher?.discountAmount || 0;
-      total += Math.max(0, addonTotal - voucherDiscount);
+      discount += items[0].voucher?.discountAmount || 0;
     }
-    return total;
+    return discount;
   };
 
   return (
@@ -756,6 +777,7 @@ export function ConfirmationItemsList({
       </h2>
 
       {tents.map((tent) => {
+        const isAccommodationExpanded = expandedAccommodation.has(tent.id);
         const isMenuExpanded = expandedMenuItems.has(tent.id);
         const isCommonItemsExpanded = expandedCommonItems.has(tent.id);
         const hasMenuProducts = tent.menuProducts && tent.menuProducts.length > 0;
@@ -763,7 +785,13 @@ export function ConfirmationItemsList({
         const isEditing = editingTentId === tent.id;
         const isEditingAddons = editingAddonTentId === tent.id;
         const menuTotal = calculateMenuTotal(tent.menuProducts);
-        const commonItemsTotal = calculateCommonItemsTotal(tent.commonItems);
+        const menuDiscountTotal = tent.menuProducts.reduce((sum, mp) => sum + (mp.discountAmount || 0), 0);
+        const commonItemsRawTotal = calculateCommonItemsRawTotal(tent.commonItems);
+        const commonItemsDiscountTotal = calculateCommonItemsDiscount(tent.commonItems);
+        const tentAccommodationTotal = tent.subtotal;
+        const tentDiscountAmount = tent.discountAmount || 0;
+        // "Giá lều này" = raw totals (before all discounts) - matches booking-level "Tạm tính"
+        const tentRawTotal = tentAccommodationTotal + menuTotal + commonItemsRawTotal;
 
         return (
           <Card key={tent.id} className="overflow-hidden">
@@ -814,6 +842,58 @@ export function ConfirmationItemsList({
                       </div>
                     </div>
                   )}
+
+                  {/* Accommodation Price Section */}
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => toggleAccommodationExpansion(tent.id)}
+                        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {isAccommodationExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                        <span>
+                          <Tent className="h-3.5 w-3.5 inline mr-1" />
+                          Chỗ ở
+                          <span className="ml-1 text-blue-600">
+                            ({formatCurrency(tentAccommodationTotal)})
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+
+                    {isAccommodationExpanded && (
+                      <div className="mt-2 pl-5 space-y-1">
+                        {tent.parameters
+                          .filter((param) => param.visibility === 'everyone')
+                          .map((param) => (
+                            <div key={param.id} className="flex justify-between text-sm text-muted-foreground">
+                              <span>{param.label} x {param.bookedQuantity}</span>
+                            </div>
+                          ))}
+                        <div className="flex justify-between text-sm font-medium text-blue-700 pt-1">
+                          <span>{tent.nights} đêm</span>
+                          <span>{formatCurrency(tentAccommodationTotal)}</span>
+                        </div>
+                        {tentDiscountAmount > 0 && tent.voucherCode && (
+                          <div className="flex justify-between text-sm text-green-600">
+                            <span className="flex items-center gap-1">
+                              <Tag className="h-3 w-3" />
+                              Voucher: {tent.voucherCode}
+                              {tent.discountType === 'percentage' && tent.discountValue ? (
+                                <span>(-{tent.discountValue}%)</span>
+                              ) : null}
+                            </span>
+                            <span>-{formatCurrency(tentDiscountAmount)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Menu Products Section */}
                   {!isEditing && (
@@ -903,6 +983,32 @@ export function ConfirmationItemsList({
                               );
                             });
                           })()}
+                          {/* Menu discount display */}
+                          {menuDiscountTotal > 0 && (() => {
+                            // Get unique voucher codes from menu products
+                            const menuVouchers = new Set(
+                              tent.menuProducts
+                                .filter(mp => mp.voucherCode && (mp.discountAmount || 0) > 0)
+                                .map(mp => mp.voucherCode!)
+                            );
+                            return (
+                              <>
+                                {Array.from(menuVouchers).map((code) => (
+                                  <div key={code} className="flex justify-between text-sm text-green-600">
+                                    <span className="flex items-center gap-1">
+                                      <Tag className="h-3 w-3" />
+                                      Voucher: {code}
+                                    </span>
+                                    <span>-{formatCurrency(
+                                      tent.menuProducts
+                                        .filter(mp => mp.voucherCode === code)
+                                        .reduce((sum, mp) => sum + (mp.discountAmount || 0), 0)
+                                    )}</span>
+                                  </div>
+                                ))}
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
 
@@ -933,7 +1039,7 @@ export function ConfirmationItemsList({
                             Dịch vụ chung
                             {hasCommonItems && (
                               <span className="ml-1 text-blue-600">
-                                ({formatCurrency(commonItemsTotal)})
+                                ({formatCurrency(commonItemsRawTotal)})
                               </span>
                             )}
                           </span>
@@ -992,9 +1098,12 @@ export function ConfirmationItemsList({
                                       </span>
                                     </div>
                                   ))}
-                                  {voucherDiscount > 0 && (
+                                  {voucherDiscount > 0 && items[0].voucher?.code && (
                                     <div className="flex justify-between text-sm text-green-600">
-                                      <span>Voucher: {items[0].voucher?.code}</span>
+                                      <span className="flex items-center gap-1">
+                                        <Tag className="h-3 w-3" />
+                                        Voucher: {items[0].voucher.code}
+                                      </span>
                                       <span>-{formatCurrency(voucherDiscount)}</span>
                                     </div>
                                   )}
@@ -1017,12 +1126,12 @@ export function ConfirmationItemsList({
                     </div>
                   )}
 
-                  {/* Subtotal for this tent */}
+                  {/* Subtotal for this tent (raw, before discounts - matches booking Tạm tính) */}
                   {!isEditing && !isEditingAddons && (
                     <div className="flex justify-between items-center pt-3 border-t mt-3">
                       <span className="text-sm text-muted-foreground">Giá lều này:</span>
                       <span className="text-lg font-semibold text-blue-600">
-                        {formatCurrency(tent.subtotal + menuTotal + commonItemsTotal)}
+                        {formatCurrency(tentRawTotal)}
                       </span>
                     </div>
                   )}

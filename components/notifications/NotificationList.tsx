@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Loader2, Bell } from 'lucide-react';
 import NotificationItem from './NotificationItem';
-import { useNotifications } from '@/hooks/useNotifications';
+import { Notification } from '@/hooks/useNotifications';
 
 interface NotificationListProps {
-  userType: 'customer' | 'staff';
+  notifications: Notification[];
+  isLoading: boolean;
   appType?: 'camping' | 'glamping';
   onClose: () => void;
 }
@@ -16,20 +16,12 @@ interface NotificationListProps {
  * List of notifications with loading and empty states
  */
 export default function NotificationList({
-  userType,
+  notifications,
+  isLoading,
   appType = 'camping',
   onClose,
 }: NotificationListProps) {
   const t = useTranslations('notifications');
-  const { notifications, isLoading, fetchNotifications } = useNotifications({
-    autoFetchCount: false,
-    appType,
-  });
-
-  // Fetch notifications when component mounts
-  useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
 
   // Loading state
   if (isLoading) {

@@ -522,7 +522,15 @@ export function AdminGlampingBookingFormModal({
     const totalAddonsDiscount = tents.reduce((sum, t) => {
       return sum + Object.values(t.addonSelections || {}).reduce((s, sel) => {
         if (!sel || !sel.selected) return s
-        return s + (sel.voucher?.discountAmount || 0)
+        // For regular addons, voucher is on the addon itself
+        let discount = sel.voucher?.discountAmount || 0
+        // For product group parents, vouchers are on child items
+        if (sel.isProductGroupParent && sel.selectedChildren) {
+          Object.values(sel.selectedChildren).forEach((child) => {
+            discount += child?.voucher?.discountAmount || 0
+          })
+        }
+        return s + discount
       }, 0)
     }, 0)
 
@@ -666,6 +674,14 @@ export function AdminGlampingBookingFormModal({
         description: validationError,
         variant: 'destructive'
       })
+      // Scroll to email field if error is email-related
+      if (validationError.includes('email') || validationError.includes('Email')) {
+        const el = document.getElementById('new-email')
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          el.focus()
+        }
+      }
       return null
     }
 
@@ -717,6 +733,11 @@ export function AdminGlampingBookingFormModal({
             // Add override if set
             ...(sel.usePriceOverride && sel.priceOverride !== undefined && {
               priceOverride: sel.priceOverride
+            }),
+            // Product group fields
+            ...(sel.isProductGroupParent && {
+              isProductGroupParent: true,
+              selectedChildren: sel.selectedChildren,
             }),
           }))
 

@@ -94,8 +94,9 @@ export async function GET(request: NextRequest) {
         gc.weight as category_weight
       FROM glamping_items gi
       JOIN glamping_categories gc ON gi.category_id = gc.id
-      ${zoneCondition ? `WHERE ${zoneCondition}` : ""}
-      ${categoryCondition ? (zoneCondition ? ` AND ${categoryCondition}` : `WHERE ${categoryCondition}`) : ""}
+      WHERE gi.is_tent = true
+      ${zoneCondition ? ` AND ${zoneCondition}` : ""}
+      ${categoryCondition ? ` AND ${categoryCondition}` : ""}
       ORDER BY gc.weight DESC, gi.display_order ASC, gi.name ASC
     `;
 

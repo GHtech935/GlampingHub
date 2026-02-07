@@ -72,6 +72,7 @@ export function GlampingBookingPaymentsTab({
 }: GlampingBookingPaymentsTabProps) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [totalPaid, setTotalPaid] = useState(0);
+  const [liveTotalAmount, setLiveTotalAmount] = useState<number | null>(null);
   const [canModify, setCanModify] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -206,6 +207,7 @@ export function GlampingBookingPaymentsTab({
         const data = await response.json();
         setPayments(data.payments || []);
         setTotalPaid(data.totalPaid || 0);
+        setLiveTotalAmount(data.totalAmount ?? null);
         setCanModify(data.canModify || false);
       } catch (error) {
         console.error('Error fetching payments:', error);
@@ -246,6 +248,7 @@ export function GlampingBookingPaymentsTab({
       const paymentsData = await paymentsResponse.json();
       setPayments(paymentsData.payments || []);
       setTotalPaid(paymentsData.totalPaid || 0);
+      setLiveTotalAmount(paymentsData.totalAmount ?? null);
 
       // Refresh parent to update totals
       onRefresh();
@@ -285,6 +288,7 @@ export function GlampingBookingPaymentsTab({
       const paymentsData = await paymentsResponse.json();
       setPayments(paymentsData.payments || []);
       setTotalPaid(paymentsData.totalPaid || 0);
+      setLiveTotalAmount(paymentsData.totalAmount ?? null);
 
       // Refresh parent to update totals
       onRefresh();
@@ -324,6 +328,7 @@ export function GlampingBookingPaymentsTab({
       const paymentsData = await paymentsResponse.json();
       setPayments(paymentsData.payments || []);
       setTotalPaid(paymentsData.totalPaid || 0);
+      setLiveTotalAmount(paymentsData.totalAmount ?? null);
 
       // Refresh parent to update totals
       onRefresh();
@@ -344,7 +349,8 @@ export function GlampingBookingPaymentsTab({
     setShowDeleteDialog(true);
   };
 
-  const totalAmount = booking.pricing.totalAmount;
+  // Use live-calculated total from the API (not the potentially stale stored value from props)
+  const totalAmount = liveTotalAmount ?? booking.pricing.totalAmount;
   const remainingBalance = totalAmount - totalPaid;
 
   if (loading) {

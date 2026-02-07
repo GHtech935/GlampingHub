@@ -18,8 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search, ChevronDown, Check } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import type { Locale, MultilingualText } from "@/lib/i18n-utils";
@@ -33,6 +34,21 @@ interface TentItem {
   checkInDate: string;
   checkOutDate: string;
   nights: number;
+}
+
+interface ProductGroupChild {
+  item_id: string;
+  item_name: MultilingualText | string;
+  item_sku: string;
+  base_price: number;
+  display_order: number;
+  parameters: Array<{
+    id: string;
+    name: MultilingualText | string;
+    color_code: string;
+    min_quantity: number;
+    max_quantity: number;
+  }>;
 }
 
 interface AddonItem {
@@ -52,6 +68,9 @@ interface AddonItem {
     min_quantity: number;
     max_quantity: number;
   }>;
+  // Product group fields
+  is_product_group_parent?: boolean;
+  product_group_children?: ProductGroupChild[];
 }
 
 interface GlampingAddCommonItemModalProps {
@@ -82,7 +101,9 @@ const texts = {
     addSuccess: 'Đã thêm item chung thành công',
     addFailed: 'Không thể thêm item chung',
     loadingAddons: 'Đang tải addons...',
+    loadingItems: 'Đang tải danh sách...',
     noAddons: 'Không có addon nào',
+    searchAddon: 'Tìm kiếm addon...',
     selectTentFirst: 'Vui lòng chọn lều',
     selectAddonFirst: 'Vui lòng chọn addon',
     setQuantityFirst: 'Vui lòng nhập số lượng',
@@ -92,6 +113,8 @@ const texts = {
     addonDateTo: 'Đến ngày',
     voucher: 'Voucher giảm giá',
     totalAfterDiscount: 'Tổng sau giảm giá',
+    selectChild: 'Chọn dịch vụ',
+    selectChildPlaceholder: 'Chọn dịch vụ...',
   },
   en: {
     title: 'Add Common Item',
@@ -110,7 +133,9 @@ const texts = {
     addSuccess: 'Common item added successfully',
     addFailed: 'Failed to add common item',
     loadingAddons: 'Loading addons...',
+    loadingItems: 'Loading items...',
     noAddons: 'No addons available',
+    searchAddon: 'Search addon...',
     selectTentFirst: 'Please select a tent',
     selectAddonFirst: 'Please select an addon',
     setQuantityFirst: 'Please enter quantity',
@@ -120,6 +145,8 @@ const texts = {
     addonDateTo: 'To Date',
     voucher: 'Discount Voucher',
     totalAfterDiscount: 'Total after discount',
+    selectChild: 'Select service',
+    selectChildPlaceholder: 'Select service...',
   },
 };
 
@@ -148,11 +175,16 @@ export function GlampingAddCommonItemModal({
   const t = texts[locale];
 
   const [selectedTentId, setSelectedTentId] = useState<string>('');
+  const [allCommonItems, setAllCommonItems] = useState<Array<{ id: string; name: MultilingualText | string; sku: string }>>([]);
+  const [loadingCommonItems, setLoadingCommonItems] = useState(false);
   const [addons, setAddons] = useState<AddonItem[]>([]);
   const [loadingAddons, setLoadingAddons] = useState(false);
   const [selectedAddonId, setSelectedAddonId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [addonDropdownOpen, setAddonDropdownOpen] = useState(false);
   const [addonDates, setAddonDates] = useState<{ from: string; to: string } | null>(null);
   const [parameterQuantities, setParameterQuantities] = useState<Record<string, number>>({});
+  const [selectedChildId, setSelectedChildId] = useState<string>('');
 
   // Pricing state
   const [parameterPricing, setParameterPricing] = useState<Record<string, number>>({});
@@ -177,17 +209,46 @@ export function GlampingAddCommonItemModal({
     [addons, selectedAddonId]
   );
 
+  const selectedChild = useMemo(
+    () => selectedAddon?.product_group_children?.find(c => c.item_id === selectedChildId),
+    [selectedAddon, selectedChildId]
+  );
+
+  // Filter common items by search query
+  const filteredCommonItems = useMemo(() => {
+    if (!searchQuery.trim()) return allCommonItems;
+    const q = searchQuery.toLowerCase().trim();
+    return allCommonItems.filter(item => {
+      const name = getLocalizedText(item.name, locale).toLowerCase();
+      const sku = (item.sku || '').toLowerCase();
+      return name.includes(q) || sku.includes(q);
+    });
+  }, [allCommonItems, searchQuery, locale]);
+
+  // Get the display name for the selected item
+  const selectedItemName = useMemo(() => {
+    if (!selectedAddonId) return '';
+    const item = allCommonItems.find(i => i.id === selectedAddonId);
+    if (!item) return '';
+    const name = getLocalizedText(item.name, locale);
+    return item.sku ? `${name} (${item.sku})` : name;
+  }, [selectedAddonId, allCommonItems, locale]);
+
   // Reset form when modal opens/closes
   useEffect(() => {
     if (!isOpen) {
       setSelectedTentId('');
+      setAllCommonItems([]);
       setAddons([]);
       setSelectedAddonId('');
+      setSelectedChildId('');
       setAddonDates(null);
       setParameterQuantities({});
       setParameterPricing({});
       setParameterPricingModes({});
       setAppliedVoucher(null);
+      setSearchQuery('');
+      setAddonDropdownOpen(false);
     }
   }, [isOpen]);
 
@@ -198,34 +259,102 @@ export function GlampingAddCommonItemModal({
     }
   }, [isOpen, tents]);
 
-  // Fetch addons when tent changes
+  // Fetch ALL common items for the zone when tent is selected
   useEffect(() => {
     if (!selectedTentId) {
-      setAddons([]);
+      setAllCommonItems([]);
       setSelectedAddonId('');
+      setSearchQuery('');
       return;
     }
 
-    const tent = tents.find(t => t.id === selectedTentId);
-    if (!tent) return;
-
-    const fetchAddons = async () => {
-      setLoadingAddons(true);
+    const fetchAllCommonItems = async () => {
+      setLoadingCommonItems(true);
       try {
-        const res = await fetch(`/api/glamping/items/${tent.itemId}`);
+        const res = await fetch(`/api/admin/glamping/items?zone_id=${zoneId}&is_tent_category=false`);
         if (!res.ok) throw new Error('Failed to fetch');
         const data = await res.json();
-        setAddons(data.item?.addons || []);
+        setAllCommonItems((data.items || []).map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          sku: item.sku,
+        })));
       } catch (error) {
-        console.error('Error fetching addons:', error);
+        console.error('Error fetching common items:', error);
+        setAllCommonItems([]);
+      } finally {
+        setLoadingCommonItems(false);
+      }
+    };
+
+    fetchAllCommonItems();
+  }, [selectedTentId, zoneId]);
+
+  // Fetch item details + parameters when a common item is selected
+  useEffect(() => {
+    if (!selectedAddonId) {
+      setAddons([]);
+      return;
+    }
+
+    const fetchItemDetails = async () => {
+      setLoadingAddons(true);
+      setSelectedChildId('');
+      try {
+        const res = await fetch(`/api/admin/glamping/items/${selectedAddonId}`);
+        if (!res.ok) throw new Error('Failed to fetch item details');
+        const data = await res.json();
+        const item = data.item;
+
+        const isProductGroupParent = item.product_group_role === 'parent';
+
+        const addonItem: AddonItem = {
+          addon_item_id: item.id,
+          name: item.name,
+          sku: item.sku,
+          price_percentage: 100,
+          is_required: false,
+          dates_setting: 'inherit_parent',
+          custom_start_date: null,
+          custom_end_date: null,
+          display_order: 0,
+          parameters: (item.parameters || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            color_code: p.color_code,
+            min_quantity: p.min_quantity,
+            max_quantity: p.max_quantity,
+          })),
+          is_product_group_parent: isProductGroupParent,
+          product_group_children: isProductGroupParent
+            ? (item.product_group_children || []).map((c: any) => ({
+                item_id: c.item_id,
+                item_name: c.item_name,
+                item_sku: c.item_sku,
+                base_price: c.base_price || 0,
+                display_order: c.display_order,
+                parameters: (c.parameters || []).map((p: any) => ({
+                  id: p.id,
+                  name: p.name,
+                  color_code: p.color_code,
+                  min_quantity: p.min_quantity,
+                  max_quantity: p.max_quantity,
+                })),
+              }))
+            : undefined,
+        };
+
+        setAddons([addonItem]);
+      } catch (error) {
+        console.error('Error fetching item details:', error);
         setAddons([]);
       } finally {
         setLoadingAddons(false);
       }
     };
 
-    fetchAddons();
-  }, [selectedTentId, tents]);
+    fetchItemDetails();
+  }, [selectedAddonId]);
 
   // Reset quantities and dates when addon changes and init with min values
   useEffect(() => {
@@ -235,6 +364,7 @@ export function GlampingAddCommonItemModal({
       setParameterPricing({});
       setParameterPricingModes({});
       setAppliedVoucher(null);
+      setSelectedChildId('');
       return;
     }
 
@@ -249,6 +379,12 @@ export function GlampingAddCommonItemModal({
       setAddonDates(null);
     }
 
+    // For product group parents, don't init parent params - wait for child selection
+    if (selectedAddon.is_product_group_parent) {
+      setParameterQuantities({});
+      return;
+    }
+
     const initial: Record<string, number> = {};
     selectedAddon.parameters.forEach(p => {
       initial[p.id] = p.min_quantity || 0;
@@ -256,9 +392,35 @@ export function GlampingAddCommonItemModal({
     setParameterQuantities(initial);
   }, [selectedAddon, selectedTent]);
 
-  // Fetch pricing when addon selected + quantities change
+  // When child is selected, reset quantities to child's parameters
   useEffect(() => {
-    if (!selectedAddonId || !selectedTent) {
+    if (!selectedChild) {
+      if (selectedAddon?.is_product_group_parent) {
+        setParameterQuantities({});
+        setParameterPricing({});
+        setParameterPricingModes({});
+        setAppliedVoucher(null);
+      }
+      return;
+    }
+
+    const initial: Record<string, number> = {};
+    selectedChild.parameters.forEach(p => {
+      initial[p.id] = p.min_quantity || 0;
+    });
+    setParameterQuantities(initial);
+    setParameterPricing({});
+    setParameterPricingModes({});
+    setAppliedVoucher(null);
+  }, [selectedChild, selectedAddon]);
+
+  // Fetch pricing when addon selected + quantities change
+  // For product group parents, use selectedChildId as the item to price
+  useEffect(() => {
+    const isProductGroup = selectedAddon?.is_product_group_parent;
+    const effectiveItemId = isProductGroup ? selectedChildId : selectedAddonId;
+
+    if (!effectiveItemId || !selectedTent) {
       setParameterPricing({});
       setParameterPricingModes({});
       prevQuantitiesRef.current = parameterQuantities;
@@ -291,7 +453,7 @@ export function GlampingAddCommonItemModal({
         const effectiveCheckOut = addonDates?.to || selectedTent.checkOutDate;
 
         const params = new URLSearchParams({
-          itemId: selectedAddonId,
+          itemId: effectiveItemId,
           checkIn: effectiveCheckIn,
           checkOut: effectiveCheckOut,
           adults: '0',
@@ -332,7 +494,7 @@ export function GlampingAddCommonItemModal({
 
     const timer = setTimeout(fetchPricing, 300);
     return () => clearTimeout(timer);
-  }, [selectedAddonId, selectedTent, parameterQuantities, addons, addonDates]);
+  }, [selectedAddonId, selectedChildId, selectedAddon, selectedTent, parameterQuantities, addons, addonDates]);
 
   // Calculate total
   const totalCost = useMemo(() => {
@@ -374,6 +536,15 @@ export function GlampingAddCommonItemModal({
       toast.error(t.selectAddonFirst);
       return;
     }
+
+    const isProductGroup = selectedAddon?.is_product_group_parent;
+
+    // For product group: need a child selected
+    if (isProductGroup && !selectedChildId) {
+      toast.error(t.selectAddonFirst);
+      return;
+    }
+
     const hasQty = Object.values(parameterQuantities).some(q => q > 0);
     if (!hasQty) {
       toast.error(t.setQuantityFirst);
@@ -396,12 +567,16 @@ export function GlampingAddCommonItemModal({
         ? addonDates.from
         : undefined;
 
+      // For product group: save the child as the actual item, and parent as metadata
+      const effectiveAddonItemId = isProductGroup ? selectedChildId : selectedAddonId;
+      const productGroupParentId = isProductGroup ? selectedAddonId : undefined;
+
       const res = await fetch(`/api/admin/glamping/bookings/${bookingId}/common-items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bookingTentId: selectedTentId,
-          addonItemId: selectedAddonId,
+          addonItemId: effectiveAddonItemId,
           addonDates: addonDates || undefined,
           selectedDate: selectedDate,
           parameters: paramsForApi,
@@ -412,6 +587,7 @@ export function GlampingAddCommonItemModal({
             discountType: appliedVoucher.discountType,
             discountValue: appliedVoucher.discountValue,
           } : undefined,
+          productGroupParentId,
         }),
       });
 
@@ -433,17 +609,17 @@ export function GlampingAddCommonItemModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>{t.title}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {/* Step 1: Select Tent */}
-          <div>
+          <div className="min-w-0">
             <Label className="mb-2 block">{t.selectTent}</Label>
             <Select value={selectedTentId} onValueChange={setSelectedTentId}>
-              <SelectTrigger>
+              <SelectTrigger className="min-w-0">
                 <SelectValue placeholder={t.selectTentPlaceholder} />
               </SelectTrigger>
               <SelectContent>
@@ -460,27 +636,73 @@ export function GlampingAddCommonItemModal({
           {selectedTentId && (
             <div>
               <Label className="mb-2 block">{t.selectAddon}</Label>
-              {loadingAddons ? (
+              {loadingCommonItems ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  {t.loadingAddons}
+                  {t.loadingItems}
                 </div>
-              ) : addons.length === 0 ? (
+              ) : allCommonItems.length === 0 ? (
                 <div className="text-sm text-gray-500 py-2">{t.noAddons}</div>
               ) : (
-                <Select value={selectedAddonId} onValueChange={setSelectedAddonId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t.selectAddonPlaceholder} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {addons.map((addon) => (
-                      <SelectItem key={addon.addon_item_id} value={addon.addon_item_id}>
-                        {getLocalizedText(addon.name, locale)}
-                        {addon.sku ? ` (${addon.sku})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={addonDropdownOpen} onOpenChange={setAddonDropdownOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span className={selectedItemName ? 'text-foreground truncate' : 'text-muted-foreground'}>
+                        {selectedItemName || t.selectAddonPlaceholder}
+                      </span>
+                      <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="z-[1300] w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <div className="flex items-center border-b border-border/50 px-3 py-2">
+                      <Search className="h-4 w-4 text-muted-foreground/60 mr-2 shrink-0" />
+                      <input
+                        type="text"
+                        className="flex-1 bg-transparent text-sm outline-none border-none ring-0 focus:outline-none focus:ring-0 focus:border-none placeholder:text-muted-foreground/60"
+                        placeholder={t.searchAddon}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-[200px] overflow-y-auto p-1">
+                      {filteredCommonItems.length === 0 ? (
+                        <div className="text-sm text-muted-foreground py-3 text-center">{t.noAddons}</div>
+                      ) : (
+                        filteredCommonItems.map((item) => {
+                          const name = getLocalizedText(item.name, locale);
+                          const isSelected = item.id === selectedAddonId;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground ${isSelected ? 'bg-accent' : ''}`}
+                              onClick={() => {
+                                setSelectedAddonId(item.id);
+                                setAddonDropdownOpen(false);
+                                setSearchQuery('');
+                              }}
+                            >
+                              {isSelected && <Check className="h-4 w-4 shrink-0" />}
+                              <span className={`truncate ${isSelected ? '' : 'ml-6'}`}>
+                                {name}{item.sku ? ` (${item.sku})` : ''}
+                              </span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {loadingAddons && selectedAddonId && (
+                <div className="flex items-center gap-2 text-sm text-gray-500 py-1 mt-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {t.loadingAddons}
+                </div>
               )}
             </div>
           )}
@@ -542,8 +764,78 @@ export function GlampingAddCommonItemModal({
             </div>
           )}
 
-          {/* Step 4: Parameters & Quantities */}
-          {selectedAddon && selectedAddon.parameters.length > 0 && (
+          {/* Step 4a: Product Group - Child Selection + Child Parameters */}
+          {selectedAddon && selectedAddon.is_product_group_parent && selectedAddon.product_group_children && selectedAddon.product_group_children.length > 0 && (
+            <div className="space-y-4">
+              {/* Child dropdown */}
+              <div>
+                <Label className="mb-2 block">{t.selectChild}</Label>
+                <Select value={selectedChildId} onValueChange={setSelectedChildId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t.selectChildPlaceholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedAddon.product_group_children.map((child) => (
+                      <SelectItem key={child.item_id} value={child.item_id}>
+                        {formatCurrency(child.base_price)} - {getLocalizedText(child.item_name, locale)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Child parameters */}
+              {selectedChild && selectedChild.parameters.length > 0 && (
+                <div>
+                  <Label className="mb-2 block">{t.parameters}</Label>
+                  <div className="space-y-2">
+                    {selectedChild.parameters.map((param) => {
+                      const qty = parameterQuantities[param.id] || 0;
+                      const unitPrice = parameterPricing[param.id] || 0;
+                      const mode = parameterPricingModes[param.id] || 'per_person';
+                      const rowTotal = mode === 'per_group' ? unitPrice : qty * unitPrice;
+
+                      return (
+                        <div key={param.id} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
+                          <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">
+                            {getLocalizedText(param.name, locale)}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={param.min_quantity || 0}
+                              max={param.max_quantity || undefined}
+                              value={qty}
+                              onChange={(e) => updateQuantity(param.id, parseInt(e.target.value) || 0)}
+                              className="w-16 h-8 text-sm text-center"
+                            />
+                            <span className="text-xs text-gray-400">&times;</span>
+                            <span className="text-sm text-gray-700 w-28 text-right tabular-nums flex items-center justify-end">
+                              {pricingLoading ? (
+                                <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                              ) : (
+                                formatCurrency(unitPrice)
+                              )}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500 w-24 text-right flex items-center justify-end">
+                            = {pricingLoading ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-gray-400 ml-1" />
+                            ) : (
+                              formatCurrency(rowTotal)
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 4b: Regular Parameters & Quantities (non-product-group) */}
+          {selectedAddon && !selectedAddon.is_product_group_parent && selectedAddon.parameters.length > 0 && (
             <div>
               <Label className="mb-2 block">{t.parameters}</Label>
               <div className="space-y-2">
@@ -595,7 +887,7 @@ export function GlampingAddCommonItemModal({
             <div>
               <Label className="mb-2 block">{t.voucher}</Label>
               <VoucherInput
-                itemId={selectedAddonId}
+                itemId={selectedAddon?.is_product_group_parent ? selectedChildId : selectedAddonId}
                 zoneId={zoneId}
                 totalAmount={totalCost}
                 applicationType="common_item"

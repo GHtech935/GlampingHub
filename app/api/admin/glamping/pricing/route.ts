@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
             item_id,
             parameter_id || null,
             event_id || null,
-            rate_type || 'per_night',
+            (rate_type?.startsWith('timeslot_') ? 'per_timeslot' : rate_type) || 'per_night',
             group_min || null,
             group_max || null,
             amount

@@ -41,6 +41,7 @@ export async function POST(
       parameters, // Array<{ parameterId, quantity, unitPrice, pricingMode? }>
       voucher, // { code, id, discountAmount, discountType, discountValue } or undefined
       priceOverride, // number | null | undefined
+      productGroupParentId, // string | undefined - parent item ID when addon is a product group child
     } = body;
 
     if (!addonItemId || !bookingTentId || !parameters || !Array.isArray(parameters) || parameters.length === 0) {
@@ -124,6 +125,7 @@ export async function POST(
             selectedDate: selectedDate || null,
             voucher: voucherMeta,
             priceOverride: priceOverride !== undefined ? priceOverride : null,
+            productGroupParentId: productGroupParentId || null,
           }),
         ]
       );
@@ -145,7 +147,18 @@ export async function POST(
 
     // Log action
     const paramDesc = parameters.map((p: any) => `${p.parameterId}: ${p.quantity}`).join(', ');
-    const description = `Added common item "${itemName}" (${paramDesc})`;
+    let description = `Added common item "${itemName}" (${paramDesc})`;
+    if (productGroupParentId) {
+      // Get parent name for log
+      const parentResult = await client.query(
+        `SELECT name FROM glamping_items WHERE id = $1`,
+        [productGroupParentId]
+      );
+      const parentName = parentResult.rows.length > 0
+        ? getLocalizedString(parentResult.rows[0].name)
+        : productGroupParentId;
+      description = `Added common item "${itemName}" (group: "${parentName}") (${paramDesc})`;
+    }
     await logGlampingBookingEditAction(client, bookingId, session.id, 'item_add', description);
 
     await client.query('COMMIT');

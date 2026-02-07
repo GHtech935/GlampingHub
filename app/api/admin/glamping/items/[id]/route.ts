@@ -56,6 +56,7 @@ export async function GET(
         a.fixed_length_unit,
         a.fixed_start_time,
         a.default_length_hours,
+        a.allocation_interval_minutes,
         a.visibility,
         a.default_calendar_status,
         COALESCE(a.is_active, true) as is_active
@@ -184,6 +185,60 @@ export async function GET(
       SELECT show_starting_price
       FROM glamping_package_settings
       WHERE item_id = $1
+    `, [id]);
+
+    // Get product group data
+    const productGroupSettingsResult = await pool.query(`
+      SELECT show_unavailable_children, show_starting_price, show_child_prices_in_dropdown,
+             display_price, default_calendar_status
+      FROM glamping_product_group_settings
+      WHERE item_id = $1
+    `, [id]);
+
+    const productGroupChildrenResult = await pool.query(`
+      SELECT pg.child_item_id, i.name as child_name, i.sku as child_sku, pg.display_order
+      FROM glamping_product_groups pg
+      JOIN glamping_items i ON pg.child_item_id = i.id
+      WHERE pg.parent_item_id = $1
+      ORDER BY pg.display_order
+    `, [id]);
+
+    // For each product group child, fetch parameters and base_price
+    const childrenWithDetails = await Promise.all(
+      productGroupChildrenResult.rows.map(async (child: any) => {
+        const childParamsResult = await pool.query(`
+          SELECT p.id, p.name, p.color_code, ip.min_quantity, ip.max_quantity
+          FROM glamping_item_parameters ip
+          JOIN glamping_parameters p ON ip.parameter_id = p.id
+          WHERE ip.item_id = $1
+          ORDER BY ip.display_order, p.name
+        `, [child.child_item_id]);
+
+        const childBasePriceResult = await pool.query(`
+          SELECT amount FROM glamping_pricing
+          WHERE item_id = $1 AND parameter_id IS NULL
+            AND group_min IS NULL AND group_max IS NULL
+            AND event_id IS NULL
+          LIMIT 1
+        `, [child.child_item_id]);
+
+        return {
+          item_id: child.child_item_id,
+          item_name: child.child_name,
+          item_sku: child.child_sku,
+          display_order: child.display_order,
+          parameters: childParamsResult.rows,
+          base_price: childBasePriceResult.rows[0] ? parseFloat(childBasePriceResult.rows[0].amount) : 0,
+        };
+      })
+    );
+
+    const productGroupParentResult = await pool.query(`
+      SELECT pg.parent_item_id, i.name as parent_name
+      FROM glamping_product_groups pg
+      JOIN glamping_items i ON pg.parent_item_id = i.id
+      WHERE pg.child_item_id = $1
+      LIMIT 1
     `, [id]);
 
     // Get timeslots
@@ -460,6 +515,20 @@ export async function GET(
         timeslots: timeslotsResult.rows,
         taxes: taxes,
         events: events,
+        // Product Group data
+        product_group_role: productGroupSettingsResult.rows.length > 0 ? 'parent' : null,
+        product_group_settings: productGroupSettingsResult.rows[0] ? {
+          show_unavailable_children: productGroupSettingsResult.rows[0].show_unavailable_children,
+          show_starting_price: productGroupSettingsResult.rows[0].show_starting_price,
+          show_child_prices_in_dropdown: productGroupSettingsResult.rows[0].show_child_prices_in_dropdown,
+          display_price: parseFloat(productGroupSettingsResult.rows[0].display_price || 0),
+          default_calendar_status: productGroupSettingsResult.rows[0].default_calendar_status,
+        } : null,
+        product_group_children: childrenWithDetails,
+        product_group_parent: productGroupParentResult.rows[0] ? {
+          id: productGroupParentResult.rows[0].parent_item_id,
+          name: productGroupParentResult.rows[0].parent_name,
+        } : null,
       }
     });
 
@@ -514,6 +583,7 @@ export async function PUT(
       fixed_length_unit,
       fixed_start_time,
       default_length_hours,
+      allocation_interval_minutes,
       timeslots,
       // Tax fields
       taxes,
@@ -521,6 +591,10 @@ export async function PUT(
       is_active,
       // Display order
       display_order,
+      // Product Grouping
+      product_group_role,
+      product_group_children,
+      product_group_settings,
     } = body;
 
     if (!name) {
@@ -557,11 +631,12 @@ export async function PUT(
           fixed_length_unit,
           fixed_start_time,
           default_length_hours,
+          allocation_interval_minutes,
           visibility,
           default_calendar_status,
           is_active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (item_id)
         DO UPDATE SET
           inventory_quantity = $2,
@@ -571,9 +646,10 @@ export async function PUT(
           fixed_length_unit = $6,
           fixed_start_time = $7,
           default_length_hours = $8,
-          visibility = $9,
-          default_calendar_status = $10,
-          is_active = $11,
+          allocation_interval_minutes = $9,
+          visibility = $10,
+          default_calendar_status = $11,
+          is_active = $12,
           updated_at = NOW()`,
         [
           id,
@@ -584,6 +660,7 @@ export async function PUT(
           fixed_length_unit || null,
           fixed_start_time || null,
           default_length_hours || null,
+          allocation_interval_minutes || 30,
           visibility || 'everyone',
           default_calendar_status || 'available',
           is_active !== undefined ? is_active : true
@@ -991,6 +1068,50 @@ export async function PUT(
              VALUES ($1, $2)`,
             [id, true]
           );
+        }
+      }
+
+      // Update product group settings if provided
+      if (product_group_role !== undefined) {
+        // Clean up existing product group data
+        await client.query('DELETE FROM glamping_product_group_settings WHERE item_id = $1', [id]);
+        await client.query('DELETE FROM glamping_product_groups WHERE parent_item_id = $1', [id]);
+
+        if (product_group_role === 'parent') {
+          // Insert settings
+          const settings = product_group_settings || {};
+          await client.query(
+            `INSERT INTO glamping_product_group_settings (
+              item_id, show_unavailable_children, show_starting_price,
+              show_child_prices_in_dropdown, display_price, default_calendar_status
+            ) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              id,
+              settings.show_unavailable_children || false,
+              settings.show_starting_price || false,
+              settings.show_child_prices_in_dropdown !== false,
+              settings.display_price || 0,
+              settings.default_calendar_status || 'available',
+            ]
+          );
+
+          // Insert child relationships
+          if (product_group_children && product_group_children.length > 0) {
+            for (let i = 0; i < product_group_children.length; i++) {
+              const childId = typeof product_group_children[i] === 'string'
+                ? product_group_children[i]
+                : product_group_children[i].item_id;
+              await client.query(
+                `INSERT INTO glamping_product_groups (parent_item_id, child_item_id, display_order)
+                 VALUES ($1, $2, $3)`,
+                [id, childId, i]
+              );
+            }
+          }
+
+          // Clear parameters and pricing when item is parent
+          await client.query('DELETE FROM glamping_item_parameters WHERE item_id = $1', [id]);
+          await client.query('DELETE FROM glamping_pricing WHERE item_id = $1', [id]);
         }
       }
 

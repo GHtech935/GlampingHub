@@ -201,19 +201,25 @@ export function calculateProductDiscount(
 
 // ─── Glamping Booking Recalculation ─────────────────────────────────────────
 
+interface GlampingBookingLiveTotal {
+  subtotal: number;
+  taxAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+}
+
 /**
- * Recalculate glamping booking-level totals after any item edit/delete.
- * Sums accommodation items + menu products, applies tax if required.
- * Updates glamping_bookings with new totals.
+ * Read-only calculation of a glamping booking's live total from individual items.
+ * Uses the same logic as recalculateGlampingBookingTotals but does NOT update the DB.
+ * Use this when you need the true current total (e.g. payments tab, balance info).
  */
-export async function recalculateGlampingBookingTotals(
+export async function getGlampingBookingLiveTotal(
   client: PoolClient,
   bookingId: string
-): Promise<void> {
-  // Get booking tax settings and current deposit/total to preserve ratio
+): Promise<GlampingBookingLiveTotal> {
+  // Get booking tax settings
   const bookingResult = await client.query(
-    `SELECT tax_invoice_required, deposit_due, total_amount
-     FROM glamping_bookings WHERE id = $1`,
+    `SELECT tax_invoice_required FROM glamping_bookings WHERE id = $1`,
     [bookingId]
   );
 
@@ -222,11 +228,30 @@ export async function recalculateGlampingBookingTotals(
   }
 
   const { tax_invoice_required } = bookingResult.rows[0];
-  const oldDepositDue = parseFloat(bookingResult.rows[0].deposit_due || '0');
-  const oldTotalAmount = parseFloat(bookingResult.rows[0].total_amount || '0');
 
+  const { subtotal, totalDiscount, additionalTax } = await _sumBookingItems(client, bookingId);
+  const afterDiscount = subtotal - totalDiscount;
+
+  let taxAmount = 0;
+  if (tax_invoice_required) {
+    const { totalTaxAmount } = await calculatePerItemTax(client, bookingId);
+    taxAmount = totalTaxAmount + additionalTax;
+  }
+
+  const totalAmount = afterDiscount + taxAmount;
+
+  return { subtotal, taxAmount, discountAmount: totalDiscount, totalAmount };
+}
+
+/**
+ * Internal helper: sum all item costs, discounts, and additional costs for a booking.
+ * Shared by both getGlampingBookingLiveTotal (read-only) and recalculateGlampingBookingTotals (read+write).
+ */
+async function _sumBookingItems(
+  client: PoolClient,
+  bookingId: string
+): Promise<{ subtotal: number; totalDiscount: number; additionalTax: number }> {
   // Sum accommodation from glamping_booking_tents (supports subtotal_override)
-  // This is separate from addon items to properly handle tent price overrides
   const tentResult = await client.query(
     `SELECT COALESCE(SUM(
        COALESCE(subtotal_override, subtotal)
@@ -238,13 +263,9 @@ export async function recalculateGlampingBookingTotals(
   const tentTotal = parseFloat(tentResult.rows[0].tent_total);
 
   // Sum addon items (from glamping_booking_items where type = 'addon')
-  // Note: per_group pricing means the price is for the whole group, not per person
-  // Note: priceOverride takes precedence if set (for addon items)
-  // For addon items with priceOverride, we need to group by addon to avoid counting override multiple times
   const addonResult = await client.query(
     `WITH addon_groups AS (
        SELECT
-         -- Group key: addon_item_id + booking_tent_id for addons
          addon_item_id::text || '_' || COALESCE(booking_tent_id::text, 'none') as group_key,
          addon_item_id,
          metadata,
@@ -258,10 +279,6 @@ export async function recalculateGlampingBookingTotals(
      grouped_totals AS (
        SELECT
          group_key,
-         -- For addon groups with priceOverride, use it (take from first row, all rows have same value)
-         -- priceOverride can be 0 (free) or positive, but NULL means no override
-         -- Also check subtotalOverride for backward compatibility
-         -- Otherwise calculate normally
          CASE
            WHEN COALESCE(MAX(metadata->>'priceOverride'), MAX(metadata->>'subtotalOverride')) IS NOT NULL
              THEN COALESCE((MAX(metadata->>'priceOverride'))::numeric, (MAX(metadata->>'subtotalOverride'))::numeric)
@@ -281,11 +298,9 @@ export async function recalculateGlampingBookingTotals(
   );
   const addonTotal = parseFloat(addonResult.rows[0].addon_total);
 
-  // Total accommodation = tents + addons
   const accommodationTotal = tentTotal + addonTotal;
 
-  // Sum menu products (from glamping_booking_menu_products)
-  // Use subtotal_override if set, otherwise calculate unit_price * quantity
+  // Sum menu products
   const menuResult = await client.query(
     `SELECT COALESCE(SUM(
        COALESCE(subtotal_override, unit_price * quantity)
@@ -296,7 +311,7 @@ export async function recalculateGlampingBookingTotals(
   );
   const menuTotal = parseFloat(menuResult.rows[0].menu_total);
 
-  // Sum additional costs (from glamping_booking_additional_costs)
+  // Sum additional costs
   const additionalCostsResult = await client.query(
     `SELECT
        COALESCE(SUM(total_price), 0) as additional_total,
@@ -327,7 +342,6 @@ export async function recalculateGlampingBookingTotals(
   const menuDiscount = parseFloat(menuDiscountResult.rows[0].menu_discount);
 
   // Sum discount amounts from addon items (voucher discounts stored in metadata)
-  // Group by addon to avoid counting the same voucher discount multiple times
   const addonDiscountResult = await client.query(
     `WITH addon_groups AS (
        SELECT
@@ -352,6 +366,35 @@ export async function recalculateGlampingBookingTotals(
 
   const subtotal = accommodationTotal + menuTotal + additionalTotal;
   const totalDiscount = tentDiscount + menuDiscount + addonDiscount;
+
+  return { subtotal, totalDiscount, additionalTax };
+}
+
+/**
+ * Recalculate glamping booking-level totals after any item edit/delete.
+ * Sums accommodation items + menu products, applies tax if required.
+ * Updates glamping_bookings with new totals.
+ */
+export async function recalculateGlampingBookingTotals(
+  client: PoolClient,
+  bookingId: string
+): Promise<void> {
+  // Get booking tax settings and current deposit/total to preserve ratio
+  const bookingResult = await client.query(
+    `SELECT tax_invoice_required, deposit_due, total_amount
+     FROM glamping_bookings WHERE id = $1`,
+    [bookingId]
+  );
+
+  if (bookingResult.rows.length === 0) {
+    throw new Error(`Booking ${bookingId} not found`);
+  }
+
+  const { tax_invoice_required } = bookingResult.rows[0];
+  const oldDepositDue = parseFloat(bookingResult.rows[0].deposit_due || '0');
+  const oldTotalAmount = parseFloat(bookingResult.rows[0].total_amount || '0');
+
+  const { subtotal, totalDiscount, additionalTax } = await _sumBookingItems(client, bookingId);
   const afterDiscount = subtotal - totalDiscount;
 
   // Apply tax if required (per-item tax rates + additional costs tax)

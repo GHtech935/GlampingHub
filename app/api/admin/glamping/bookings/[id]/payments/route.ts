@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { getSession, isStaffSession } from "@/lib/auth";
+import { getGlampingBookingLiveTotal } from "@/lib/booking-recalculate";
 
 export const dynamic = 'force-dynamic';
 
@@ -91,6 +92,9 @@ export async function GET(
       .filter(p => ['completed', 'paid', 'successful'].includes(p.status))
       .reduce((sum, p) => sum + p.amount, 0);
 
+    // Calculate live total from individual items (not the potentially stale stored value)
+    const liveTotal = await getGlampingBookingLiveTotal(client, id);
+
     // Determine if booking can be modified
     const modifiableStatuses = ['pending', 'confirmed', 'checked_in'];
     const canModify = modifiableStatuses.includes(booking.status);
@@ -98,7 +102,7 @@ export async function GET(
     return NextResponse.json({
       payments,
       totalPaid,
-      totalAmount: parseFloat(booking.total_amount),
+      totalAmount: liveTotal.totalAmount,
       canModify,
     });
   } catch (error) {

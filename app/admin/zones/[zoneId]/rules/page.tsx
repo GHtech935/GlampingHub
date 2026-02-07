@@ -43,6 +43,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
+import { DAY_NAMES } from "@/lib/days-of-week";
 
 interface Rule {
   id: string;
@@ -65,15 +66,7 @@ interface RuleSet {
 }
 
 // Days of week for start_day_of_week rule
-const DAYS_OF_WEEK = [
-  { value: 0, label: 'sunday' },
-  { value: 1, label: 'monday' },
-  { value: 2, label: 'tuesday' },
-  { value: 3, label: 'wednesday' },
-  { value: 4, label: 'thursday' },
-  { value: 5, label: 'friday' },
-  { value: 6, label: 'saturday' },
-];
+const DAYS_OF_WEEK = DAY_NAMES.map((name, index) => ({ value: index, label: name }));
 
 // Rules that only work in default ruleset
 const DEFAULT_ONLY_RULES = ['max_subtotal_value', 'min_subtotal_value'];

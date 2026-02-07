@@ -19,6 +19,21 @@ export interface ItemAddon {
   custom_end_date: string | null;
   display_order: number;
   parameters: AddonParameter[];
+  // Product Grouping fields
+  is_product_group_parent?: boolean;
+  product_group_children?: Array<{
+    child_item_id: string;
+    name: any;
+    sku: string;
+    base_price: number;
+    parameters: AddonParameter[];
+  }>;
+  product_group_settings?: {
+    show_child_prices_in_dropdown: boolean;
+    show_unavailable_children: boolean;
+    show_starting_price: boolean;
+    display_price: number;
+  };
 }
 
 interface UseItemAddonsReturn {

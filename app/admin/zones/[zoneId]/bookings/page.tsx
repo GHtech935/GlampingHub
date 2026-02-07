@@ -605,7 +605,7 @@ export default function GlampingBookingsPage() {
                       className="hover:bg-gray-50 transition-colors"
                     >
                       {/* Booking Code */}
-                      <td className="px-4 py-4 whitespace-nowrap">
+                      <td className="px-4 py-2 whitespace-nowrap">
                         <span className="text-sm font-medium text-gray-900">
                           {booking.bookingCode}
                         </span>
@@ -615,7 +615,7 @@ export default function GlampingBookingsPage() {
                       </td>
 
                       {/* Customer Info */}
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-2">
                         <div className="text-sm font-medium text-gray-900">
                           {booking.customer.fullName || '-'}
                         </div>
@@ -638,7 +638,7 @@ export default function GlampingBookingsPage() {
                       </td>
 
                       {/* Zone / Item */}
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-2">
                         <div className="flex items-start gap-2">
                           <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
                           <div>
@@ -653,7 +653,7 @@ export default function GlampingBookingsPage() {
                       </td>
 
                       {/* Dates */}
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-2">
                         <div className="flex items-start gap-2">
                           <Calendar className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
                           <div>
@@ -668,7 +668,7 @@ export default function GlampingBookingsPage() {
                       </td>
 
                       {/* Guests */}
-                      <td className="px-4 py-4 whitespace-nowrap">
+                      <td className="px-4 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-gray-400" />
                           <div className="text-sm text-gray-900">
@@ -678,7 +678,7 @@ export default function GlampingBookingsPage() {
                       </td>
 
                       {/* Status */}
-                      <td className="px-4 py-4 whitespace-nowrap">
+                      <td className="px-4 py-2 whitespace-nowrap">
                         <div className="flex flex-col gap-1">
                           <Badge variant={getStatusVariant(booking.status)} className="text-xs">
                             {getStatusLabel(booking.status, locale)}
@@ -690,7 +690,7 @@ export default function GlampingBookingsPage() {
                       </td>
 
                       {/* Total Amount */}
-                      <td className="px-4 py-4 whitespace-nowrap">
+                      <td className="px-4 py-2 whitespace-nowrap">
                         <div className="text-sm font-semibold text-gray-900">
                           {formatCurrency(booking.pricing.totalAmount)}
                         </div>
@@ -705,7 +705,7 @@ export default function GlampingBookingsPage() {
                       </td>
 
                       {/* Actions */}
-                      <td className="px-4 py-4 whitespace-nowrap">
+                      <td className="px-4 py-2 whitespace-nowrap">
                         <Button
                           size="sm"
                           variant="outline"

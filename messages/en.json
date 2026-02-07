@@ -404,7 +404,8 @@
             "grandTotal": "Grand total",
             "addonVoucher": "Addon voucher",
             "calculatingPrice": "Calculating price...",
-            "selectDatesToSeePrice": "Select dates and info to see pricing"
+            "selectDatesToSeePrice": "Select dates and info to see pricing",
+            "selectChildren": "Click to select child services"
         },
         "datesAlreadyBooked": "Dates Already Booked",
         "datesAlreadyBookedMessage": "Sorry, this item is already booked for the selected dates. Please choose different dates or go back to the item details page to select available dates.",
@@ -3562,6 +3563,25 @@
                         "submit": "Save Changes",
                         "searchPlaceholder": "Search items..."
                     },
+                    "productGroup": {
+                        "label": "Product Grouping",
+                        "disabled": "Disabled",
+                        "parent": "Parent",
+                        "childInfoPrefix": "This item is a ",
+                        "childInfoChild": "Child",
+                        "childInfoSuffix": " of Product Group Parent:",
+                        "childItems": "Child Items",
+                        "tableName": "Name",
+                        "tableSku": "SKU",
+                        "addChild": "Add Child Item",
+                        "showUnavailable": "Show unavailable child items",
+                        "showStartingPrice": "Show starting price",
+                        "showChildPrices": "Show child prices in dropdown",
+                        "selectChildTitle": "Select Child Items",
+                        "selectChildDesc": "Select common items as children for this product group",
+                        "searchPlaceholder": "Search items...",
+                        "noItems": "No items available"
+                    },
                     "menuProducts": {
                         "title": "Menu Products",
                         "dialogTitle": "Attach Food/Beverages",
@@ -4533,6 +4553,7 @@
                 "filters": {
                     "all": "All",
                     "allCategories": "All categories",
+                    "category": "Category",
                     "noCategory": "Show items without category"
                 },
                 "status": {
@@ -4599,6 +4620,15 @@
                     "updateFailed": "Failed to update item",
                     "guestLimitError": "Maximum guests must be greater than or equal to minimum guests",
                     "guestLimitBothRequired": "Please fill in both minimum and maximum guests, or leave both empty"
+                },
+                "appliedItems": {
+                    "title": "Applied to Items",
+                    "description": "Select tent items to attach this common item to",
+                    "save": "Save",
+                    "cancel": "Cancel",
+                    "saving": "Saving...",
+                    "success": "Updated successfully",
+                    "error": "An error occurred"
                 }
             },
             "commonItemCategories": {

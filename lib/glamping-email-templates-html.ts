@@ -897,6 +897,100 @@ export const glampingAdminNewBookingPendingHTML = `
 </html>
 `;
 
+// Admin Email: Booking Cancelled
+export const glampingAdminBookingCancelledHTML = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thông báo: Đơn đã bị hủy</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f9fafb;">
+  <div style="${emailStyles.container}">
+    <!-- Header -->
+    <div style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); padding: 30px 20px; text-align: center;">
+      <h1 style="${emailStyles.headerTitle}">GlampingHub Admin</h1>
+      <p style="color: white; margin: 10px 0 0 0; font-size: 16px;">Đơn đặt chỗ đã bị hủy</p>
+    </div>
+
+    <!-- Content -->
+    <div style="${emailStyles.content}">
+      <p style="${emailStyles.greeting}">Xin chào <strong>{admin_name}</strong>,</p>
+
+      <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; color: #991b1b; font-size: 16px; font-weight: bold;">
+          Đơn #{booking_reference} đã bị hủy
+        </p>
+      </div>
+
+      <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">
+        Đơn đặt chỗ sau đây đã bị hủy bởi admin. Vui lòng xem chi tiết bên dưới.
+      </p>
+
+      <!-- Booking Info -->
+      <div style="${emailStyles.section}">
+        <h2 style="${emailStyles.sectionTitle}">Thông tin đơn đã hủy</h2>
+
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Mã đặt chỗ:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{booking_reference}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Tổng tiền:</td>
+            <td style="padding: 10px 0; color: #dc2626; font-size: 16px; font-weight: bold; text-align: right;">{amount}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Khách hàng:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{guest_name}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Email:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{guest_email}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Khu vực:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{zone_name}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Lều:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{item_name}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e5e7eb;">
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Ngày:</td>
+            <td style="padding: 10px 0; color: #1f2937; font-size: 14px; font-weight: 500; text-align: right;">{check_in_date} → {check_out_date}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; color: #6b7280; font-size: 14px;">Lý do hủy:</td>
+            <td style="padding: 10px 0; color: #dc2626; font-size: 14px; font-weight: 500; text-align: right;">{cancellation_reason}</td>
+          </tr>
+        </table>
+      </div>
+
+      <hr style="${emailStyles.divider}">
+
+      <!-- Action Button -->
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{notification_link}" style="display: inline-block; background-color: #dc2626; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          Xem chi tiết đơn
+        </a>
+      </div>
+
+      <p style="color: #6b7280; font-size: 12px; line-height: 1.6; text-align: center;">
+        Đây là email tự động từ hệ thống GlampingHub.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="${emailStyles.footer}">
+      <p>© 2025 GlampingHub. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+`;
+
 // Customer Email: Payment Confirmation
 export const glampingPaymentConfirmationHTML = `
 <!DOCTYPE html>
@@ -1986,6 +2080,16 @@ export const GLAMPING_EMAIL_TEMPLATES: Record<string, GlampingEmailTemplateDefin
     type: 'admin_notification',
     description: 'Email thông báo cho admin khi khách đã thanh toán và đơn được tự động xác nhận',
     availableVariables: ['admin_name', 'booking_reference', 'amount', 'guest_name', 'guest_email', 'zone_name', 'item_name', 'check_in_date', 'check_out_date', 'notification_link'],
+    isActive: true,
+  },
+  'glamping-admin-booking-cancelled': {
+    slug: 'glamping-admin-booking-cancelled',
+    name: '[Admin] Đơn đã bị hủy',
+    subject: 'Đơn #{booking_reference} đã bị hủy - GlampingHub Admin',
+    html: glampingAdminBookingCancelledHTML,
+    type: 'admin_notification',
+    description: 'Email thông báo cho admin/staff khi booking bị hủy',
+    availableVariables: ['admin_name', 'booking_reference', 'amount', 'guest_name', 'guest_email', 'zone_name', 'item_name', 'check_in_date', 'check_out_date', 'notification_link', 'cancellation_reason'],
     isActive: true,
   },
   'glamping-payment-confirmation': {

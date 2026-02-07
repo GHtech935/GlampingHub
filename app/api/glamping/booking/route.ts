@@ -7,6 +7,7 @@ import {
   sendGlampingBookingNotificationToStaff,
 } from '@/lib/email';
 import { validateVoucherDirect } from '@/lib/voucher-validation';
+import { getSession, isStaffSession } from '@/lib/auth';
 
 /**
  * Validate date of birth format (MM-DD)
@@ -112,6 +113,10 @@ export async function POST(request: NextRequest) {
     await client.query('BEGIN');
 
     const body = await request.json();
+
+    // Check if staff is creating this booking
+    const session = await getSession();
+    const createdByUserId = session && isStaffSession(session) ? session.id : null;
 
     // Check if this is a multi-item booking
     const isMultiItemBooking = Array.isArray(body.items) && body.items.length > 0;
@@ -583,6 +588,41 @@ export async function POST(request: NextRequest) {
         const cartAddons = cartItem.addons || [];
         for (let j = 0; j < cartAddons.length; j++) {
           const addon = cartAddons[j];
+
+          // For product group parents, validate child vouchers instead
+          if (addon.isProductGroupParent && addon.selectedChildren) {
+            for (const [childId, childData] of Object.entries(addon.selectedChildren as Record<string, any>)) {
+              const childVoucher = childData?.voucher;
+              if (childVoucher && childVoucher.code) {
+                try {
+                  const additionalUses = voucherUsageCounts[childVoucher.code?.toUpperCase()] || 0;
+                  const childTotal = childData.totalPrice || 0;
+                  const result = await validateVoucherDirect(client, childVoucher.code, {
+                    zoneId,
+                    itemId: childId,
+                    totalAmount: childTotal,
+                  }, additionalUses);
+
+                  if (result.valid) {
+                    totalAddonDiscounts += result.discountAmount;
+                    addonsVoucherDiscount += result.discountAmount;
+                    const key = result.voucherCode?.toUpperCase() || '';
+                    voucherUsageCounts[key] = (voucherUsageCounts[key] || 0) + 1;
+                  }
+                } catch (err) {
+                  console.error(`[Multi-Item Booking] Error validating child voucher:`, err);
+                }
+              }
+            }
+            // Push a placeholder for the parent addon (no parent-level voucher)
+            addonVoucherResults.push({
+              tentIndex: i, addonIndex: j,
+              voucherCode: null, voucherId: null,
+              discountType: null, discountValue: 0, discountAmount: 0,
+            });
+            continue;
+          }
+
           if (addon.voucher && addon.voucher.code) {
             try {
               const additionalUses = voucherUsageCounts[addon.voucher.code?.toUpperCase()] || 0;
@@ -846,9 +886,10 @@ export async function POST(request: NextRequest) {
           social_media_url,
           photo_consent,
           referral_source,
+          created_by_user_id,
           created_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, NOW())
         RETURNING id, booking_code, created_at, total_amount
       `;
 
@@ -878,6 +919,7 @@ export async function POST(request: NextRequest) {
         socialMediaUrl || null,
         photoConsent !== undefined ? photoConsent : null,
         referralSource || null,
+        createdByUserId,
       ]);
 
       const booking = bookingResult.rows[0];
@@ -1076,6 +1118,50 @@ export async function POST(request: NextRequest) {
               )
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             `;
+
+            // Handle product group parent: save each child as separate addon
+            if (addon.isProductGroupParent && addon.selectedChildren) {
+              for (const [childItemId, childData] of Object.entries(addon.selectedChildren as Record<string, any>)) {
+                const childParamEntries = Object.entries(childData.parameterQuantities || {});
+                // Use child's own voucher data (sent from client)
+                const childVoucher = childData.voucher || null;
+
+                for (const [paramId, qty] of childParamEntries) {
+                  if ((qty as number) > 0) {
+                    const paramPricing = childData.parameterPricing?.[paramId];
+                    const unitPrice = paramPricing?.unitPrice || 0;
+                    const pricingMode = paramPricing?.pricingMode || 'per_person';
+
+                    await client.query(addonInsertQuery, [
+                      booking.id,
+                      tentId,
+                      itemData.itemId,
+                      childItemId,
+                      paramId,
+                      'per_night',
+                      qty,
+                      unitPrice,
+                      JSON.stringify({
+                        type: 'addon',
+                        parentItemId: itemData.itemId,
+                        productGroupParentId: addon.addonItemId,
+                        dates: childData.dates || addon.dates || null,
+                        selectedDate: childData.selectedDate || addon.selectedDate || null,
+                        pricingMode,
+                        voucher: childVoucher?.code ? {
+                          code: childVoucher.code,
+                          id: childVoucher.id,
+                          discountAmount: childVoucher.discountAmount,
+                          discountType: childVoucher.discountType,
+                          discountValue: childVoucher.discountValue,
+                        } : null,
+                      }),
+                    ]);
+                  }
+                }
+              }
+              continue; // Skip normal addon processing
+            }
 
             // Calculate total price (use override if provided)
             let calculatedTotal = 0;
@@ -1895,9 +1981,10 @@ export async function POST(request: NextRequest) {
         social_media_url,
         photo_consent,
         referral_source,
+        created_by_user_id,
         created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW())
       RETURNING id, booking_code, created_at, total_amount
     `;
 
@@ -1926,6 +2013,7 @@ export async function POST(request: NextRequest) {
       socialMediaUrl || null,
       photoConsent !== undefined ? photoConsent : null,
       referralSource || null,
+      createdByUserId,
     ]);
 
     const booking = bookingResult.rows[0];

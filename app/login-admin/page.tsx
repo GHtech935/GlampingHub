@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
-import { Tent, Lock, Mail, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Lock, Mail, Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useTranslations("adminLogin");
   const { toast } = useToast();
   const [email, setEmail] = useState("");
@@ -43,8 +43,9 @@ export default function AdminLoginPage() {
         title: t("welcomeBack", { name: data.user.firstName }),
       });
 
-      // Redirect to admin page
-      router.push("/admin");
+      // Full page reload to pick up the new session cookie
+      const redirectTo = searchParams.get("from") || "/admin";
+      window.location.href = redirectTo;
     } catch (error) {
       console.error("Login error:", error);
       toast({
@@ -64,25 +65,6 @@ export default function AdminLoginPage() {
         {/* Login Card */}
         <div className="bg-white rounded-lg shadow-xl p-8">
         
-          {/* Info Banner */}
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm text-blue-900 font-medium mb-1">
-                  {t("staffAccessOnly")}
-                </p>
-                <p className="text-xs text-blue-700">
-                  {t("staffAccessDescription")}{" "}
-                  <Link href="/login" className="underline font-medium">
-                    {t("customerLoginLink")}
-                  </Link>
-                  .
-                </p>
-              </div>
-            </div>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email Field */}
             <div>

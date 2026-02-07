@@ -95,6 +95,8 @@ interface CommonItemData {
   discountAmount: number;
   dates: { from: string; to: string } | null;
   priceOverride?: number | null;
+  productGroupParentId?: string | null;
+  productGroupParentName?: string | null;
 }
 
 interface EditItemsData {
@@ -352,6 +354,8 @@ export function GlampingBookingEditTab({
       discountAmount: item.discountAmount,
       zoneId: zoneId,
       priceOverride: item.priceOverride,
+      productGroupParentId: item.productGroupParentId,
+      productGroupParentName: item.productGroupParentName,
     });
   };
 
@@ -844,6 +848,11 @@ export function GlampingBookingEditTab({
                             <div className="font-semibold text-gray-900">{item.itemName}</div>
                             {tent && data.tents.length > 1 && (
                               <div className="text-sm text-gray-600">({tent.itemName})</div>
+                            )}
+                            {item.productGroupParentName && (
+                              <Badge variant="outline" className="text-xs text-blue-700 border-blue-300">
+                                {item.productGroupParentName}
+                              </Badge>
                             )}
                             {item.priceOverride !== null && item.priceOverride !== undefined && (
                               <Badge variant="secondary" className="text-xs">

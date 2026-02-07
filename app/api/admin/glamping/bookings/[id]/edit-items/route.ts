@@ -264,6 +264,8 @@ export async function GET(
       discountAmount: number;
       dates: { from: string; to: string } | null;
       priceOverride: number | null;
+      productGroupParentId: string | null;
+      productGroupParentName: string | null;
     }>();
 
     for (const row of commonItemsResult.rows) {
@@ -289,6 +291,8 @@ export async function GET(
             : (metadata.subtotalOverride !== undefined && metadata.subtotalOverride !== null
               ? parseFloat(metadata.subtotalOverride)
               : null),
+          productGroupParentId: metadata.productGroupParentId || null,
+          productGroupParentName: null, // will be resolved below
         });
       }
       const entry = commonItemsMap.get(key)!;
@@ -308,6 +312,24 @@ export async function GET(
     for (const group of commonItemsMap.values()) {
       if (group.priceOverride !== null) {
         group.totalPrice = group.priceOverride;
+      }
+    }
+
+    // Resolve product group parent names
+    const parentIds = new Set<string>();
+    for (const group of commonItemsMap.values()) {
+      if (group.productGroupParentId) parentIds.add(group.productGroupParentId);
+    }
+    if (parentIds.size > 0) {
+      const parentNamesResult = await pool.query(
+        `SELECT id, name FROM glamping_items WHERE id = ANY($1::uuid[])`,
+        [Array.from(parentIds)]
+      );
+      const parentNameMap = new Map(parentNamesResult.rows.map((r: any) => [r.id, getLocalizedString(r.name)]));
+      for (const group of commonItemsMap.values()) {
+        if (group.productGroupParentId) {
+          group.productGroupParentName = parentNameMap.get(group.productGroupParentId) || null;
+        }
       }
     }
 

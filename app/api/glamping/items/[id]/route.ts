@@ -141,7 +141,7 @@ export async function GET(
     `;
     const { rows: addons } = await pool.query(addonsQuery, [id]);
 
-    // For each addon, fetch its parameters
+    // For each addon, fetch its parameters and check for product grouping
     const addonsWithParams = await Promise.all(
       addons.map(async (addon) => {
         const addonParamsQuery = `
@@ -152,6 +152,56 @@ export async function GET(
           ORDER BY ip.display_order
         `;
         const { rows: addonParams } = await pool.query(addonParamsQuery, [addon.addon_item_id]);
+
+        // Check if this addon is a product group parent
+        const pgSettingsQuery = `
+          SELECT show_unavailable_children, show_starting_price,
+                 show_child_prices_in_dropdown, display_price
+          FROM glamping_product_group_settings
+          WHERE item_id = $1
+        `;
+        const { rows: pgSettings } = await pool.query(pgSettingsQuery, [addon.addon_item_id]);
+
+        let productGroupData: any = {};
+        if (pgSettings.length > 0) {
+          // Fetch children with their parameters
+          const childrenQuery = `
+            SELECT pg.child_item_id, i.name, i.sku, pg.display_order,
+                   (SELECT MIN(amount) FROM glamping_pricing WHERE item_id = i.id AND event_id IS NULL AND amount > 0) as base_price
+            FROM glamping_product_groups pg
+            JOIN glamping_items i ON pg.child_item_id = i.id
+            LEFT JOIN glamping_item_attributes a ON i.id = a.item_id
+            WHERE pg.parent_item_id = $1
+              AND COALESCE(a.is_active, true) = true
+            ORDER BY pg.display_order
+          `;
+          const { rows: children } = await pool.query(childrenQuery, [addon.addon_item_id]);
+
+          // Fetch parameters for each child
+          const childrenWithParams = await Promise.all(
+            children.map(async (child) => {
+              const { rows: childParams } = await pool.query(addonParamsQuery, [child.child_item_id]);
+              return {
+                child_item_id: child.child_item_id,
+                name: child.name,
+                sku: child.sku,
+                base_price: parseFloat(child.base_price || 0),
+                parameters: childParams,
+              };
+            })
+          );
+
+          productGroupData = {
+            is_product_group_parent: true,
+            product_group_children: childrenWithParams,
+            product_group_settings: {
+              show_child_prices_in_dropdown: pgSettings[0].show_child_prices_in_dropdown,
+              show_unavailable_children: pgSettings[0].show_unavailable_children,
+              show_starting_price: pgSettings[0].show_starting_price,
+              display_price: parseFloat(pgSettings[0].display_price || 0),
+            },
+          };
+        }
 
         return {
           addon_item_id: addon.addon_item_id,
@@ -164,6 +214,7 @@ export async function GET(
           custom_end_date: addon.custom_end_date || null,
           display_order: addon.display_order,
           parameters: addonParams,
+          ...productGroupData,
         };
       })
     );

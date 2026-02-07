@@ -404,7 +404,8 @@
             "grandTotal": "Tổng cộng",
             "addonVoucher": "Voucher dịch vụ",
             "calculatingPrice": "Đang tính giá...",
-            "selectDatesToSeePrice": "Chọn ngày và thông tin để xem giá"
+            "selectDatesToSeePrice": "Chọn ngày và thông tin để xem giá",
+            "selectChildren": "Bấm để chọn dịch vụ con"
         },
         "datesAlreadyBooked": "Ngày đã được đặt",
         "datesAlreadyBookedMessage": "Rất tiếc, mặt hàng này đã được đặt trong khoảng thời gian bạn chọn. Vui lòng chọn ngày khác hoặc quay lại trang chi tiết để chọn ngày còn trống.",
@@ -3562,6 +3563,25 @@
                         "submit": "Lưu thay đổi",
                         "searchPlaceholder": "Tìm kiếm mặt hàng..."
                     },
+                    "productGroup": {
+                        "label": "Nhóm sản phẩm",
+                        "disabled": "Tắt",
+                        "parent": "Cha",
+                        "childInfoPrefix": "Item này là ",
+                        "childInfoChild": "Child",
+                        "childInfoSuffix": " của Product Group Parent:",
+                        "childItems": "Các item con",
+                        "tableName": "Tên",
+                        "tableSku": "SKU",
+                        "addChild": "Thêm Child Item",
+                        "showUnavailable": "Hiện child items không khả dụng",
+                        "showStartingPrice": "Hiện giá khởi điểm",
+                        "showChildPrices": "Hiện giá child trong dropdown",
+                        "selectChildTitle": "Chọn Child Items",
+                        "selectChildDesc": "Chọn các common items làm child cho product group này",
+                        "searchPlaceholder": "Tìm kiếm item...",
+                        "noItems": "Không có item nào"
+                    },
                     "menuProducts": {
                         "title": "Sản phẩm Menu",
                         "dialogTitle": "Đính kèm món ăn/đồ uống",
@@ -4528,6 +4548,7 @@
                 "filters": {
                     "all": "Tất cả",
                     "allCategories": "Tất cả danh mục",
+                    "category": "Danh mục",
                     "noCategory": "Xem item không có danh mục"
                 },
                 "status": {
@@ -4594,6 +4615,15 @@
                     "updateFailed": "Cập nhật item thất bại",
                     "guestLimitError": "Số khách tối đa phải lớn hơn hoặc bằng số khách tối thiểu",
                     "guestLimitBothRequired": "Vui lòng điền cả số khách tối thiểu và tối đa, hoặc để trống cả 2"
+                },
+                "appliedItems": {
+                    "title": "Áp dụng cho lều",
+                    "description": "Chọn lều muốn gắn item chung này",
+                    "save": "Lưu",
+                    "cancel": "Hủy",
+                    "saving": "Đang lưu...",
+                    "success": "Cập nhật thành công",
+                    "error": "Có lỗi xảy ra"
                 }
             },
             "commonItemCategories": {

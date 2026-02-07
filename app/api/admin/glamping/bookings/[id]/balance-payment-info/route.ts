@@ -3,6 +3,7 @@ import pool from "@/lib/db";
 import { getSession, isStaffSession } from "@/lib/auth";
 import { getBankAccountForGlampingZone } from "@/lib/bank-accounts";
 import { getBalancePaymentInfo } from "@/lib/vietqr";
+import { getGlampingBookingLiveTotal } from "@/lib/booking-recalculate";
 
 // Disable caching - admin needs real-time data
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,17 @@ export async function GET(
 
     const booking = bookingResult.rows[0];
 
-    // Calculate actual balance (total_amount - total_paid including additional costs)
+    // Calculate live total from individual items (not the potentially stale stored value)
+    const client = await pool.connect();
+    let totalAmount: number;
+    try {
+      const liveTotal = await getGlampingBookingLiveTotal(client, id);
+      totalAmount = liveTotal.totalAmount;
+    } finally {
+      client.release();
+    }
+
+    // Calculate actual balance (live total - total paid)
     const paymentsQuery = `
       SELECT COALESCE(SUM(amount), 0) as total_paid
       FROM glamping_booking_payments
@@ -62,16 +73,6 @@ export async function GET(
     const paymentsResult = await pool.query(paymentsQuery, [id]);
     const totalPaid = parseFloat(paymentsResult.rows[0].total_paid || 0);
 
-    // Get additional costs
-    const additionalCostsQuery = `
-      SELECT COALESCE(SUM(total_price + tax_amount), 0) as additional_total
-      FROM glamping_booking_additional_costs
-      WHERE booking_id = $1
-    `;
-    const additionalCostsResult = await pool.query(additionalCostsQuery, [id]);
-    const additionalCostsTotal = parseFloat(additionalCostsResult.rows[0].additional_total || 0);
-
-    const totalAmount = parseFloat(booking.total_amount || 0) + additionalCostsTotal;
     const actualBalance = Math.max(0, totalAmount - totalPaid);
 
     // Validate payment status

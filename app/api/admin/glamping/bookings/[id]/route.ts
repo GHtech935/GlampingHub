@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { getSession, isStaffSession } from "@/lib/auth";
 import { sendTemplateEmail, sendGlampingPostStayThankYou } from "@/lib/email";
+import { getGlampingBookingLiveTotal } from "@/lib/booking-recalculate";
 
 // Disable caching - admin needs real-time data
 export const dynamic = 'force-dynamic';
@@ -73,10 +74,16 @@ export async function GET(
         c.email as customer_email,
         c.phone as customer_phone,
         c.country as customer_country,
-        c.address_line1 as customer_address
+        c.address_line1 as customer_address,
+
+        -- Creator info
+        b.created_by_user_id,
+        u.first_name as creator_first_name,
+        u.last_name as creator_last_name
 
       FROM glamping_bookings b
       LEFT JOIN customers c ON b.customer_id = c.id
+      LEFT JOIN users u ON b.created_by_user_id = u.id
       WHERE b.id = $1
     `;
 
@@ -213,6 +220,15 @@ export async function GET(
       name: getLocalizedString(itemsResult.rows[0].zone_name),
     } : null;
 
+    // Calculate live total from individual items (not the potentially stale stored value)
+    const liveTotal = await getGlampingBookingLiveTotal(client, id);
+
+    // Recalculate deposit_due based on live total and stored deposit ratio
+    const storedTotal = parseFloat(row.total_amount || 0);
+    const storedDeposit = parseFloat(row.deposit_due || 0);
+    const depositRatio = storedTotal > 0 && storedDeposit > 0 ? storedDeposit / storedTotal : 1;
+    const liveDepositDue = Math.round(liveTotal.totalAmount * depositRatio);
+
     // Format response
     const booking = {
       id: row.id,
@@ -229,11 +245,11 @@ export async function GET(
       guests: row.guests || {},
       totalGuests: row.total_guests,
       pricing: {
-        subtotalAmount: parseFloat(row.subtotal_amount || 0),
-        taxAmount: parseFloat(row.tax_amount || 0),
-        discountAmount: parseFloat(row.discount_amount || 0),
-        totalAmount: parseFloat(row.total_amount || 0),
-        depositDue: parseFloat(row.deposit_due || 0),
+        subtotalAmount: liveTotal.subtotal,
+        taxAmount: liveTotal.taxAmount,
+        discountAmount: liveTotal.discountAmount,
+        totalAmount: liveTotal.totalAmount,
+        depositDue: liveDepositDue,
         balanceDue: parseFloat(row.balance_due || 0),
         currency: row.currency,
       },
@@ -306,6 +322,10 @@ export async function GET(
       specialRequirements: row.special_requirements,
       taxInvoiceRequired: row.tax_invoice_required || false,
       taxRate: row.tax_rate || 10,
+      createdByUserId: row.created_by_user_id || null,
+      createdByName: row.created_by_user_id
+        ? `${row.creator_first_name || ''} ${row.creator_last_name || ''}`.trim() || 'Admin'
+        : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       confirmedAt: row.confirmed_at,
@@ -345,7 +365,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { status, paymentStatus, internalNotes } = body;
+    const { status, paymentStatus, internalNotes, cancellationReason } = body;
 
     // Start transaction
     await client.query('BEGIN');
@@ -380,6 +400,11 @@ export async function PUT(
         updateFields.push(`confirmed_at = NOW()`);
       } else if (status === 'cancelled' && current.status !== 'cancelled') {
         updateFields.push(`cancelled_at = NOW()`);
+        if (cancellationReason) {
+          updateFields.push(`cancellation_reason = $${paramIndex}`);
+          updateValues.push(cancellationReason);
+          paramIndex++;
+        }
       }
     }
 
@@ -525,6 +550,25 @@ export async function PUT(
               console.log('✅ Post-stay thank-you email sent to customer:', booking.customer_email);
             }
 
+            // 1c. Send cancellation email to customer when cancelled
+            if (finalStatus === 'cancelled' && currentStatus !== 'cancelled') {
+              const customerName = `${booking.customer_first_name} ${booking.customer_last_name}`.trim();
+
+              await sendTemplateEmail({
+                templateSlug: 'glamping-booking-cancellation',
+                to: [{ email: booking.customer_email, name: customerName }],
+                variables: {
+                  customer_name: booking.customer_first_name,
+                  booking_reference: booking.booking_code,
+                  zone_name: zoneName,
+                  cancellation_reason: cancellationReason || 'Không có lý do cụ thể',
+                },
+                glampingBookingId: id,
+              });
+
+              console.log('✅ Cancellation email sent to customer:', booking.customer_email);
+            }
+
             // 2. Send notification to staff (admin/sale/operations/glamping_owner)
             const staffResult = await pool.query(
               `SELECT DISTINCT u.email, COALESCE(u.first_name, 'Admin') as name
@@ -544,7 +588,9 @@ export async function PUT(
             // Determine template based on status change
             let templateSlug = 'glamping-admin-new-booking-pending';
 
-            if (finalStatus === 'confirmed' && currentStatus !== 'confirmed') {
+            if (finalStatus === 'cancelled' && currentStatus !== 'cancelled') {
+              templateSlug = 'glamping-admin-booking-cancelled';
+            } else if (finalStatus === 'confirmed' && currentStatus !== 'confirmed') {
               templateSlug = 'glamping-admin-new-booking-pending';
             }
 
@@ -564,6 +610,7 @@ export async function PUT(
                   check_in_date: new Date(booking.check_in_date).toLocaleDateString('vi-VN'),
                   check_out_date: new Date(booking.check_out_date).toLocaleDateString('vi-VN'),
                   notification_link: bookingLink,
+                  cancellation_reason: cancellationReason || 'Không có lý do cụ thể',
                 },
                 glampingBookingId: id,
               })

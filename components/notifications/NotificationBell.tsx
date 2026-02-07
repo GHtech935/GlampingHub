@@ -28,15 +28,13 @@ export default function NotificationBell({
   className,
 }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { unreadCount, fetchNotifications, fetchUnreadCount } = useNotifications({
+  const { unreadCount, fetchUnreadCount } = useNotifications({
     autoFetchCount: true,
     appType,
   });
 
   const handleClick = () => {
     setIsOpen(true);
-    // Fetch fresh notifications when opening panel
-    fetchNotifications();
   };
 
   const handleClose = () => {

@@ -567,9 +567,9 @@ export function GlampingDateRangePickerWithCalendar({
     <div className="space-y-4">
       <Card className="border-none shadow-none">
         <CardContent className="px-0 py-2">
-          <div className="space-y-6">
+          <div className="space-y-6 flex flex-wrap">
             {/* Calendar Section - Now on top */}
-            <div className="space-y-3 max-w-2xl mx-auto">
+            <div className="space-y-3 w-full lg:w-1/2">
               {/* Month navigation */}
               <div className="flex items-center justify-between">
                 <Button type="button" variant="ghost" size="icon" onClick={goToPreviousMonth} className="h-8 w-8" disabled={disabled}>
@@ -736,7 +736,7 @@ export function GlampingDateRangePickerWithCalendar({
             </div>
 
             {/* Booking Info + Parameters Section - Now below */}
-            <div className="">
+            <div className="w-full lg:w-1/2">
               {/* Booking Info */}
               <div className="p-4 space-y-2">
                 <p className="text-sm font-medium text-gray-700">
